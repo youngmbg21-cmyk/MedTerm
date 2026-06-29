@@ -345,6 +345,96 @@ CREATE POLICY "Users can manage own chat messages"
   ));
 
 -- ============================================================
+-- Phase 3: Sense-making
+-- ============================================================
+CREATE TABLE segment_cards (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  segment TEXT NOT NULL,
+  content JSONB NOT NULL,
+  created_by UUID REFERENCES team_members(id),
+  created_at TIMESTAMPTZ DEFAULT now(),
+  updated_at TIMESTAMPTZ DEFAULT now()
+);
+
+ALTER TABLE segment_cards ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Active members can read segment_cards" ON segment_cards FOR SELECT
+  USING (EXISTS (SELECT 1 FROM team_members tm WHERE tm.user_id = auth.uid() AND tm.status = 'active'));
+CREATE POLICY "Partners and leads can write segment_cards" ON segment_cards FOR ALL
+  USING (EXISTS (SELECT 1 FROM team_members tm WHERE tm.user_id = auth.uid() AND tm.status = 'active' AND tm.role IN ('lead', 'partner')));
+
+CREATE TABLE kill_list (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  hypothesis TEXT NOT NULL,
+  evidence TEXT NOT NULL,
+  killed_date DATE NOT NULL,
+  killed_by UUID REFERENCES team_members(id),
+  created_at TIMESTAMPTZ DEFAULT now()
+);
+
+ALTER TABLE kill_list ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Active members can read kill_list" ON kill_list FOR SELECT
+  USING (EXISTS (SELECT 1 FROM team_members tm WHERE tm.user_id = auth.uid() AND tm.status = 'active'));
+CREATE POLICY "Partners and leads can insert kill_list" ON kill_list FOR INSERT
+  WITH CHECK (EXISTS (SELECT 1 FROM team_members tm WHERE tm.user_id = auth.uid() AND tm.status = 'active' AND tm.role IN ('lead', 'partner')));
+-- No UPDATE or DELETE — append-only
+
+-- ============================================================
+-- Phase 4: Economics
+-- ============================================================
+CREATE TABLE economics (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  model_name TEXT NOT NULL,
+  assumptions JSONB NOT NULL,
+  derived JSONB,
+  created_by UUID REFERENCES team_members(id),
+  created_at TIMESTAMPTZ DEFAULT now(),
+  updated_at TIMESTAMPTZ DEFAULT now()
+);
+
+ALTER TABLE economics ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Active members can read economics" ON economics FOR SELECT
+  USING (EXISTS (SELECT 1 FROM team_members tm WHERE tm.user_id = auth.uid() AND tm.status = 'active'));
+CREATE POLICY "Partners and leads can write economics" ON economics FOR ALL
+  USING (EXISTS (SELECT 1 FROM team_members tm WHERE tm.user_id = auth.uid() AND tm.status = 'active' AND tm.role IN ('lead', 'partner')));
+
+CREATE TABLE field_checks (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  assumption TEXT NOT NULL,
+  confirmed BOOLEAN DEFAULT false,
+  confirmed_by TEXT,
+  confirmed_date DATE,
+  notes TEXT,
+  created_by UUID REFERENCES team_members(id),
+  created_at TIMESTAMPTZ DEFAULT now()
+);
+
+ALTER TABLE field_checks ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Active members can read field_checks" ON field_checks FOR SELECT
+  USING (EXISTS (SELECT 1 FROM team_members tm WHERE tm.user_id = auth.uid() AND tm.status = 'active'));
+CREATE POLICY "Partners and leads can write field_checks" ON field_checks FOR ALL
+  USING (EXISTS (SELECT 1 FROM team_members tm WHERE tm.user_id = auth.uid() AND tm.status = 'active' AND tm.role IN ('lead', 'partner')));
+
+-- ============================================================
+-- Phase 5: Decision
+-- ============================================================
+CREATE TABLE decision_memos (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  version INTEGER DEFAULT 1,
+  content JSONB NOT NULL,
+  co_signed_by UUID[],
+  co_signed_at TIMESTAMPTZ,
+  created_by UUID REFERENCES team_members(id),
+  created_at TIMESTAMPTZ DEFAULT now(),
+  updated_at TIMESTAMPTZ DEFAULT now()
+);
+
+ALTER TABLE decision_memos ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Active members can read decision_memos" ON decision_memos FOR SELECT
+  USING (EXISTS (SELECT 1 FROM team_members tm WHERE tm.user_id = auth.uid() AND tm.status = 'active'));
+CREATE POLICY "Partners and leads can write decision_memos" ON decision_memos FOR ALL
+  USING (EXISTS (SELECT 1 FROM team_members tm WHERE tm.user_id = auth.uid() AND tm.status = 'active' AND tm.role IN ('lead', 'partner')));
+
+-- ============================================================
 -- Updated-at triggers
 -- ============================================================
 CREATE OR REPLACE FUNCTION update_updated_at()
@@ -360,3 +450,6 @@ CREATE TRIGGER set_updated_at BEFORE UPDATE ON interviews FOR EACH ROW EXECUTE F
 CREATE TRIGGER set_updated_at BEFORE UPDATE ON matrix FOR EACH ROW EXECUTE FUNCTION update_updated_at();
 CREATE TRIGGER set_updated_at BEFORE UPDATE ON deliverables FOR EACH ROW EXECUTE FUNCTION update_updated_at();
 CREATE TRIGGER set_updated_at BEFORE UPDATE ON chat_sessions FOR EACH ROW EXECUTE FUNCTION update_updated_at();
+CREATE TRIGGER set_updated_at BEFORE UPDATE ON segment_cards FOR EACH ROW EXECUTE FUNCTION update_updated_at();
+CREATE TRIGGER set_updated_at BEFORE UPDATE ON economics FOR EACH ROW EXECUTE FUNCTION update_updated_at();
+CREATE TRIGGER set_updated_at BEFORE UPDATE ON decision_memos FOR EACH ROW EXECUTE FUNCTION update_updated_at();

@@ -196,6 +196,11 @@ async function handleRequest(request, env) {
     '/api/deliverables': 'deliverables',
     '/api/scripts': 'scripts',
     '/api/reports': 'reports',
+    '/api/kill_list': 'kill_list',
+    '/api/economics': 'economics',
+    '/api/field_checks': 'field_checks',
+    '/api/decision_memos': 'decision_memos',
+    '/api/segment_cards': 'segment_cards',
   };
 
   // Match /api/<table> or /api/<table>/<id>
