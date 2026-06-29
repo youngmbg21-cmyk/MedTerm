@@ -1,0 +1,15 @@
+name = "medterminal-worker"
+main = "worker.js"
+compatibility_date = "2024-01-01"
+
+# Set these in the Cloudflare dashboard under Workers > Settings > Variables
+# Do NOT put real values here — this file is committed to the repo.
+#
+# [vars]
+# SUPABASE_URL = "https://your-project.supabase.co"
+# ALLOWED_ORIGIN = "https://medterminal.netlify.app"
+#
+# Secrets (set via `wrangler secret put`):
+#   SUPABASE_SERVICE_KEY
+#   SUPABASE_ANON_KEY
+#   CLAUDE_API_KEY
