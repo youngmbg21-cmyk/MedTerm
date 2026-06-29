@@ -1,87 +1,78 @@
-# CLAUDE.md — MedTerminal Project Instructions
+# CLAUDE.md — MedTerminal Research Workspace
 
-This file tells Claude Code everything it needs to know about MedTerminal before writing a single line of code.
+This file is the first thing Claude Code should read. It defines what this project is, what the app does, and the rules that govern every code change.
 
 ---
 
 ## What This Project Is
 
-**MedTerminal** is a patient-side medical tourism platform built for Kenyan families seeking treatment abroad — primarily in India. It is NOT a broker tool, a hospital marketplace, or a lead-generation engine. It is the patient's advocate: one thread, one named coordinator, transparent information, no kickbacks.
+`index.html` is a **research workspace** — a single-file browser app used by Simon and Amina to manage a six-phase qualitative research programme. The research programme is investigating whether a patient-side medical tourism platform (for Kenyan patients travelling to India for treatment) is viable enough to build.
 
-Tagline: *"Care abroad — without the guesswork."*
+**This app is not the MedTerminal product.** It is the tool used to decide whether to build it.
 
-Read `docs/project-overview.md` for the full brief before making any product or UX decisions.
-
----
-
-## Who You Are Building For
-
-**Primary user:** A Kenyan family (often middle-income, Nairobi-based) with a sick family member who needs treatment — cardiac surgery, oncology, orthopaedics — that is unavailable or unaffordable in Kenya. They are anxious, under-informed, and have likely already been approached by brokers.
-
-**Secondary user:** Amina — the named human coordinator in Nairobi who uses the platform to manage cases on behalf of families.
-
-Design, tone, and UX decisions must always centre the patient family first.
+Read `docs/project-overview.md` before making any product or UX decisions.
 
 ---
 
-## Core Principles — Never Violate These
+## What the App Does
 
-1. **Patient-side always.** MedTerminal never holds patient money, never receives referral fees from hospitals, and never surfaces a hospital higher because it pays more. If a feature could create a conflict of interest, raise it before building it.
+Nine screens. One AI assistant. One file. ~1,060 lines of vanilla HTML/JS/CSS.
 
-2. **Transparency over conversion.** Show real quotes, real timelines, real success rates — even if they make a hospital look less attractive. Never hide unflattering information to close a deal.
+The app:
+- Tracks outreach to interview subjects (patients, caregivers, hospital staff, brokers, clinicians)
+- - Logs qualitative interviews and enforces same-day tagging
+  - - Manages a theme matrix of de-identified quotes tagged by theme, severity, and WTP signal
+    - - Shows per-segment saturation progress toward Phase 2 exit criteria
+      - - Provides read-only reference: interview scripts, outreach templates, operating manual
+        - - Powers a Claude-backed AI assistant that knows the live state of the research
+         
+          - Read `docs/features.md` for the full screen-by-screen breakdown.
+         
+          - ---
 
-3. **One thread.** The patient experience must feel like one continuous journey, not a series of disconnected forms and emails. Every feature should connect to the patient's case thread.
+          ## Who Uses It
 
-4. **Human in the loop.** Amina is always visible. The platform supports her — it does not replace her. No automated decision should ever reach the patient without a human review step.
+          - **Simon** — project lead, strategy, synthesis. Desktop user.
+          - - **Amina** — field coordinator in Nairobi. Conducts interviews. Mobile user (375px viewport).
+           
+            - Both use the app simultaneously. Every screen must work on mobile.
+           
+            - ---
 
-5. **Dignity in design.** Users are dealing with fear, illness, and financial stress. The tone must be calm, clear, and warm. Never clinical or transactional.
+            ## Core Rules — Never Violate These
 
----
-
-## Current State of the Codebase
-
-- `index.html` — The main frontend file. Single-file app using Tailwind CSS and Google Fonts (Fraunces + Inter). No backend yet.
-- `README.md` — Public-facing project description.
-- `CLAUDE.md` — This file.
-- `docs/` — Project reference documents.
-
----
-
-## Technical Rules
-
-- **Keep it a single-file app** (`index.html`) until explicitly told otherwise. Do not split into multiple files or introduce a build system without instruction.
-- **Use Tailwind CSS** for all styling. Do not introduce other CSS frameworks.
-- **No backend yet.** All state lives in the browser. Use `localStorage` if persistence is needed.
-- **Fonts:** Fraunces (headings) and Inter (body) — already loaded via Google Fonts. Do not change these.
-- **Colour palette:** Reference the CSS variables already defined in `index.html` (`:root`). Do not introduce new colours without checking against the existing palette first.
-- **No external JavaScript libraries** unless explicitly approved. Vanilla JS only.
-- **Accessibility matters.** Use semantic HTML. Every interactive element must be keyboard-navigable and have appropriate ARIA labels.
-- **Mobile-first.** Design for a 375px screen width first, then scale up.
-
----
-
-## What To Build Next
-
-See `docs/features.md` for the full feature roadmap, broken down by journey stage.
-
----
-
-## Tone & Voice
-
-- Calm, clear, warm. Never cold or clinical.
-- Plain English. Avoid medical jargon unless it is being explained.
-- Address the user as a capable adult making a serious decision, not as a patient to be managed.
-- Amina speaks in first person: "I'll walk you through this."
-
----
-
-## File Reference
-
-| File | Purpose |
-|------|---------|
-| `index.html` | Main app — all frontend code lives here |
-| `README.md` | Project overview for GitHub |
-| `CLAUDE.md` | This file — instructions for Claude Code |
-| `docs/project-overview.md` | Full project brief, mission, problem, opportunity |
-| `docs/features.md` | Feature roadmap by user journey stage |
-| `docs/tech-stack.md` | Tech decisions and constraints |
+            1. **Single file.** Everything lives in `index.html`. Do not split into multiple files or introduce a build system without explicit instruction.
+            2. 2. **No frameworks.** Vanilla JavaScript only. No React, Vue, Alpine, or any other JS framework.
+               3. 3. **No build tools.** No npm, no Webpack, no Vite. The file opens directly in a browser.
+                  4. 4. **Tailwind CDN only.** `<script src="https://cdn.tailwindcss.com">`. No PostCSS pipeline.
+                     5. 5. **No direct API calls from the browser.** All Airtable and Claude calls go through the Cloudflare Worker. Never put API keys in the frontend.
+                        6. 6. **Use existing CSS variables and component classes.** Check `:root` and `.card`, `.chip`, `.bar-wrap`, `.btn` before creating anything new.
+                           7. 7. **Mobile-first.** Design for 375px first. Test at 375px before committing.
+                              8. 8. **Respect the same-day-tag rule.** This is the most important data quality mechanism in the app. Never weaken or remove the red warning for untagged interviews.
+                                
+                                 9. ---
+                                
+                                 10. ## Architecture in One Paragraph
+                                
+                                 11. The browser loads `index.html`, which on startup fetches all data from Airtable via a Cloudflare Worker and holds it in memory. Hash routing (`#dashboard`, `#outreach`, etc.) shows and hides screen sections. All writes POST to the Worker, which updates Airtable and returns the updated record. The AI assistant sends a live context snapshot + conversation history to the Worker, which prepends the research-director system prompt and forwards to Claude. Claude's response streams back to the panel.
+                                
+                                 12. Read `docs/tech-stack.md` for full technical detail and constraints.
+                                
+                                 13. ---
+                                
+                                 14. ## File Reference
+                                
+                                 15. | File | Purpose |
+                                 16. |------|---------|
+                                 17. | `index.html` | The entire app — HTML, CSS, JS in one file |
+                                 18. | `README.md` | Public-facing repository description |
+                                 19. | `CLAUDE.md` | This file — start here |
+                                 20. | `docs/project-overview.md` | What the research programme is and why |
+                                 21. | `docs/features.md` | Every screen and component, in detail |
+                                 22. | `docs/tech-stack.md` | Architecture, constraints, development workflow |
+                                
+                                 23. ---
+                                
+                                 24. ## Tone & Voice
+                                
+                                 25. The app's tone is calm, precise, and professional. It is a working tool, not a product demo. UI copy should be direct and functional. The AI assistant speaks in the voice of a senior research director — it references specific data, names specific interview IDs, and gives actionable recommendations, not generic advice.
