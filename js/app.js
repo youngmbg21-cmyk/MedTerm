@@ -3,6 +3,12 @@
    ============================================================ */
 export const WORKER_URL = 'https://YOUR-WORKER.workers.dev';
 
+// Feature 1: Hardcoded API key — NEVER used directly from the browser.
+// This constant exists only as documentation. The actual key lives in the
+// Cloudflare Worker's environment variables (wrangler secret).
+// See docs/tech-stack.md for the proxy architecture.
+// In the Worker: env.CLAUDE_API_KEY is set via `wrangler secret put CLAUDE_API_KEY`
+
 export const PHASE_INFO = {
   current: 0,
   label: 'Phase 0 — Foundation & onboarding',

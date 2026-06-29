@@ -1,4 +1,4 @@
-import { STATE, PHASE_INFO, h, esc, api, renderCurrentRoute } from './app.js';
+import { STATE, PHASE_INFO, h, esc, api, renderCurrentRoute, SEGMENTS, THEMES } from './app.js';
 
 let currentSessionId = null;
 
@@ -9,8 +9,16 @@ export function toggleChat(forceOpen) {
   else panel.classList.toggle('closed');
 
   if (!panel.classList.contains('closed') && STATE.chatHistory.length === 0) {
-    addChatMessage('bot', "Hi. I read your interviews, outreach, and matrix every time you ask. I can also query specific data, suggest actions, and generate reports. Try a quick action below, or type a question.");
+    addChatMessage('bot', "Hi. I read your interviews, outreach, and matrix every time you ask. I can also query specific data, suggest actions, and generate reports. Ask me how to use any tab or feature — I know the whole platform. Try a quick action below, or type a question.");
   }
+}
+
+export function clearChat() {
+  STATE.chatHistory = [];
+  currentSessionId = null;
+  const msgs = document.getElementById('chat-messages');
+  msgs.innerHTML = '';
+  addChatMessage('bot', "Chat cleared. I still have access to all your project data. Ask me anything — including how to use any tab or feature.");
 }
 
 function addChatMessage(role, text) {
@@ -106,6 +114,121 @@ function removeTypingIndicator() {
   if (t) t.remove();
 }
 
+function buildPlatformGuide() {
+  return `
+=== PLATFORM USAGE GUIDE (answer questions about any tab/feature from this) ===
+
+This is MedTerminal Research Workspace — a tool for managing a six-phase qualitative research programme investigating whether a patient-side medical tourism platform (Kenya → India) is viable.
+
+TABS & FEATURES:
+- **Dashboard**: Overview with KPIs — interviews logged, same-day tag rate, outreach stats, theme count. Shows phase progress and exit criteria checklist.
+- **Outreach**: Contact management table. Track interview subjects (patients, caregivers, hospital staff, brokers, clinicians). Fields: Name, Segment, Organisation, Country, Channel, Status (Cold→Sent→Replied→Booked→Done→Declined), Owner, Notes. Add new contacts via the + button.
+- **Interviews**: Log of qualitative interviews. Each has date, segment, participant code, interviewer, notes. The SAME-DAY TAG RULE is critical — interviews must be tagged the same day they are conducted. Red warnings appear for untagged interviews.
+- **Theme Matrix**: De-identified quotes tagged by theme, severity (1-5), and willingness-to-pay (WTP) signal. This is the core analysis tool. Themes include: ${THEMES.slice(0, 10).join(', ')}, and more.
+- **Saturation**: Shows per-segment interview progress toward Phase 2 exit criteria. Segments tracked: ${SEGMENTS.join(', ')}.
+- **Scripts** (Reference): Read-only interview scripts for different segments.
+- **Templates** (Reference): Outreach message templates.
+- **Operating Manual** (Reference): Project procedures and guidelines.
+- **Theme Analysis** (Phase 3): Deep analysis of emerging themes across segments.
+- **Segment Cards** (Phase 3): Per-segment synthesis cards.
+- **Top-3 Pains** (Phase 3): Ranked pain points from the research.
+- **Kill List** (Phase 3): Reasons that could kill the project — tracked and evaluated.
+- **State of the Field** (Phase 3): Competitive landscape analysis.
+- **Unit Economics** (Phase 4): Financial model and unit economics calculations.
+- **Alternate Models** (Phase 4): Alternative business model explorations.
+- **Field Checks** (Phase 4): Real-world validation of economic assumptions.
+- **Decision Memo** (Phase 5): Go/no-go decision document.
+- **MVP Scope** (Phase 5): Minimum viable product definition if go.
+- **Confirmatory Tests** (Phase 5): Final validation tests.
+- **Reports** (Output): Generated research reports.
+
+HOW TO USE:
+- Navigate using the left sidebar. On mobile, tap the hamburger menu.
+- Use the AI assistant (me) via the chat panel — click "Ask assistant" or "Open assistant".
+- Quick actions below the chat provide common queries.
+- The Refresh button re-fetches all data from Airtable.
+- All data persists in Airtable via the Cloudflare Worker backend.
+=== END PLATFORM GUIDE ===`;
+}
+
+function buildFullContentSnapshot() {
+  const sections = [];
+
+  // Outreach records (summarized to stay within token limits)
+  if (STATE.outreach.length > 0) {
+    const outreachSummary = STATE.outreach.slice(0, 50).map(r => {
+      const f = r.fields || r;
+      return `${f.Name || '?'} | ${f.Segment || '?'} | ${f.Organisation || ''} | ${f.Status || 'Cold'} | ${f.Notes || ''}`.slice(0, 200);
+    }).join('\n');
+    sections.push(`=== OUTREACH RECORDS (${STATE.outreach.length} total, showing up to 50) ===\n${outreachSummary}`);
+  }
+
+  // Full interview log
+  if (STATE.interviews.length > 0) {
+    const interviewList = STATE.interviews.slice(0, 50).map(r => {
+      const f = r.fields || r;
+      return `ID:${f.ID || r.id || '?'} | ${f.Date || '?'} | ${f.Segment || '?'} | ${f.ParticipantCode || f.participant_code || '?'} | Tagged:${f['Tagged same-day'] || f.tagged_same_day || 'N'} | ${(f.Notes || f.notes || '').slice(0, 150)}`;
+    }).join('\n');
+    sections.push(`=== INTERVIEW LOG (${STATE.interviews.length} total, showing up to 50) ===\n${interviewList}`);
+  }
+
+  // Full theme matrix quotes
+  if (STATE.matrix.length > 0) {
+    const matrixList = STATE.matrix.slice(0, 80).map(r => {
+      const f = r.fields || r;
+      return `[${f['Theme tag'] || f.theme_tag || '?'}] Seg:${f.Segment || f.segment || '?'} Sev:${f.Severity || f.severity || '?'} WTP:${f.WTP || f.wtp || '?'} — "${(f.Quote || f.quote || '').slice(0, 200)}"`;
+    }).join('\n');
+    sections.push(`=== THEME MATRIX (${STATE.matrix.length} total, showing up to 80) ===\n${matrixList}`);
+  }
+
+  // Kill list
+  if (STATE.killList?.length > 0) {
+    const killItems = STATE.killList.map(r => {
+      const f = r.fields || r;
+      return `- ${f.Risk || f.risk || f.Name || f.name || JSON.stringify(f).slice(0, 200)}`;
+    }).join('\n');
+    sections.push(`=== KILL LIST (${STATE.killList.length} entries) ===\n${killItems}`);
+  }
+
+  // Field checks
+  if (STATE.fieldChecks?.length > 0) {
+    const checks = STATE.fieldChecks.map(r => {
+      const f = r.fields || r;
+      return `- ${f.Check || f.check || f.Name || f.name || JSON.stringify(f).slice(0, 200)}`;
+    }).join('\n');
+    sections.push(`=== FIELD CHECKS (${STATE.fieldChecks.length} entries) ===\n${checks}`);
+  }
+
+  // Scripts
+  if (STATE.scripts?.length > 0) {
+    const scriptList = STATE.scripts.map(r => {
+      const f = r.fields || r;
+      return `Script: ${f.script_name || f.Name || '?'} — ${(f.content || f.Content || f.script_content || '').slice(0, 300)}`;
+    }).join('\n');
+    sections.push(`=== SCRIPTS (${STATE.scripts.length}) ===\n${scriptList}`);
+  }
+
+  // Deliverables
+  if (STATE.deliverables?.length > 0) {
+    const delList = STATE.deliverables.map(r => {
+      const f = r.fields || r;
+      return `${f.Name || f.name || '?'} | Status: ${f.Status || f.status || '?'}`;
+    }).join('\n');
+    sections.push(`=== DELIVERABLES (${STATE.deliverables.length}) ===\n${delList}`);
+  }
+
+  // Reports
+  if (STATE.reports?.length > 0) {
+    const reportList = STATE.reports.map(r => {
+      const f = r.fields || r;
+      return `${f.Title || f.title || f.Name || f.name || '?'} — ${(f.Summary || f.summary || f.Content || f.content || '').slice(0, 300)}`;
+    }).join('\n');
+    sections.push(`=== REPORTS (${STATE.reports.length}) ===\n${reportList}`);
+  }
+
+  return sections.join('\n\n');
+}
+
 function buildDataContext() {
   const themes = {};
   STATE.matrix.forEach(r => {
@@ -142,12 +265,20 @@ function buildDataContext() {
     })
     .join('\n');
 
-  // Script names for context
   const scriptNames = STATE.scripts?.length > 0
     ? [...new Set(STATE.scripts.map(s => s.script_name || s.fields?.script_name).filter(Boolean))].join(', ')
     : 'Patient / caregiver, Hospital IPD, Agent / facilitator';
 
-  return `Current phase: ${PHASE_INFO.label}
+  // Feature 2: Platform guide baked into context
+  const platformGuide = buildPlatformGuide();
+
+  // Feature 4: Full content snapshot from all tabs
+  const fullContent = buildFullContentSnapshot();
+
+  return `${platformGuide}
+
+=== PROJECT STATUS SUMMARY ===
+Current phase: ${PHASE_INFO.label}
 
 Interviews logged: ${STATE.interviews.length}
 By segment: ${Object.entries(segmentCounts).map(([s,n]) => `${s}=${n}`).join(', ') || 'none yet'}
@@ -164,7 +295,9 @@ ${highSeverityQuotes || '(none yet)'}
 
 Interview scripts available: ${scriptNames}
 Kill list entries: ${STATE.killList?.length || 0}
-Field checks: ${STATE.fieldChecks?.length || 0}`;
+Field checks: ${STATE.fieldChecks?.length || 0}
+
+${fullContent}`;
 }
 
 export async function sendChat(userText) {
@@ -228,3 +361,4 @@ export function quickPrompt(text) {
 window.toggleChat = toggleChat;
 window.quickPrompt = quickPrompt;
 window.sendChat = sendChat;
+window.clearChat = clearChat;
