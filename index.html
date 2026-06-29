@@ -104,7 +104,10 @@
       <div class="serif text-lg leading-none">Research assistant</div>
       <div class="micro mt-1" style="color:var(--ink-mute);">Reads your data · advises next steps</div>
     </div>
-    <button class="btn btn-ghost" onclick="toggleChat()" aria-label="Close">✕</button>
+    <div class="flex items-center gap-2">
+      <button class="btn btn-ghost text-xs" onclick="clearChat()" aria-label="Clear chat" title="Clear conversation">Clear</button>
+      <button class="btn btn-ghost" onclick="toggleChat()" aria-label="Close">✕</button>
+    </div>
   </div>
 
   <div id="chat-messages" class="flex-1 overflow-y-auto px-5 py-4 flex flex-col gap-3"></div>
