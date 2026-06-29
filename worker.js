@@ -316,9 +316,31 @@ async function handleRequest(request, env) {
     return jsonResponse({ records: data }, status, origin, env);
   }
 
-  // --- Chat ---
+  // --- Chat with tool use ---
   if (path === '/api/chat' && request.method === 'POST') {
-    const { messages, dataContext } = await request.json();
+    const { messages, dataContext, sessionId, tools: enableTools } = await request.json();
+
+    // Persist session if needed
+    let activeSessionId = sessionId;
+    if (!activeSessionId) {
+      const { data: sessionData } = await supabaseRequest('POST', 'chat_sessions', {
+        user_id: member.id,
+        title: messages[0]?.content?.slice(0, 80) || 'Chat session',
+      }, env);
+      activeSessionId = Array.isArray(sessionData) ? sessionData[0]?.id : sessionData?.id;
+    }
+
+    // Save user message
+    if (messages.length > 0) {
+      const lastMsg = messages[messages.length - 1];
+      if (lastMsg.role === 'user') {
+        await supabaseRequest('POST', 'chat_messages', {
+          session_id: activeSessionId,
+          role: 'user',
+          content: lastMsg.content,
+        }, env);
+      }
+    }
 
     const systemMessage = `${SYSTEM_PROMPT}\n\n--- LIVE PROJECT DATA ---\n${dataContext}`;
 
@@ -327,27 +349,244 @@ async function handleRequest(request, env) {
       content: m.content,
     }));
 
-    const res = await fetch('https://api.anthropic.com/v1/messages', {
+    // Tool definitions for Claude
+    const toolDefs = enableTools ? [
+      {
+        name: 'query_outreach',
+        description: 'Query outreach contacts with optional filters. Returns matching records.',
+        input_schema: {
+          type: 'object',
+          properties: {
+            status: { type: 'string', description: 'Filter by status: Cold, Sent, Replied, Booked, Done, Declined' },
+            segment: { type: 'string', description: 'Filter by segment' },
+            limit: { type: 'number', description: 'Max records to return (default 20)' },
+          },
+        },
+      },
+      {
+        name: 'query_interviews',
+        description: 'Query interview records with optional filters.',
+        input_schema: {
+          type: 'object',
+          properties: {
+            segment: { type: 'string', description: 'Filter by segment' },
+            interviewer: { type: 'string', description: 'Filter by interviewer name' },
+            tagged: { type: 'string', description: 'Filter by tagged status: Y or N' },
+            limit: { type: 'number', description: 'Max records to return (default 20)' },
+          },
+        },
+      },
+      {
+        name: 'query_matrix',
+        description: 'Query theme matrix entries with optional filters.',
+        input_schema: {
+          type: 'object',
+          properties: {
+            theme_tag: { type: 'string', description: 'Filter by theme tag' },
+            segment: { type: 'string', description: 'Filter by segment' },
+            min_severity: { type: 'number', description: 'Minimum severity (1-5)' },
+            wtp: { type: 'string', description: 'Filter by WTP: Y, Maybe, N' },
+            limit: { type: 'number', description: 'Max records to return (default 20)' },
+          },
+        },
+      },
+      {
+        name: 'query_scripts',
+        description: 'Query interview scripts. Returns the latest version of each script.',
+        input_schema: {
+          type: 'object',
+          properties: {
+            script_name: { type: 'string', description: 'Filter by script name' },
+          },
+        },
+      },
+      {
+        name: 'query_deliverables',
+        description: 'Query phase deliverables and exit criteria.',
+        input_schema: {
+          type: 'object',
+          properties: {
+            phase: { type: 'number', description: 'Filter by phase number (0-5)' },
+            status: { type: 'string', description: 'Filter by status' },
+          },
+        },
+      },
+      {
+        name: 'propose_action',
+        description: 'Propose an action for the user to confirm. The action will be shown to the user with a Confirm/Skip button.',
+        input_schema: {
+          type: 'object',
+          properties: {
+            action_type: { type: 'string', enum: ['add_interview', 'update_deliverable', 'add_matrix_entry', 'flag_quote'], description: 'Type of action' },
+            description: { type: 'string', description: 'Human-readable description of what this action does' },
+            payload: { type: 'object', description: 'The data to write' },
+          },
+          required: ['action_type', 'description', 'payload'],
+        },
+      },
+      {
+        name: 'generate_report',
+        description: 'Generate a report. Types: weekly_status, phase_exit, investor_briefing, decision_memo.',
+        input_schema: {
+          type: 'object',
+          properties: {
+            report_type: { type: 'string', enum: ['weekly_status', 'phase_exit', 'investor_briefing', 'decision_memo'], description: 'Type of report' },
+            parameters: { type: 'object', description: 'Additional parameters for the report' },
+          },
+          required: ['report_type'],
+        },
+      },
+    ] : undefined;
+
+    // First Claude call
+    const claudeBody = {
+      model: CLAUDE_MODEL,
+      max_tokens: 4096,
+      system: systemMessage,
+      messages: claudeMessages,
+    };
+    if (toolDefs) claudeBody.tools = toolDefs;
+
+    let res = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         'x-api-key': env.CLAUDE_API_KEY,
         'anthropic-version': '2023-06-01',
       },
-      body: JSON.stringify({
-        model: CLAUDE_MODEL,
-        max_tokens: 2048,
-        system: systemMessage,
-        messages: claudeMessages,
-      }),
+      body: JSON.stringify(claudeBody),
     });
 
-    const result = await res.json();
-    const text = result.content?.[0]?.text || '(empty response)';
-    return jsonResponse({ text }, 200, origin, env);
+    let result = await res.json();
+    const actions = [];
+    let textParts = [];
+    let toolRound = 0;
+    const maxToolRounds = 3;
+
+    // Process tool use loop
+    while (result.stop_reason === 'tool_use' && toolRound < maxToolRounds) {
+      toolRound++;
+      const toolUseBlocks = result.content.filter(b => b.type === 'tool_use');
+      const textBlocks = result.content.filter(b => b.type === 'text');
+      textBlocks.forEach(b => textParts.push(b.text));
+
+      const toolResults = [];
+      for (const toolBlock of toolUseBlocks) {
+        const toolResult = await executeToolCall(toolBlock.name, toolBlock.input, env, member);
+
+        if (toolBlock.name === 'propose_action') {
+          actions.push({
+            action_type: toolBlock.input.action_type,
+            description: toolBlock.input.description,
+            payload: toolBlock.input.payload,
+          });
+          toolResults.push({ type: 'tool_result', tool_use_id: toolBlock.id, content: 'Action proposed to user for confirmation.' });
+        } else {
+          toolResults.push({ type: 'tool_result', tool_use_id: toolBlock.id, content: JSON.stringify(toolResult).slice(0, 4000) });
+        }
+      }
+
+      // Continue conversation with tool results
+      claudeMessages.push({ role: 'assistant', content: result.content });
+      claudeMessages.push({ role: 'user', content: toolResults });
+
+      res = await fetch('https://api.anthropic.com/v1/messages', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-api-key': env.CLAUDE_API_KEY,
+          'anthropic-version': '2023-06-01',
+        },
+        body: JSON.stringify({ ...claudeBody, messages: claudeMessages }),
+      });
+      result = await res.json();
+    }
+
+    // Collect final text
+    if (result.content) {
+      result.content.filter(b => b.type === 'text').forEach(b => textParts.push(b.text));
+    }
+    const finalText = textParts.join('\n\n') || '(empty response)';
+
+    // Save assistant message
+    await supabaseRequest('POST', 'chat_messages', {
+      session_id: activeSessionId,
+      role: 'assistant',
+      content: finalText,
+      tool_calls: toolRound > 0 ? { rounds: toolRound, actions: actions.length } : null,
+    }, env);
+
+    // Detect patterns for proactive surfacing
+    const patterns = detectPatterns();
+
+    return jsonResponse({
+      text: finalText,
+      sessionId: activeSessionId,
+      actions,
+      patterns,
+    }, 200, origin, env);
   }
 
   return errorResponse('Not found', 404, origin, env);
+}
+
+// Execute a tool call from Claude
+async function executeToolCall(name, input, env, member) {
+  switch (name) {
+    case 'query_outreach': {
+      let query = 'outreach?order=created_at.desc';
+      if (input.status) query += `&status=eq.${input.status}`;
+      if (input.segment) query += `&segment=eq.${input.segment}`;
+      query += `&limit=${input.limit || 20}`;
+      const { data } = await supabaseRequest('GET', query, null, env);
+      return { records: data, count: data?.length || 0 };
+    }
+    case 'query_interviews': {
+      let query = 'interviews?order=date.desc';
+      if (input.segment) query += `&segment=eq.${input.segment}`;
+      if (input.interviewer) query += `&interviewer=eq.${input.interviewer}`;
+      if (input.tagged) query += `&tagged_same_day=eq.${input.tagged}`;
+      query += `&limit=${input.limit || 20}`;
+      const { data } = await supabaseRequest('GET', query, null, env);
+      return { records: data, count: data?.length || 0 };
+    }
+    case 'query_matrix': {
+      let query = 'matrix?order=created_at.desc';
+      if (input.theme_tag) query += `&theme_tag=eq.${input.theme_tag}`;
+      if (input.segment) query += `&segment=eq.${input.segment}`;
+      if (input.min_severity) query += `&severity=gte.${input.min_severity}`;
+      if (input.wtp) query += `&wtp=eq.${input.wtp}`;
+      query += `&limit=${input.limit || 20}`;
+      const { data } = await supabaseRequest('GET', query, null, env);
+      return { records: data, count: data?.length || 0 };
+    }
+    case 'query_scripts': {
+      let query = 'scripts?order=version.desc';
+      if (input.script_name) query += `&script_name=eq.${encodeURIComponent(input.script_name)}`;
+      const { data } = await supabaseRequest('GET', query, null, env);
+      return { records: data, count: data?.length || 0 };
+    }
+    case 'query_deliverables': {
+      let query = 'deliverables?order=phase.asc';
+      if (input.phase !== undefined) query += `&phase=eq.${input.phase}`;
+      if (input.status) query += `&status=eq.${input.status}`;
+      const { data } = await supabaseRequest('GET', query, null, env);
+      return { records: data, count: data?.length || 0 };
+    }
+    case 'propose_action':
+      return { proposed: true };
+    case 'generate_report':
+      return { message: 'Report generation acknowledged. The report content follows in the response text.' };
+    default:
+      return { error: `Unknown tool: ${name}` };
+  }
+}
+
+// Detect patterns for proactive surfacing (runs server-side)
+function detectPatterns() {
+  // Placeholder — in production, this would analyse recent data trends
+  // and return pattern strings for the frontend to display.
+  return [];
 }
 
 export default {
