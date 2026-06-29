@@ -1,0 +1,1059 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>MedTerminal — Research Workspace</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,300;9..144,400;9..144,500;9..144,600&family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg:        #F5F1EA;
+    --bg-soft:   #FAF7F1;
+    --paper:     #FFFFFF;
+    --ink:       #1F2A28;
+    --ink-soft:  #4A5651;
+    --ink-mute:  #8A8478;
+    --line:      #E5DDD0;
+    --line-soft: #EFE9DD;
+    --sage:      #5C7A6B;
+    --sage-deep: #3F5A4D;
+    --sage-soft: #E6EDE7;
+    --clay:      #B8693E;
+    --clay-soft: #F4E4D8;
+    --rose:      #C95F5F;
+    --rose-soft: #F6E3E3;
+    --honey:     #D4A24C;
+    --honey-soft:#F5E9CF;
+  }
+  html, body { background: var(--bg); color: var(--ink); }
+  body { font-family: 'Inter', system-ui, sans-serif; font-feature-settings: "ss01","cv11"; -webkit-font-smoothing: antialiased; }
+  .serif { font-family: 'Fraunces', Georgia, serif; font-feature-settings: "ss01"; letter-spacing: -0.01em; }
+  .micro { font-size: 10.5px; letter-spacing: 0.14em; text-transform: uppercase; font-weight: 500; }
+  .num   { font-variant-numeric: tabular-nums; }
+
+  .card { background: var(--paper); border: 1px solid var(--line); border-radius: 14px; }
+  .card-soft { background: var(--bg-soft); border: 1px solid var(--line-soft); border-radius: 14px; }
+  .divide-warm > * + * { border-top: 1px solid var(--line-soft); }
+
+  .chip { display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; border-radius: 999px; font-size: 11px; font-weight: 500; border: 1px solid transparent; }
+  .chip-sage  { background: var(--sage-soft); color: var(--sage-deep); border-color: #d4dfd5; }
+  .chip-honey { background: var(--honey-soft); color: #8a6a23; border-color: #ecdcb6; }
+  .chip-rose  { background: var(--rose-soft); color: #9a3f3f; border-color: #ecc9c9; }
+  .chip-clay  { background: var(--clay-soft); color: #8a4a26; border-color: #ecd2bc; }
+  .chip-line  { background: var(--paper); color: var(--ink-soft); border-color: var(--line); }
+
+  .nav-item { display:flex; align-items:center; gap:10px; padding:9px 12px; border-radius:10px; color: var(--ink-soft); font-size: 14px; font-weight: 500; cursor: pointer; transition: all .15s ease; }
+  .nav-item:hover { background: var(--bg-soft); color: var(--ink); }
+  .nav-item.active { background: var(--sage-soft); color: var(--sage-deep); }
+  .nav-item .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--line); }
+  .nav-item.active .dot { background: var(--sage-deep); }
+
+  .btn { display:inline-flex; align-items:center; gap:8px; padding: 8px 14px; border-radius: 10px; font-size: 13px; font-weight: 500; cursor:pointer; transition: all .15s ease; }
+  .btn-primary { background: var(--sage-deep); color: var(--paper); }
+  .btn-primary:hover { background: var(--sage); }
+  .btn-line { background: var(--paper); color: var(--ink); border: 1px solid var(--line); }
+  .btn-line:hover { background: var(--bg-soft); }
+  .btn-ghost { background: transparent; color: var(--ink-soft); }
+  .btn-ghost:hover { color: var(--ink); background: var(--bg-soft); }
+
+  .input, .select, .textarea {
+    width: 100%; padding: 9px 12px; border-radius: 10px; background: var(--paper);
+    border: 1px solid var(--line); font-size: 14px; color: var(--ink);
+    transition: border-color .15s ease;
+  }
+  .input:focus, .select:focus, .textarea:focus { outline: none; border-color: var(--sage); }
+  .label { font-size: 12px; font-weight: 500; color: var(--ink-soft); margin-bottom: 4px; display: block; }
+
+  .h-row { transition: background .15s ease; }
+  .h-row:hover { background: var(--bg-soft); }
+  .table-wrap { overflow-x: auto; }
+  table.data { width: 100%; border-collapse: collapse; font-size: 13px; }
+  table.data th { text-align: left; padding: 10px 12px; font-weight: 500; font-size: 11px; color: var(--ink-mute); letter-spacing: 0.06em; text-transform: uppercase; border-bottom: 1px solid var(--line); }
+  table.data td { padding: 11px 12px; border-bottom: 1px solid var(--line-soft); color: var(--ink); vertical-align: top; }
+
+  .kpi { padding: 18px 20px; }
+  .kpi-num { font-size: 32px; font-weight: 400; line-height: 1; font-variant-numeric: tabular-nums; letter-spacing: -0.02em; font-family: 'Fraunces', Georgia, serif; }
+  .kpi-label { font-size: 11px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--ink-mute); font-weight: 500; margin-top: 8px; }
+
+  .phase-pill { display:inline-flex; align-items:center; gap:6px; padding: 3px 10px; border-radius: 999px; font-size: 11px; font-weight: 500; font-family: 'Fraunces', Georgia, serif; }
+  .phase-pill.done { background: var(--sage-soft); color: var(--sage-deep); }
+  .phase-pill.active { background: var(--honey-soft); color: #8a6a23; }
+  .phase-pill.next { background: var(--bg-soft); color: var(--ink-mute); border: 1px dashed var(--line); }
+
+  .bar-wrap { width: 100%; height: 6px; background: var(--line-soft); border-radius: 4px; overflow:hidden; }
+  .bar-wrap > i { display:block; height:100%; background: var(--sage); border-radius: 4px; transition: width .25s ease; }
+
+  /* Chatbot panel */
+  .chat-panel { position: fixed; right: 0; top: 0; bottom: 0; width: 420px; background: var(--paper); border-left: 1px solid var(--line); z-index: 50; display: flex; flex-direction: column; transition: transform .3s ease; }
+  .chat-panel.closed { transform: translateX(100%); }
+  .chat-msg { padding: 11px 14px; border-radius: 14px; font-size: 14px; line-height: 1.55; max-width: 92%; white-space: pre-wrap; }
+  .chat-msg.user { background: var(--sage-soft); color: var(--sage-deep); align-self: flex-end; border-bottom-right-radius: 4px; }
+  .chat-msg.bot  { background: var(--bg-soft); color: var(--ink); align-self: flex-start; border-bottom-left-radius: 4px; border: 1px solid var(--line-soft); }
+  .chat-msg.bot strong { color: var(--sage-deep); font-weight: 600; }
+  .quick-action { padding: 6px 12px; font-size: 12px; border-radius: 999px; background: var(--paper); border: 1px solid var(--line); color: var(--ink-soft); cursor: pointer; transition: all .15s; }
+  .quick-action:hover { background: var(--sage-soft); color: var(--sage-deep); border-color: var(--sage); }
+  .typing-dot { width:6px; height:6px; border-radius:50%; background: var(--ink-mute); animation: blink 1.4s infinite both; }
+  .typing-dot:nth-child(2) { animation-delay: .2s; }
+  .typing-dot:nth-child(3) { animation-delay: .4s; }
+  @keyframes blink { 0%,80%,100%{opacity:.25} 40%{opacity:1} }
+
+  /* Modal */
+  .modal-bg { position: fixed; inset: 0; background: rgba(31,42,40,0.4); z-index: 60; display: flex; align-items: center; justify-content: center; padding: 20px; }
+  .modal { background: var(--paper); border-radius: 16px; max-width: 560px; width: 100%; max-height: 88vh; overflow-y: auto; }
+
+  .fade-in { animation: fadeIn .25s ease both; }
+  @keyframes fadeIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+
+  /* Mobile */
+  @media (max-width: 1024px) {
+    .chat-panel { width: 100%; }
+  }
+  @media (max-width: 768px) {
+    .sidebar-nav { position: fixed; top: 0; left: 0; bottom: 0; transform: translateX(-100%); transition: transform .3s ease; z-index: 40; width: 260px; }
+    .sidebar-nav.open { transform: translateX(0); }
+    .main-area { padding-left: 0 !important; }
+  }
+</style>
+</head>
+<body>
+
+<!-- Sidebar nav -->
+<aside class="sidebar-nav fixed top-0 left-0 bottom-0 w-[240px] border-r flex flex-col z-30" style="border-color:var(--line); background:var(--bg);">
+  <div class="px-5 pt-6 pb-5 border-b" style="border-color:var(--line-soft);">
+    <div class="flex items-center gap-2">
+      <div class="w-7 h-7 rounded-lg flex items-center justify-center" style="background:var(--sage-deep);">
+        <span class="serif text-white text-base">M</span>
+      </div>
+      <div>
+        <div class="serif text-base leading-none" style="color:var(--ink);">MedTerminal</div>
+        <div class="micro mt-1" style="color:var(--clay);">Research Workspace</div>
+      </div>
+    </div>
+  </div>
+
+  <nav class="flex-1 px-3 py-4 space-y-0.5 overflow-y-auto">
+    <div class="micro px-3 mb-2" style="color:var(--ink-mute);">Daily</div>
+    <a class="nav-item" data-route="dashboard"><span class="dot"></span>Dashboard</a>
+    <a class="nav-item" data-route="outreach"><span class="dot"></span>Outreach</a>
+    <a class="nav-item" data-route="interviews"><span class="dot"></span>Interviews</a>
+    <a class="nav-item" data-route="matrix"><span class="dot"></span>Theme matrix</a>
+    <a class="nav-item" data-route="saturation"><span class="dot"></span>Saturation</a>
+
+    <div class="micro px-3 mt-5 mb-2" style="color:var(--ink-mute);">Reference</div>
+    <a class="nav-item" data-route="scripts"><span class="dot"></span>Scripts</a>
+    <a class="nav-item" data-route="templates"><span class="dot"></span>Templates</a>
+    <a class="nav-item" data-route="manual"><span class="dot"></span>Operating manual</a>
+
+    <div class="micro px-3 mt-5 mb-2" style="color:var(--ink-mute);">Phase 5</div>
+    <a class="nav-item" data-route="decisions"><span class="dot"></span>Decisions</a>
+  </nav>
+
+  <div class="px-4 py-4 border-t" style="border-color:var(--line-soft);">
+    <button class="btn btn-line w-full justify-center" onclick="toggleChat()">
+      <span>💬</span><span>Open assistant</span>
+    </button>
+    <div class="micro mt-3 text-center" style="color:var(--ink-mute);">v0.1 · phase 0</div>
+  </div>
+</aside>
+
+<!-- Main area -->
+<main class="main-area" style="padding-left:240px; min-height:100vh;">
+  <!-- Top bar -->
+  <header class="sticky top-0 z-20" style="background:rgba(245,241,234,0.92); backdrop-filter:saturate(150%) blur(8px); border-bottom:1px solid var(--line-soft);">
+    <div class="px-8 py-4 flex items-center justify-between">
+      <div>
+        <div class="micro" style="color:var(--ink-mute);">Current phase</div>
+        <h1 id="page-title" class="serif text-xl mt-0.5">Dashboard</h1>
+      </div>
+      <div class="flex items-center gap-3">
+        <span id="sync-status" class="chip chip-line">Loading…</span>
+        <button class="btn btn-ghost" onclick="loadAllData(true)">↻ Refresh</button>
+        <button class="btn btn-primary" onclick="toggleChat()">Ask assistant</button>
+      </div>
+    </div>
+  </header>
+
+  <!-- Page container -->
+  <div id="page" class="px-8 py-8 max-w-[1200px]"></div>
+</main>
+
+<!-- Chatbot side panel -->
+<aside id="chat-panel" class="chat-panel closed">
+  <div class="px-5 py-4 border-b flex items-center justify-between" style="border-color:var(--line-soft);">
+    <div>
+      <div class="serif text-lg leading-none">Research assistant</div>
+      <div class="micro mt-1" style="color:var(--ink-mute);">Reads your data · advises next steps</div>
+    </div>
+    <button class="btn btn-ghost" onclick="toggleChat()" aria-label="Close">✕</button>
+  </div>
+
+  <div id="chat-messages" class="flex-1 overflow-y-auto px-5 py-4 flex flex-col gap-3"></div>
+
+  <div class="px-5 py-3 border-t flex flex-wrap gap-2" style="border-color:var(--line-soft);">
+    <button class="quick-action" onclick="quickPrompt('Give me a one-paragraph status of where the project is right now. Be specific. Use the data.')">Status check</button>
+    <button class="quick-action" onclick="quickPrompt('Assess our progress against the current phase exit criteria. What still needs to be done?')">Phase exit check</button>
+    <button class="quick-action" onclick="quickPrompt('What is the single most important thing I should do today, given the state of the project? Be specific — name a person, a deliverable, or an interview.')">What now?</button>
+    <button class="quick-action" onclick="quickPrompt('Surface the strongest themes emerging from the matrix. Quote specific entries. Flag where evidence is still thin.')">Surface themes</button>
+  </div>
+
+  <div class="px-5 py-4 border-t" style="border-color:var(--line-soft);">
+    <div class="flex gap-2 items-end">
+      <textarea id="chat-input" class="textarea" rows="2" placeholder="Ask anything about the project state…" onkeydown="if(event.key==='Enter' && !event.shiftKey){event.preventDefault();sendChat();}"></textarea>
+      <button class="btn btn-primary" onclick="sendChat()">Send</button>
+    </div>
+  </div>
+</aside>
+
+<!-- Modal container -->
+<div id="modal-root"></div>
+
+<script>
+/* ============================================================
+   CONFIG — set these for your deployment
+   ============================================================ */
+const WORKER_URL = 'https://YOUR-WORKER.workers.dev'; // set this to your deployed Worker URL
+const PHASE_INFO = {
+  current: 0,
+  label: 'Phase 0 — Foundation & onboarding',
+  exitCriteria: [
+    { id: 'pre-work', label: "Simon's pre-work completed" },
+    { id: 'workspace', label: 'Workspace live, both have written content' },
+    { id: 'scripts-v1', label: 'Interview scripts v1 drafted' },
+    { id: 'wedge-locked', label: 'Wedge brief signed and dated' },
+    { id: 'simon-explains', label: 'Simon can explain the project unaided' },
+    { id: 'two-changes', label: 'Simon has flagged ≥2 plan changes' }
+  ]
+};
+
+/* ============================================================
+   STATE
+   ============================================================ */
+const STATE = {
+  outreach: [],
+  interviews: [],
+  matrix: [],
+  deliverables: [],
+  targets: [],
+  chatHistory: [],
+  loaded: false,
+};
+
+/* ============================================================
+   API CLIENT
+   ============================================================ */
+async function api(path, opts = {}) {
+  const url = `${WORKER_URL}${path}`;
+  const res = await fetch(url, {
+    ...opts,
+    headers: { 'Content-Type': 'application/json', ...(opts.headers || {}) },
+    credentials: 'include'
+  });
+  if (!res.ok) throw new Error(`API ${res.status}: ${await res.text()}`);
+  return res.json();
+}
+
+async function loadAllData(showStatus = false) {
+  setSync('Loading…');
+  try {
+    const [o, i, m, d] = await Promise.all([
+      api('/api/Outreach').catch(() => ({ records: [] })),
+      api('/api/Interviews').catch(() => ({ records: [] })),
+      api('/api/Matrix').catch(() => ({ records: [] })),
+      api('/api/Deliverables').catch(() => ({ records: [] }))
+    ]);
+    STATE.outreach = o.records || [];
+    STATE.interviews = i.records || [];
+    STATE.matrix = m.records || [];
+    STATE.deliverables = d.records || [];
+    STATE.loaded = true;
+    setSync('Synced');
+    if (showStatus) renderCurrentRoute();
+    else renderCurrentRoute();
+  } catch (e) {
+    setSync('Offline · using cache', 'rose');
+    console.error(e);
+  }
+}
+
+function setSync(text, tone='line') {
+  const el = document.getElementById('sync-status');
+  el.className = `chip chip-${tone === 'rose' ? 'rose' : tone === 'sage' ? 'sage' : 'line'}`;
+  el.textContent = text;
+  if (text === 'Synced') {
+    setTimeout(() => {
+      el.className = 'chip chip-sage';
+      el.textContent = `✓ ${STATE.outreach.length + STATE.interviews.length + STATE.matrix.length} records`;
+    }, 600);
+  }
+}
+
+/* ============================================================
+   ROUTER
+   ============================================================ */
+const ROUTES = {
+  dashboard: { title: 'Dashboard', render: renderDashboard },
+  outreach: { title: 'Outreach', render: renderOutreach },
+  interviews: { title: 'Interviews', render: renderInterviews },
+  matrix: { title: 'Theme matrix', render: renderMatrix },
+  saturation: { title: 'Saturation', render: renderSaturation },
+  scripts: { title: 'Interview scripts', render: renderScripts },
+  templates: { title: 'Outreach templates', render: renderTemplates },
+  manual: { title: 'Operating manual', render: renderManual },
+  decisions: { title: 'Decisions', render: renderDecisions }
+};
+
+function go(route) {
+  if (!ROUTES[route]) route = 'dashboard';
+  location.hash = route;
+}
+
+function renderCurrentRoute() {
+  const route = (location.hash || '#dashboard').slice(1);
+  const r = ROUTES[route] || ROUTES.dashboard;
+  document.getElementById('page-title').textContent = r.title;
+  document.querySelectorAll('[data-route]').forEach(el => {
+    el.classList.toggle('active', el.dataset.route === route);
+  });
+  const page = document.getElementById('page');
+  page.innerHTML = '';
+  page.classList.add('fade-in');
+  r.render(page);
+  setTimeout(() => page.classList.remove('fade-in'), 300);
+}
+
+window.addEventListener('hashchange', renderCurrentRoute);
+document.querySelectorAll('[data-route]').forEach(el => {
+  el.addEventListener('click', () => go(el.dataset.route));
+});
+
+/* ============================================================
+   HELPERS
+   ============================================================ */
+const $ = (sel, root = document) => root.querySelector(sel);
+const h = (tag, attrs = {}, children = []) => {
+  const el = document.createElement(tag);
+  for (const [k, v] of Object.entries(attrs)) {
+    if (k === 'class') el.className = v;
+    else if (k === 'html') el.innerHTML = v;
+    else if (k.startsWith('on')) el.addEventListener(k.slice(2).toLowerCase(), v);
+    else el.setAttribute(k, v);
+  }
+  (Array.isArray(children) ? children : [children]).forEach(c => {
+    if (c == null) return;
+    if (typeof c === 'string') el.appendChild(document.createTextNode(c));
+    else el.appendChild(c);
+  });
+  return el;
+};
+
+function statusChip(status) {
+  const map = {
+    'Cold': 'chip-line', 'Sent': 'chip-honey', 'Replied': 'chip-honey',
+    'Booked': 'chip-sage', 'Done': 'chip-sage', 'Declined': 'chip-rose',
+    'In progress': 'chip-honey', 'Complete': 'chip-sage', 'Blocked': 'chip-rose',
+    'Not started': 'chip-line'
+  };
+  return `<span class="chip ${map[status] || 'chip-line'}">${status || '—'}</span>`;
+}
+
+function severityDots(sev) {
+  if (!sev) return '<span style="color:var(--ink-mute);">—</span>';
+  const n = parseInt(sev, 10) || 0;
+  let html = '<span class="inline-flex gap-0.5">';
+  for (let i = 1; i <= 5; i++) {
+    const cls = i <= n ? (n >= 4 ? 'on-high' : n >= 3 ? 'on-mid' : 'on-low') : '';
+    html += `<i class="risk-dots-i" style="width:5px;height:5px;border-radius:50%;background:${i<=n ? (n>=4?'var(--rose)':n>=3?'var(--honey)':'var(--sage)') : 'var(--line)'};"></i>`;
+  }
+  return html + '</span>';
+}
+
+/* ============================================================
+   SCREEN: Dashboard
+   ============================================================ */
+function renderDashboard(page) {
+  // Compute KPIs from STATE
+  const total = STATE.interviews.length;
+  const tagged = STATE.interviews.filter(r => r.fields?.['Tagged same-day'] === 'Y').length;
+  const taggedPct = total ? Math.round((tagged / total) * 100) : 0;
+  const sentOrLater = STATE.outreach.filter(r => ['Sent','Replied','Booked','Done'].includes(r.fields?.Status)).length;
+  const booked = STATE.outreach.filter(r => ['Booked','Done'].includes(r.fields?.Status)).length;
+  const themes = new Set(STATE.matrix.map(r => r.fields?.['Theme tag']).filter(Boolean));
+
+  // KPI cards row
+  const kpis = h('div', { class: 'grid grid-cols-2 md:grid-cols-4 gap-4 mb-6' }, [
+    kpiCard('Interviews logged', total, total >= 30 ? 'Saturation territory' : `Target ~30 by Phase 2 close`),
+    kpiCard('Same-day tagged', `${taggedPct}%`, taggedPct === 100 ? 'Hard rule holding' : 'Hard rule: must be 100%', taggedPct === 100 ? 'sage' : taggedPct >= 80 ? 'honey' : 'rose'),
+    kpiCard('Outreach contacted', sentOrLater, `${booked} booked or done`),
+    kpiCard('Themes surfaced', themes.size, themes.size >= 8 ? 'Rich pool' : 'Build the matrix')
+  ]);
+  page.appendChild(kpis);
+
+  // Phase progress card
+  const phaseCard = h('div', { class: 'card mb-6' }, [
+    h('div', { class: 'px-6 pt-5 pb-4 flex items-baseline justify-between border-b', html: '', }, [
+      h('div', {}, [
+        h('div', { class: 'micro', html: `Phase ${PHASE_INFO.current}` }),
+        h('div', { class: 'serif text-lg mt-1', html: PHASE_INFO.label.split('—')[1]?.trim() || PHASE_INFO.label })
+      ]),
+      h('div', { class: 'flex gap-1.5' }, [0,1,2,3,4,5].map(n =>
+        h('span', { class: `phase-pill ${n < PHASE_INFO.current ? 'done' : n === PHASE_INFO.current ? 'active' : 'next'}`, html: `${n}` })
+      ))
+    ]),
+    h('div', { class: 'px-6 py-4 divide-warm' }, PHASE_INFO.exitCriteria.map(c => {
+      const done = STATE.deliverables.find(d => d.fields?.['Deliverable']?.toLowerCase().includes(c.label.toLowerCase().slice(0, 20)))?.fields?.Status === 'Complete';
+      return h('div', { class: 'flex items-center justify-between py-2 text-sm' }, [
+        h('div', { class: 'flex items-center gap-3' }, [
+          h('span', { class: 'inline-flex w-4 h-4 rounded items-center justify-center', html: done ? '<span style="color:var(--sage-deep);font-size:13px;">✓</span>' : '<span style="color:var(--line);font-size:13px;">○</span>', style: `background:${done?'var(--sage-soft)':'var(--bg-soft)'}; border: 1px solid ${done?'var(--sage)':'var(--line)'};` }),
+          h('span', { class: done ? 'line-through' : '', style: done ? 'color:var(--ink-mute);' : '' }, c.label)
+        ]),
+        h('span', { class: 'micro', html: done ? '<span style="color:var(--sage-deep);">Done</span>' : '<span style="color:var(--ink-mute);">Pending</span>' })
+      ]);
+    }))
+  ]);
+  page.appendChild(phaseCard);
+
+  // Recent activity + assistant prompt
+  const grid = h('div', { class: 'grid md:grid-cols-3 gap-4' });
+
+  const recent = h('div', { class: 'card md:col-span-2' }, [
+    h('div', { class: 'px-6 pt-5 pb-3', html: '<div class="micro" style="color:var(--ink-mute);">Recent interviews</div>' }),
+    h('div', { class: 'divide-warm px-6 pb-5' }, (STATE.interviews.slice(0,4).length ? STATE.interviews.slice(0,4) : [{fields:{}}]).map(r => {
+      if (!r.fields?.Date) return h('div', { class: 'py-4 text-sm', style: 'color:var(--ink-mute);', html: 'No interviews logged yet. Start with Phase 1 outreach, then log the first one in Interviews →' });
+      return h('div', { class: 'py-3 flex items-center justify-between text-sm' }, [
+        h('div', {}, [
+          h('div', { class: 'font-medium', html: `${r.fields?.['Interview ID'] || '—'} · ${r.fields?.Segment || '—'}` }),
+          h('div', { class: 'text-xs mt-0.5', style: 'color:var(--ink-mute);', html: `${r.fields?.Date || ''} · ${r.fields?.Interviewer || ''}` })
+        ]),
+        h('div', { html: r.fields?.['Tagged same-day'] === 'Y' ? '<span class="chip chip-sage">tagged</span>' : '<span class="chip chip-rose">untagged</span>' })
+      ]);
+    }))
+  ]);
+  grid.appendChild(recent);
+
+  const ask = h('div', { class: 'card-soft p-5' }, [
+    h('div', { class: 'serif text-base mb-2', html: 'What should I do today?' }),
+    h('div', { class: 'text-xs mb-3', style: 'color:var(--ink-soft);', html: 'The assistant reads your interviews, outreach, and matrix — and recommends the next specific move.' }),
+    h('button', { class: 'btn btn-primary w-full justify-center', onclick: () => { toggleChat(true); quickPrompt('What is the single most important thing I should do today? Be specific.'); } }, 'Ask the assistant')
+  ]);
+  grid.appendChild(ask);
+
+  page.appendChild(grid);
+}
+
+function kpiCard(label, value, sub, tone) {
+  const valueClass = tone === 'rose' ? 'color:var(--rose);' : tone === 'honey' ? 'color:#8a6a23;' : tone === 'sage' ? 'color:var(--sage-deep);' : '';
+  return h('div', { class: 'card kpi' }, [
+    h('div', { class: 'kpi-num', style: valueClass, html: String(value) }),
+    h('div', { class: 'kpi-label', html: label }),
+    sub ? h('div', { class: 'text-xs mt-2', style: 'color:var(--ink-mute);', html: sub }) : null
+  ]);
+}
+
+/* ============================================================
+   SCREEN: Outreach (R/W table)
+   ============================================================ */
+const OUTREACH_FIELDS = ['Name','Segment','Organisation','Country','Channel','Status','Owner','First contact','Notes'];
+const OUTREACH_STATUS_OPTIONS = ['Cold','Sent','Replied','Booked','Done','Declined'];
+const SEGMENTS = ['Patient','Caregiver','Hospital IPD','Aggregator','Agent','Insurance broker','Diaspora family'];
+
+function renderOutreach(page) {
+  const filterState = { status: 'all', owner: 'all', q: '' };
+
+  const headerBar = h('div', { class: 'flex flex-wrap items-center gap-3 mb-4' }, [
+    h('input', { class: 'input flex-1 min-w-[200px]', placeholder: 'Search name, org, country…', oninput: e => { filterState.q = e.target.value; renderTable(); } }),
+    h('select', { class: 'select max-w-[160px]', onchange: e => { filterState.status = e.target.value; renderTable(); } }, [
+      h('option', { value: 'all' }, 'All statuses'),
+      ...OUTREACH_STATUS_OPTIONS.map(s => h('option', { value: s }, s))
+    ]),
+    h('button', { class: 'btn btn-primary', onclick: () => openOutreachForm() }, '+ Add contact')
+  ]);
+  page.appendChild(headerBar);
+
+  const tableWrap = h('div', { class: 'card' });
+  page.appendChild(tableWrap);
+
+  function renderTable() {
+    const rows = STATE.outreach.filter(r => {
+      const f = r.fields || {};
+      if (filterState.status !== 'all' && f.Status !== filterState.status) return false;
+      if (filterState.q) {
+        const q = filterState.q.toLowerCase();
+        const hay = [f.Name, f.Organisation, f.Country, f.Segment, f.Notes].filter(Boolean).join(' ').toLowerCase();
+        if (!hay.includes(q)) return false;
+      }
+      return true;
+    });
+
+    tableWrap.innerHTML = '';
+    const t = h('div', { class: 'table-wrap' });
+    const table = h('table', { class: 'data' });
+
+    const thead = h('thead');
+    thead.innerHTML = `<tr><th>Name</th><th>Segment</th><th>Org</th><th>Country</th><th>Status</th><th>Owner</th><th></th></tr>`;
+    table.appendChild(thead);
+
+    const tbody = h('tbody');
+    if (rows.length === 0) {
+      tbody.innerHTML = `<tr><td colspan="7" class="text-center py-8" style="color:var(--ink-mute);">${STATE.outreach.length === 0 ? 'No outreach yet. Add your first contact.' : 'No matches.'}</td></tr>`;
+    } else {
+      rows.forEach(r => {
+        const f = r.fields || {};
+        const tr = h('tr', { class: 'h-row' });
+        tr.innerHTML = `
+          <td class="font-medium">${f.Name || '—'}</td>
+          <td>${f.Segment || '—'}</td>
+          <td>${f.Organisation || '—'}</td>
+          <td>${f.Country || '—'}</td>
+          <td>${statusChip(f.Status)}</td>
+          <td>${f.Owner || '—'}</td>
+          <td><button class="btn btn-ghost" data-edit="${r.id}">Edit</button></td>
+        `;
+        tr.querySelector('[data-edit]').addEventListener('click', () => openOutreachForm(r));
+        tbody.appendChild(tr);
+      });
+    }
+    table.appendChild(tbody);
+    t.appendChild(table);
+    tableWrap.appendChild(t);
+  }
+  renderTable();
+}
+
+function openOutreachForm(existing) {
+  const f = existing?.fields || {};
+  const modal = openModal('Outreach contact', [
+    formField('Name', 'Name', 'input', f.Name),
+    formField('Segment', 'Segment', 'select', f.Segment, SEGMENTS),
+    formField('Organisation', 'Organisation', 'input', f.Organisation),
+    formField('Country', 'Country', 'input', f.Country),
+    formField('Channel', 'Channel', 'select', f.Channel, ['LinkedIn','Email','In-person','Phone','WhatsApp','Facebook']),
+    formField('Status', 'Status', 'select', f.Status || 'Cold', OUTREACH_STATUS_OPTIONS),
+    formField('Owner', 'Owner', 'select', f.Owner, ['Young','Simon','Joint']),
+    formField('First contact', 'First contact', 'input', f['First contact'], null, 'date'),
+    formField('Notes', 'Notes', 'textarea', f.Notes)
+  ], async (data) => {
+    try {
+      if (existing) {
+        const updated = await api(`/api/Outreach/${existing.id}`, { method: 'PATCH', body: JSON.stringify({ fields: data }) });
+        const idx = STATE.outreach.findIndex(r => r.id === existing.id);
+        if (idx >= 0) STATE.outreach[idx] = updated;
+      } else {
+        const created = await api('/api/Outreach', { method: 'POST', body: JSON.stringify({ fields: data }) });
+        STATE.outreach.unshift(created.records ? created.records[0] : created);
+      }
+      closeModal();
+      renderCurrentRoute();
+    } catch (e) {
+      alert('Save failed: ' + e.message);
+    }
+  });
+}
+
+/* ============================================================
+   SCREEN: Interviews
+   ============================================================ */
+function renderInterviews(page) {
+  const headerBar = h('div', { class: 'flex justify-between items-center mb-4' }, [
+    h('div', { class: 'text-sm', style: 'color:var(--ink-soft);', html: `${STATE.interviews.length} logged · <strong style="color:var(--sage-deep);">Hard rule: tag in matrix the same day</strong>` }),
+    h('button', { class: 'btn btn-primary', onclick: () => openInterviewForm() }, '+ Log interview')
+  ]);
+  page.appendChild(headerBar);
+
+  const card = h('div', { class: 'card' });
+  const tw = h('div', { class: 'table-wrap' });
+  const table = h('table', { class: 'data' });
+  table.innerHTML = `<thead><tr><th>ID</th><th>Date</th><th>Segment</th><th>Initials</th><th>Interviewer</th><th>Format</th><th>Tagged</th><th>Topic</th><th></th></tr></thead>`;
+  const tbody = h('tbody');
+  if (STATE.interviews.length === 0) {
+    tbody.innerHTML = `<tr><td colspan="9" class="text-center py-10" style="color:var(--ink-mute);">No interviews logged yet.<br><span class="text-xs">Phase 1 begins when target lists are built and the first outreach is sent.</span></td></tr>`;
+  } else {
+    STATE.interviews.forEach(r => {
+      const f = r.fields || {};
+      const tr = h('tr', { class: 'h-row' });
+      tr.innerHTML = `
+        <td class="font-medium num">${f['Interview ID'] || '—'}</td>
+        <td class="num">${f.Date || '—'}</td>
+        <td>${f.Segment || '—'}</td>
+        <td>${f.Initials || '—'}</td>
+        <td>${f.Interviewer || '—'}</td>
+        <td>${f.Format || '—'}</td>
+        <td>${f['Tagged same-day'] === 'Y' ? '<span class="chip chip-sage">Y</span>' : '<span class="chip chip-rose">No</span>'}</td>
+        <td class="max-w-[280px]">${f['Brief topic'] || '—'}</td>
+        <td><button class="btn btn-ghost" data-edit="${r.id}">Edit</button></td>
+      `;
+      tr.querySelector('[data-edit]').addEventListener('click', () => openInterviewForm(r));
+      tbody.appendChild(tr);
+    });
+  }
+  table.appendChild(tbody);
+  tw.appendChild(table);
+  card.appendChild(tw);
+  page.appendChild(card);
+}
+
+function openInterviewForm(existing) {
+  const f = existing?.fields || {};
+  const nextId = `INT-${String(STATE.interviews.length + 1).padStart(3,'0')}`;
+  openModal('Log interview', [
+    formField('Interview ID', 'Interview ID', 'input', f['Interview ID'] || nextId),
+    formField('Date', 'Date', 'input', f.Date || new Date().toISOString().slice(0,10), null, 'date'),
+    formField('Interviewer', 'Interviewer', 'select', f.Interviewer, ['Young','Simon']),
+    formField('Segment', 'Segment', 'select', f.Segment, SEGMENTS),
+    formField('Initials', 'Initials', 'input', f.Initials),
+    formField('Format', 'Format', 'select', f.Format, ['In-person','Video','Phone']),
+    formField('Recorded', 'Recorded', 'select', f.Recorded, ['Y','N']),
+    formField('Tagged same-day', 'Tagged same-day', 'select', f['Tagged same-day'] || 'N', ['Y','N']),
+    formField('Brief topic', 'Brief topic', 'input', f['Brief topic']),
+    formField('Link to notes', 'Link to notes', 'input', f['Link to notes'])
+  ], async (data) => {
+    try {
+      if (existing) {
+        const updated = await api(`/api/Interviews/${existing.id}`, { method: 'PATCH', body: JSON.stringify({ fields: data }) });
+        const idx = STATE.interviews.findIndex(r => r.id === existing.id);
+        if (idx >= 0) STATE.interviews[idx] = updated;
+      } else {
+        const created = await api('/api/Interviews', { method: 'POST', body: JSON.stringify({ fields: data }) });
+        STATE.interviews.unshift(created.records ? created.records[0] : created);
+      }
+      closeModal();
+      renderCurrentRoute();
+    } catch (e) { alert('Save failed: ' + e.message); }
+  });
+}
+
+/* ============================================================
+   SCREEN: Theme matrix
+   ============================================================ */
+const THEMES = [
+  'Discovery — WhatsApp/personal','Discovery — search/online','Discovery — broker/agent',
+  'Trust — doctor reputation','Trust — price clarity','Trust — speed of reply','Trust — accreditation',
+  'Friction — slow response','Friction — paperwork','Friction — language','Friction — money transfer','Friction — quote chasing',
+  'Pain — financial','Pain — emotional','Pain — coordination','Pain — outcome',
+  'Money — willingness to pay','Money — broker commission','Money — insurance',
+  'Buyer — family abroad','Buyer — Nairobi family','Buyer — Hospital IPD'
+];
+
+function renderMatrix(page) {
+  const filterState = { theme: 'all', segment: 'all', minSev: 0, wtp: 'all' };
+
+  const filters = h('div', { class: 'flex flex-wrap items-center gap-3 mb-4' }, [
+    h('select', { class: 'select max-w-[220px]', onchange: e => { filterState.theme = e.target.value; renderRows(); } }, [
+      h('option', { value: 'all' }, 'All themes'),
+      ...THEMES.map(t => h('option', { value: t }, t))
+    ]),
+    h('select', { class: 'select max-w-[160px]', onchange: e => { filterState.segment = e.target.value; renderRows(); } }, [
+      h('option', { value: 'all' }, 'All segments'),
+      ...SEGMENTS.map(s => h('option', { value: s }, s))
+    ]),
+    h('select', { class: 'select max-w-[140px]', onchange: e => { filterState.minSev = +e.target.value; renderRows(); } }, [
+      h('option', { value: 0 }, 'Any severity'),
+      h('option', { value: 3 }, 'Severity ≥ 3'),
+      h('option', { value: 4 }, 'Severity ≥ 4'),
+      h('option', { value: 5 }, 'Severity = 5')
+    ]),
+    h('select', { class: 'select max-w-[140px]', onchange: e => { filterState.wtp = e.target.value; renderRows(); } }, [
+      h('option', { value: 'all' }, 'Any WTP'),
+      h('option', { value: 'Y' }, 'WTP = Y'),
+      h('option', { value: 'Maybe' }, 'WTP = Maybe')
+    ]),
+    h('button', { class: 'btn btn-primary ml-auto', onclick: () => openMatrixForm() }, '+ Add quote')
+  ]);
+  page.appendChild(filters);
+
+  const card = h('div', { class: 'card' });
+  page.appendChild(card);
+
+  function renderRows() {
+    card.innerHTML = '';
+    const rows = STATE.matrix.filter(r => {
+      const f = r.fields || {};
+      if (filterState.theme !== 'all' && f['Theme tag'] !== filterState.theme) return false;
+      if (filterState.segment !== 'all' && f.Segment !== filterState.segment) return false;
+      if (filterState.minSev && (+(f.Severity || 0)) < filterState.minSev) return false;
+      if (filterState.wtp !== 'all' && f.WTP !== filterState.wtp) return false;
+      return true;
+    });
+
+    if (rows.length === 0) {
+      card.innerHTML = `<div class="p-10 text-center" style="color:var(--ink-mute);">${STATE.matrix.length === 0 ? 'No quotes tagged yet.<br><span class="text-xs">Add the first one after your next interview.</span>' : 'No matches with current filters.'}</div>`;
+      return;
+    }
+
+    rows.forEach(r => {
+      const f = r.fields || {};
+      const row = h('div', { class: 'px-6 py-4 border-b', style: 'border-color:var(--line-soft);' }, [
+        h('div', { class: 'flex items-start justify-between gap-4 mb-2' }, [
+          h('div', { class: 'flex flex-wrap gap-2' }, [
+            f['Theme tag'] ? h('span', { class: 'chip chip-sage', html: f['Theme tag'] }) : null,
+            f.Segment ? h('span', { class: 'chip chip-line', html: f.Segment }) : null,
+            f.Severity ? h('span', { class: `chip ${f.Severity>=4?'chip-rose':f.Severity>=3?'chip-honey':'chip-line'}`, html: `Severity ${f.Severity}` }) : null,
+            f.WTP ? h('span', { class: `chip ${f.WTP==='Y'?'chip-sage':'chip-line'}`, html: `WTP ${f.WTP}` }) : null,
+            f['Interview ID'] ? h('span', { class: 'chip chip-line', html: f['Interview ID'] }) : null
+          ].filter(Boolean)),
+          h('button', { class: 'btn btn-ghost text-xs', onclick: () => openMatrixForm(r) }, 'Edit')
+        ]),
+        h('div', { class: 'serif text-base leading-relaxed', html: f.Quote || '<span style="color:var(--ink-mute);">(no quote)</span>' }),
+        f.Notes ? h('div', { class: 'text-xs mt-2', style: 'color:var(--ink-mute);', html: f.Notes }) : null
+      ].filter(Boolean));
+      card.appendChild(row);
+    });
+  }
+  renderRows();
+}
+
+function openMatrixForm(existing) {
+  const f = existing?.fields || {};
+  openModal('Add matrix quote', [
+    formField('Interview ID', 'Interview ID', 'select', f['Interview ID'], ['', ...STATE.interviews.map(i => i.fields?.['Interview ID']).filter(Boolean)]),
+    formField('Quote / observation', 'Quote', 'textarea', f.Quote),
+    formField('Theme tag', 'Theme tag', 'select', f['Theme tag'], THEMES),
+    formField('Segment', 'Segment', 'select', f.Segment, SEGMENTS),
+    formField('Severity (1–5)', 'Severity', 'select', f.Severity, ['1','2','3','4','5']),
+    formField('Willingness to pay', 'WTP', 'select', f.WTP, ['Y','Maybe','N']),
+    formField('Notes', 'Notes', 'textarea', f.Notes)
+  ], async (data) => {
+    // Coerce severity to number for Airtable
+    if (data.Severity) data.Severity = Number(data.Severity);
+    try {
+      if (existing) {
+        const updated = await api(`/api/Matrix/${existing.id}`, { method: 'PATCH', body: JSON.stringify({ fields: data }) });
+        const idx = STATE.matrix.findIndex(r => r.id === existing.id);
+        if (idx >= 0) STATE.matrix[idx] = updated;
+      } else {
+        const created = await api('/api/Matrix', { method: 'POST', body: JSON.stringify({ fields: data }) });
+        STATE.matrix.unshift(created.records ? created.records[0] : created);
+      }
+      closeModal();
+      renderCurrentRoute();
+    } catch (e) { alert('Save failed: ' + e.message); }
+  });
+}
+
+/* ============================================================
+   SCREEN: Saturation
+   ============================================================ */
+function renderSaturation(page) {
+  const targets = { Patient: 8, Caregiver: 6, 'Hospital IPD': 5, Aggregator: 3, Agent: 4, 'Insurance broker': 2, 'Diaspora family': 4 };
+  const cards = h('div', { class: 'grid md:grid-cols-2 gap-4' });
+  Object.entries(targets).forEach(([seg, target]) => {
+    const done = STATE.interviews.filter(r => r.fields?.Segment === seg).length;
+    const pct = Math.min(100, Math.round((done / target) * 100));
+    const status = done >= target ? 'Saturating' : done >= target * 0.5 ? 'In progress' : 'Just starting';
+    cards.appendChild(h('div', { class: 'card p-5' }, [
+      h('div', { class: 'flex items-baseline justify-between mb-2' }, [
+        h('div', { class: 'serif text-base', html: seg }),
+        h('div', { class: 'text-xs num', style: 'color:var(--ink-mute);', html: `${done} / ${target}` })
+      ]),
+      h('div', { class: 'bar-wrap mb-3' }, [h('i', { style: `width:${pct}%; background: ${done >= target ? 'var(--sage)' : done >= target*0.5 ? 'var(--honey)' : 'var(--clay)'};` })]),
+      h('div', { class: 'text-xs', style: 'color:var(--ink-mute);', html: status })
+    ]));
+  });
+  page.appendChild(cards);
+
+  page.appendChild(h('div', { class: 'card-soft p-5 mt-5 text-sm', style: 'color:var(--ink-soft);', html: '<strong>How to read this:</strong> a segment "saturates" when the last three interviews surface 0–1 new themes each. Counts here are necessary but not sufficient. Use the assistant — "Surface themes" — to check whether new themes are still emerging.' }));
+}
+
+/* ============================================================
+   SCREEN: Scripts (read-only reference)
+   ============================================================ */
+function renderScripts(page) {
+  const tabs = h('div', { class: 'flex gap-2 mb-5 border-b pb-3', style: 'border-color:var(--line-soft);' });
+  const content = h('div', { class: 'card p-6 max-w-3xl' });
+  const SCRIPTS = {
+    'Patient / caregiver': [
+      ['Open (3 min)', 'Thank the person. Promise: no quotes with their name without permission. Ask permission to record.'],
+      ['Warm-up (5 min)', '"Walk me through the last time you or your family considered or went through this." Anchor in a real, recent story.'],
+      ['Core: discovery', 'How did you first start looking for hospitals abroad? — Probe if they mention WhatsApp or a person.'],
+      ['Core: trust', 'What made you trust one hospital more than another? — Probe if they say "a friend went there".'],
+      ['Core: friction', 'What was the most frustrating moment in the whole process? — Wait through silence.'],
+      ['Core: money', 'If you had to do it again, what would you pay someone to handle for you? — Anchor on the number they give.'],
+      ['Core: severity', 'Was there a moment you nearly gave up? — That moment is the wedge.'],
+      ['Close (3 min)', '"Is there anything I should have asked but didn\'t?" · Ask for two specific introductions · Confirm follow-up permission.']
+    ],
+    'Hospital IPD': [
+      ['Open (2 min)', 'Brief professional intro. Not selling, not asking for referrals. Permission to record.'],
+      ['Warm-up (3 min)', '"Tell me how your IPD is structured — who handles East African inquiries?"'],
+      ['Core: qualified leads', 'What makes a lead from East Africa qualified vs unqualified? — Which document is missing most often?'],
+      ['Core: documents', 'What information do you need before the medical team will review a case? — Would they pay for cases pre-formatted to that standard?'],
+      ['Core: response time', 'From first inquiry, how fast do you usually reply, and what slows you down?'],
+      ['Core: commissions', 'What do you currently pay agents per converted patient? — Does it vary by specialty?'],
+      ['Core: SaaS interest', 'Would you pay for software that pre-qualifies and packages African cases for you? — What would have to be true?'],
+      ['Close (5 min)', '"Anything I should have asked?" · "Who else at the hospital?" · Follow-up permission.']
+    ],
+    'Agent / facilitator': [
+      ['Open (3 min)', 'Friendly but specific. Upfront: building patient-side. Their candour matters.'],
+      ['Warm-up (5 min)', '"Walk me through your last patient — first call to follow-up at home."'],
+      ['Core: workflow', 'Where do you add the most value? — Emotional vs transactional answer = different MVPs.'],
+      ['Core: pain', 'What\'s painfully manual? — Quote-chasing or document re-formatting = leverage.'],
+      ['Core: money', 'How do you get paid, and by whom? — Both sides? Ask which resists more.'],
+      ['Core: adoption', 'What would a tool have to do for you to use it daily? — Which feature, removed, kills adoption?'],
+      ['Close (3 min)', 'Anything missed · Two introductions · Follow-up.']
+    ]
+  };
+  let active = Object.keys(SCRIPTS)[0];
+  function renderTab() {
+    tabs.innerHTML = '';
+    Object.keys(SCRIPTS).forEach(name => {
+      tabs.appendChild(h('button', { class: `btn ${name === active ? 'btn-primary' : 'btn-line'}`, onclick: () => { active = name; renderTab(); } }, name));
+    });
+    content.innerHTML = '';
+    content.appendChild(h('div', { class: 'serif text-xl mb-4', html: active }));
+    SCRIPTS[active].forEach(([title, body]) => {
+      content.appendChild(h('div', { class: 'mb-4' }, [
+        h('div', { class: 'micro mb-1', style: 'color:var(--clay);', html: title }),
+        h('div', { class: 'text-sm leading-relaxed', html: body })
+      ]));
+    });
+  }
+  page.appendChild(tabs);
+  page.appendChild(content);
+  renderTab();
+}
+
+/* ============================================================
+   SCREEN: Templates (read-only with copy)
+   ============================================================ */
+function renderTemplates(page) {
+  const TEMPLATES = [
+    { name: 'Hospital IPD — LinkedIn (cold)', subject: null, body: `Hi [name], I lead a small research project on how East African patients (mostly Kenya → India) experience cross-border care. We're trying to understand what makes a lead qualified or unqualified for an IPD like yours, and where the early-stage friction lives.\n\nI'm not selling anything and not asking for referrals — I am asking for 30 minutes of your perspective. Would you be open?`, ask: '30-minute video call in the next two weeks.' },
+    { name: 'Hospital IPD — email (warm intro)', subject: 'Brief research on East African patient flow — 30 min?', body: `Dear [name],\n\n[Mutual contact] suggested I reach out. I'm leading a research project on how Kenyan and East African families navigate care abroad. The bulk of patients still flow to Indian hospitals like yours, and I'm trying to understand the IPD side of that journey — what makes a referral qualified, where time gets lost, what would actually be useful from the African end.\n\nThis is research, not sales. I would value your perspective for 30 minutes. I can work to your time zone.`, ask: '30-minute video call this month.' },
+    { name: 'Aggregator (cold)', subject: 'Research on East African medical travel — 30 min for a peer conversation?', body: `Hi [name],\n\nI'm researching how Kenyan families currently navigate medical travel to India. You've been doing this for [X] years and run a substantial African desk — I would value your view of how the market actually works, including where you see gaps that the current model doesn't serve.\n\nI'm not a competitor — we are building patient-side tooling, not a referral business. Happy to share what we learn in return.`, ask: '30-minute peer call in the next two weeks.' },
+    { name: 'Diaspora family (Facebook group)', subject: null, body: `Hi everyone — I'm working on a small research project for Kenyan families navigating medical care abroad (mostly India, some Turkey). If you have helped a parent or relative back home through a treatment journey — booking a hospital, sending money, coordinating from a distance — I would love 30 minutes of your time to understand what worked and what was painful.\n\nThis is research, not a service pitch. Your story stays anonymous. Please DM me if you're open.`, ask: '30-minute video call. Reply with a free time.' },
+    { name: 'Nairobi agent (Simon, walk-in follow-up)', subject: 'Research on medical-travel facilitation in Kenya', body: `Hi [name],\n\nI was in your office briefly last week. I'm doing research on how the medical-travel business actually works in Kenya — what agents do day-to-day, where the time goes, how the economics flow. I am not a competitor. I'm trying to understand the work before I decide whether to do anything in this space.\n\nWould you be open to 30 minutes? Happy to come to you again — chai included.`, ask: '30-minute in-person conversation at his office.' },
+    { name: 'Insurance broker (warm intro)', subject: 'Research on cross-border medical claims — 30 min?', body: `Dear [name],\n\n[Mutual contact] suggested I reach out. I'm researching how Kenyan families navigate medical care abroad — and specifically how insurance fits in (or doesn't). You see a side of this that most people don't: which claims get declined, who travels anyway, and how the financing actually flows.\n\nWould 30 minutes work? I'm not selling anything; I'm trying to understand the market.`, ask: '30-minute video or in-person call.' }
+  ];
+
+  page.appendChild(h('div', { class: 'mb-5 text-sm', style: 'color:var(--ink-soft);', html: 'Ready to send with light personalisation. Click <strong>Copy</strong> on any template, then replace [name] / [mutual contact] / [X].' }));
+
+  TEMPLATES.forEach((t, i) => {
+    const card = h('div', { class: 'card p-6 mb-4 max-w-3xl' }, [
+      h('div', { class: 'flex items-baseline justify-between mb-3' }, [
+        h('div', { class: 'serif text-lg', html: t.name }),
+        h('button', { class: 'btn btn-line text-xs', onclick: () => {
+          const full = (t.subject ? `Subject: ${t.subject}\n\n` : '') + t.body + `\n\nSpecific ask: ${t.ask}`;
+          navigator.clipboard.writeText(full);
+          alert('Copied to clipboard');
+        }}, 'Copy')
+      ]),
+      t.subject ? h('div', { class: 'text-xs mb-2', style: 'color:var(--ink-mute);', html: `<strong style="color:var(--ink-soft);">Subject:</strong> ${t.subject}` }) : null,
+      h('div', { class: 'text-sm whitespace-pre-line leading-relaxed', html: t.body }),
+      h('div', { class: 'mt-3 text-xs', style: 'color:var(--clay);', html: `<strong>Ask:</strong> ${t.ask}` })
+    ].filter(Boolean));
+    page.appendChild(card);
+  });
+}
+
+/* ============================================================
+   SCREEN: Manual (read-only)
+   ============================================================ */
+function renderManual(page) {
+  const MANUAL = [
+    { h: 'How this project runs', body: 'Three commitments override anything else:\n• Exits over deadlines. Each phase ends when its exit criteria are met.\n• Distributed by design. Sweden + Kenya. Three short meetings per week hold the team together.\n• Trust beats access. Simon\'s local network is the project\'s biggest strategic asset. No interview is worth a burned relationship.' },
+    { h: 'The hard rule', body: 'Every interview gets tagged in the matrix the same day. Untagged interviews are lost interviews. This is the single most common failure mode in distributed research. If a Friday sense-making call finds an interview still untagged, the interview is re-run if needed.' },
+    { h: 'Coordination rhythm', body: '• Monday 09:00 SE / 10:00 KE — weekly planning (45 min)\n• Wednesday 09:00 / 10:00 — mid-week checkpoint (30 min)\n• Friday 16:00 / 17:00 — end-of-week sense-making (45 min)\n• Async: shared workspace + dedicated WhatsApp. No question waits more than 24 hours for a written reply.' },
+    { h: 'Voice rules', body: 'Direct, warm, honest. Editorial, not corporate. Conservative on claims.\n• Don\'t use "synthesis" — use sense-making.\n• Don\'t use "sprint" — use phase.\n• Avoid "it\'s worth noting", "in conclusion", "leverage" as a verb.\n• Numbers without sources are suspicious. Either cite or hedge.\n• First-use rule: spell out Hospital IPD (International Patient Department) on first appearance.' },
+    { h: 'File naming', body: '• Interviews: YYYY-MM-DD_segment_initials_brief-tag (e.g. 2026-07-08_patient_AM_cardiac-mother)\n• Documents: MedTerminal_<Area>_<Version>.<ext>\n• Consent forms: per person, by initials and date. Stored separately from interview content.' },
+    { h: 'Privacy and consent', body: '• Verbal consent before any recording. Asked twice for in-person interviews.\n• Personal data lives in encrypted folders. Consent forms stored separately from notes.\n• No medical advice given. Ever.\n• Participants can withdraw at any point.\n• Quotes are de-identified unless explicit written permission was given.' },
+    { h: 'Decision rights', body: '• Joint, written, dated: wedge choice, research design, spending, phase exits, final GO / PIVOT / NO-GO.\n• Owned individually: day-to-day execution within each person\'s domain.\n• If we cannot agree on a phase exit, we don\'t vote. We gather the evidence that resolves the disagreement, then revisit.' }
+  ];
+  const wrap = h('div', { class: 'max-w-3xl' });
+  MANUAL.forEach(s => {
+    wrap.appendChild(h('div', { class: 'mb-6' }, [
+      h('div', { class: 'serif text-lg mb-2', style: 'color:var(--sage-deep);', html: s.h }),
+      h('div', { class: 'text-sm leading-relaxed whitespace-pre-line', html: s.body })
+    ]));
+  });
+  page.appendChild(wrap);
+}
+
+/* ============================================================
+   SCREEN: Decisions (Phase 5 placeholder)
+   ============================================================ */
+function renderDecisions(page) {
+  page.appendChild(h('div', { class: 'card p-8 max-w-2xl text-center' }, [
+    h('div', { class: 'serif text-2xl mb-3', html: 'Decision tools' }),
+    h('div', { class: 'text-sm mb-5', style: 'color:var(--ink-soft);', html: 'Wedge brief authoring, kill-list, and decision memo composition.' }),
+    h('div', { class: 'micro mb-2', style: 'color:var(--clay);', html: 'Activates at Phase 3' }),
+    h('div', { class: 'text-xs', style: 'color:var(--ink-mute);', html: 'For now, use the docx templates from MedTerminal_Phases2to5_Templates.docx and check in here when sense-making begins.' })
+  ]));
+}
+
+/* ============================================================
+   MODAL + FORM HELPERS
+   ============================================================ */
+function openModal(title, fields, onSubmit) {
+  const root = document.getElementById('modal-root');
+  root.innerHTML = '';
+
+  const form = h('form', { onsubmit: (e) => {
+    e.preventDefault();
+    const data = {};
+    fields.forEach(f => {
+      const el = form.querySelector(`[name="${f.key}"]`);
+      if (el && el.value !== '') data[f.key] = el.value;
+    });
+    onSubmit(data);
+  }});
+  form.appendChild(h('div', { class: 'serif text-xl mb-5', html: title }));
+  fields.forEach(f => form.appendChild(f.el));
+  form.appendChild(h('div', { class: 'flex gap-3 mt-5 justify-end pt-4 border-t', style: 'border-color:var(--line-soft);' }, [
+    h('button', { type: 'button', class: 'btn btn-line', onclick: closeModal }, 'Cancel'),
+    h('button', { type: 'submit', class: 'btn btn-primary' }, 'Save')
+  ]));
+
+  const modal = h('div', { class: 'modal-bg fade-in', onclick: (e) => { if (e.target.classList.contains('modal-bg')) closeModal(); } }, [
+    h('div', { class: 'modal p-6' }, [form])
+  ]);
+  root.appendChild(modal);
+}
+
+function closeModal() {
+  document.getElementById('modal-root').innerHTML = '';
+}
+
+function formField(label, key, type, value, options, inputType) {
+  const wrap = h('div', { class: 'mb-3' });
+  wrap.appendChild(h('label', { class: 'label', html: label }));
+  let input;
+  if (type === 'select') {
+    input = h('select', { class: 'select', name: key });
+    (options || []).forEach(o => {
+      const opt = h('option', { value: o }, o);
+      if (o === value) opt.selected = true;
+      input.appendChild(opt);
+    });
+  } else if (type === 'textarea') {
+    input = h('textarea', { class: 'textarea', name: key, rows: 3 }, value || '');
+  } else {
+    input = h('input', { class: 'input', name: key, type: inputType || 'text', value: value || '' });
+  }
+  wrap.appendChild(input);
+  return { key, el: wrap };
+}
+
+/* ============================================================
+   CHATBOT
+   ============================================================ */
+function toggleChat(forceOpen) {
+  const panel = document.getElementById('chat-panel');
+  if (forceOpen === true) panel.classList.remove('closed');
+  else if (forceOpen === false) panel.classList.add('closed');
+  else panel.classList.toggle('closed');
+
+  if (!panel.classList.contains('closed') && STATE.chatHistory.length === 0) {
+    addChatMessage('bot', "Hi. I'll read your interviews, outreach, and matrix every time you ask. Try a quick action below, or type a question.");
+  }
+}
+
+function addChatMessage(role, text) {
+  const msgs = document.getElementById('chat-messages');
+  const cls = role === 'user' ? 'chat-msg user' : 'chat-msg bot';
+  const el = h('div', { class: cls, html: text.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>') });
+  msgs.appendChild(el);
+  msgs.scrollTop = msgs.scrollHeight;
+}
+
+function addTypingIndicator() {
+  const msgs = document.getElementById('chat-messages');
+  const el = h('div', { class: 'chat-msg bot flex items-center gap-1.5', id: 'typing' }, [
+    h('div', { class: 'typing-dot' }),
+    h('div', { class: 'typing-dot' }),
+    h('div', { class: 'typing-dot' })
+  ]);
+  msgs.appendChild(el);
+  msgs.scrollTop = msgs.scrollHeight;
+}
+
+function removeTypingIndicator() {
+  const t = document.getElementById('typing');
+  if (t) t.remove();
+}
+
+function buildDataContext() {
+  const themes = {};
+  STATE.matrix.forEach(r => {
+    const t = r.fields?.['Theme tag']; if (!t) return;
+    themes[t] = (themes[t] || 0) + 1;
+  });
+  const segmentCounts = {};
+  STATE.interviews.forEach(r => {
+    const s = r.fields?.Segment; if (!s) return;
+    segmentCounts[s] = (segmentCounts[s] || 0) + 1;
+  });
+  const outreachByStatus = {};
+  STATE.outreach.forEach(r => {
+    const s = r.fields?.Status || 'Cold';
+    outreachByStatus[s] = (outreachByStatus[s] || 0) + 1;
+  });
+  const untaggedCount = STATE.interviews.filter(r => r.fields?.['Tagged same-day'] !== 'Y').length;
+  const highSeverityQuotes = STATE.matrix
+    .filter(r => (r.fields?.Severity >= 4) && r.fields?.WTP === 'Y')
+    .slice(0, 8)
+    .map(r => `- [${r.fields?.['Theme tag'] || '?'}] (${r.fields?.Segment || '?'}, sev ${r.fields?.Severity}, WTP ${r.fields?.WTP}) "${(r.fields?.Quote || '').slice(0, 200)}"`)
+    .join('\n');
+
+  return `Current phase: ${PHASE_INFO.label}
+
+Interviews logged: ${STATE.interviews.length}
+By segment: ${Object.entries(segmentCounts).map(([s,n]) => `${s}=${n}`).join(', ') || 'none yet'}
+Untagged interviews (violates same-day hard rule): ${untaggedCount}
+
+Outreach status: ${Object.entries(outreachByStatus).map(([s,n]) => `${s}=${n}`).join(', ') || 'no outreach yet'}
+Total outreach records: ${STATE.outreach.length}
+
+Matrix: ${STATE.matrix.length} quotes/observations tagged.
+Theme frequencies: ${Object.entries(themes).sort((a,b) => b[1]-a[1]).slice(0,10).map(([t,n]) => `${t}=${n}`).join(', ') || 'none yet'}
+
+High-severity, willingness-to-pay quotes (up to 8):
+${highSeverityQuotes || '(none yet)'}`;
+}
+
+async function sendChat(userText) {
+  const input = document.getElementById('chat-input');
+  const text = (userText || input.value || '').trim();
+  if (!text) return;
+  input.value = '';
+
+  addChatMessage('user', text);
+  STATE.chatHistory.push({ role: 'user', content: text });
+
+  addTypingIndicator();
+  try {
+    const dataContext = buildDataContext();
+    const res = await api('/api/chat', {
+      method: 'POST',
+      body: JSON.stringify({ messages: STATE.chatHistory, dataContext })
+    });
+    removeTypingIndicator();
+    const reply = res.text || '(empty reply)';
+    addChatMessage('bot', reply);
+    STATE.chatHistory.push({ role: 'assistant', content: reply });
+  } catch (e) {
+    removeTypingIndicator();
+    addChatMessage('bot', `Couldn't reach the assistant. ${e.message}`);
+  }
+}
+
+function quickPrompt(text) {
+  toggleChat(true);
+  sendChat(text);
+}
+
+/* ============================================================
+   BOOT
+   ============================================================ */
+(async function init() {
+  if (!location.hash) location.hash = 'dashboard';
+  renderCurrentRoute();
+  if (WORKER_URL.includes('YOUR-WORKER')) {
+    setSync('Set WORKER_URL in index.html', 'rose');
+    return;
+  }
+  await loadAllData();
+})();
+</script>
+</body>
+</html>
