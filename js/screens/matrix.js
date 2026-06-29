@@ -1,4 +1,5 @@
 import { STATE, SEGMENTS, THEMES, h, esc, statusChip, api, openModal, closeModal, formField, renderCurrentRoute, registerRoute } from '../app.js';
+import { exportMatrix } from '../export.js';
 
 function renderMatrix(page) {
   const filterState = { theme: 'all', segment: 'all', minSev: 0, wtp: 'all' };
@@ -23,7 +24,8 @@ function renderMatrix(page) {
       h('option', { value: 'Y' }, 'WTP = Y'),
       h('option', { value: 'Maybe' }, 'WTP = Maybe')
     ]),
-    h('button', { class: 'btn btn-primary ml-auto', onclick: () => openMatrixForm() }, '+ Add quote')
+    h('button', { class: 'btn btn-line ml-auto', onclick: exportMatrix }, '↓ CSV'),
+    h('button', { class: 'btn btn-primary', onclick: () => openMatrixForm() }, '+ Add quote')
   ]);
   page.appendChild(filters);
 

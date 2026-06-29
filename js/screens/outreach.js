@@ -1,4 +1,5 @@
 import { STATE, SEGMENTS, OUTREACH_STATUS_OPTIONS, h, esc, statusChip, api, openModal, closeModal, formField, renderCurrentRoute, registerRoute } from '../app.js';
+import { exportOutreach } from '../export.js';
 
 function renderOutreach(page) {
   const filterState = { status: 'all', owner: 'all', q: '' };
@@ -9,6 +10,7 @@ function renderOutreach(page) {
       h('option', { value: 'all' }, 'All statuses'),
       ...OUTREACH_STATUS_OPTIONS.map(s => h('option', { value: s }, s))
     ]),
+    h('button', { class: 'btn btn-line', onclick: exportOutreach }, '↓ CSV'),
     h('button', { class: 'btn btn-primary', onclick: () => openOutreachForm() }, '+ Add contact')
   ]);
   page.appendChild(headerBar);

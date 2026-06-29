@@ -1,4 +1,5 @@
 import { STATE, SEGMENTS, h, esc, api, openModal, closeModal, formField, renderCurrentRoute, registerRoute } from '../app.js';
+import { exportInterviews } from '../export.js';
 
 function renderInterviews(page) {
   const rule = h('strong', { text: 'Hard rule: tag in matrix the same day' });
@@ -8,6 +9,7 @@ function renderInterviews(page) {
       document.createTextNode(`${STATE.interviews.length} logged · `),
       rule
     ]),
+    h('button', { class: 'btn btn-line', onclick: exportInterviews }, '↓ CSV'),
     h('button', { class: 'btn btn-primary', onclick: () => openInterviewForm() }, '+ Log interview')
   ]);
   page.appendChild(headerBar);

@@ -114,6 +114,10 @@ table.data td { padding: 11px 12px; border-bottom: 1px solid var(--line-soft); c
 }
 @media (max-width: 768px) {
   .hamburger { display: flex; align-items: center; }
+  .main-area > header .flex { flex-wrap: wrap; gap: 8px; }
+  #page { padding-left: 16px !important; padding-right: 16px !important; }
+  .modal { max-width: 100% !important; margin: 8px; border-radius: 12px; }
+  table.data th, table.data td { font-size: 12px; padding: 8px 6px; }
 }
 
 @media print {
