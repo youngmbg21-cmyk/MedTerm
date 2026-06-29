@@ -45,7 +45,7 @@ The app:
             2. 2. **No frameworks.** Vanilla JavaScript only. No React, Vue, Alpine, or any other JS framework.
                3. 3. **No build tools.** No npm, no Webpack, no Vite. The file opens directly in a browser.
                   4. 4. **Tailwind CDN only.** `<script src="https://cdn.tailwindcss.com">`. No PostCSS pipeline.
-                     5. 5. **No direct API calls from the browser.** All Airtable and Claude calls go through the Cloudflare Worker. Never put API keys in the frontend.
+                     5. 5. **No direct Claude API calls from the browser.** All Claude calls go through the Supabase Edge Function `claude-proxy`. Data calls use the Supabase JS client with RLS. Never put the Claude API key in the frontend.
                         6. 6. **Use existing CSS variables and component classes.** Check `:root` and `.card`, `.chip`, `.bar-wrap`, `.btn` before creating anything new.
                            7. 7. **Mobile-first.** Design for 375px first. Test at 375px before committing.
                               8. 8. **Respect the same-day-tag rule.** This is the most important data quality mechanism in the app. Never weaken or remove the red warning for untagged interviews.
@@ -54,7 +54,7 @@ The app:
                                 
                                  10. ## Architecture in One Paragraph
                                 
-                                 11. The browser loads `index.html`, which on startup fetches all data from Airtable via a Cloudflare Worker and holds it in memory. Hash routing (`#dashboard`, `#outreach`, etc.) shows and hides screen sections. All writes POST to the Worker, which updates Airtable and returns the updated record. The AI assistant sends a live context snapshot + conversation history to the Worker, which prepends the research-director system prompt and forwards to Claude. Claude's response streams back to the panel.
+                                 11. The browser loads `index.html`, which on startup fetches all data from Supabase via the JS client and holds it in memory. Hash routing (`#dashboard`, `#outreach`, etc.) shows and hides screen sections. All data writes go through the Supabase JS client (with RLS). The AI assistant sends a live context snapshot + conversation history to the `claude-proxy` Supabase Edge Function, which reads the Claude API key from the `settings` table, prepends the research-director system prompt, and forwards to Claude. Claude's response returns to the panel.
                                 
                                  12. Read `docs/tech-stack.md` for full technical detail and constraints.
                                 

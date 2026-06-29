@@ -132,7 +132,7 @@
 
 <!-- Boot: load modules -->
 <script type="module">
-  import { WORKER_URL, loadAllData, setSync, renderCurrentRoute, go } from './js/app.js';
+  import { SUPABASE_URL, loadAllData, setSync, renderCurrentRoute, go } from './js/app.js';
   import './js/chat.js';
 
   // Load all screen modules
@@ -175,8 +175,8 @@
   // Boot
   if (!location.hash) location.hash = 'dashboard';
   renderCurrentRoute();
-  if (WORKER_URL.includes('YOUR-WORKER')) {
-    setSync('Set WORKER_URL in js/app.js', 'rose');
+  if (SUPABASE_URL.includes('YOUR-PROJECT-REF')) {
+    setSync('Set Supabase config in js/supabase.js', 'rose');
   } else {
     await loadAllData();
   }

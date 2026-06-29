@@ -146,8 +146,8 @@ HOW TO USE:
 - Navigate using the left sidebar. On mobile, tap the hamburger menu.
 - Use the AI assistant (me) via the chat panel — click "Ask assistant" or "Open assistant".
 - Quick actions below the chat provide common queries.
-- The Refresh button re-fetches all data from Airtable.
-- All data persists in Airtable via the Cloudflare Worker backend.
+- The Refresh button re-fetches all data from Supabase.
+- All data persists in Supabase via the backend.
 === END PLATFORM GUIDE ===`;
 }
 

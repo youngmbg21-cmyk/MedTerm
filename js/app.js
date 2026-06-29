@@ -1,13 +1,7 @@
 /* ============================================================
-   CONFIG
+   CONFIG — Supabase backend
    ============================================================ */
-export const WORKER_URL = 'https://YOUR-WORKER.workers.dev';
-
-// Feature 1: Hardcoded API key — NEVER used directly from the browser.
-// This constant exists only as documentation. The actual key lives in the
-// Cloudflare Worker's environment variables (wrangler secret).
-// See docs/tech-stack.md for the proxy architecture.
-// In the Worker: env.CLAUDE_API_KEY is set via `wrangler secret put CLAUDE_API_KEY`
+import { supabase, SUPABASE_URL, SUPABASE_ANON_KEY } from './supabase.js';
 
 export const PHASE_INFO = {
   current: 0,
@@ -53,17 +47,71 @@ export const THEMES = [
 ];
 
 /* ============================================================
-   API CLIENT
+   API CLIENT — routes through Supabase
    ============================================================ */
+export { supabase, SUPABASE_URL, SUPABASE_ANON_KEY };
+
+async function getAuthHeaders() {
+  const { data: { session } } = await supabase.auth.getSession();
+  if (!session) return { 'Content-Type': 'application/json', 'apikey': SUPABASE_ANON_KEY };
+  return {
+    'Content-Type': 'application/json',
+    'Authorization': `Bearer ${session.access_token}`,
+    'apikey': SUPABASE_ANON_KEY,
+  };
+}
+
 export async function api(path, opts = {}) {
-  const url = `${WORKER_URL}${path}`;
-  const res = await fetch(url, {
-    ...opts,
-    headers: { 'Content-Type': 'application/json', ...(opts.headers || {}) },
-    credentials: 'include'
-  });
-  if (!res.ok) throw new Error(`API ${res.status}: ${await res.text()}`);
-  return res.json();
+  const headers = await getAuthHeaders();
+  const url = `${SUPABASE_URL}/functions/v1/claude-proxy`;
+
+  // Chat calls go to the Edge Function
+  if (path === '/api/chat') {
+    const res = await fetch(url, {
+      ...opts,
+      headers: { ...headers, ...(opts.headers || {}) },
+    });
+    if (!res.ok) throw new Error(`API ${res.status}: ${await res.text()}`);
+    return res.json();
+  }
+
+  // Data calls go directly to Supabase REST via the JS client
+  const table = path.replace('/api/', '').split('/')[0];
+  const recordId = path.replace('/api/', '').split('/')[1] || null;
+  const method = opts.method || 'GET';
+
+  if (method === 'GET') {
+    const query = recordId
+      ? supabase.from(table).select('*').eq('id', recordId)
+      : supabase.from(table).select('*').order('created_at', { ascending: false });
+    const { data, error } = await query;
+    if (error) throw new Error(error.message);
+    return { records: data || [] };
+  }
+
+  if (method === 'POST') {
+    const body = JSON.parse(opts.body);
+    const row = body.fields || body;
+    const { data, error } = await supabase.from(table).insert(row).select();
+    if (error) throw new Error(error.message);
+    return Array.isArray(data) ? data[0] : data;
+  }
+
+  if (method === 'PATCH' && recordId) {
+    const body = JSON.parse(opts.body);
+    const fields = body.fields || body;
+    const { data, error } = await supabase.from(table).update(fields).eq('id', recordId).select();
+    if (error) throw new Error(error.message);
+    return Array.isArray(data) ? data[0] : data;
+  }
+
+  if (method === 'DELETE' && recordId) {
+    const { error } = await supabase.from(table).delete().eq('id', recordId);
+    if (error) throw new Error(error.message);
+    return { deleted: true };
+  }
+
+  throw new Error(`Unsupported: ${method} ${path}`);
 }
 
 export async function loadAllData(showStatus = false) {
