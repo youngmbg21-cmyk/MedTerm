@@ -26,6 +26,7 @@ export const STATE = {
   deliverables: [],
   targets: [],
   chatHistory: [],
+  reports: [],
   loaded: false,
 };
 
@@ -62,7 +63,7 @@ export async function api(path, opts = {}) {
 export async function loadAllData(showStatus = false) {
   setSync('Loading…');
   try {
-    const [o, i, m, d, s, kl, fc] = await Promise.all([
+    const [o, i, m, d, s, kl, fc, rp] = await Promise.all([
       api('/api/outreach').catch(() => ({ records: [] })),
       api('/api/interviews').catch(() => ({ records: [] })),
       api('/api/matrix').catch(() => ({ records: [] })),
@@ -70,6 +71,7 @@ export async function loadAllData(showStatus = false) {
       api('/api/scripts').catch(() => ({ records: [] })),
       api('/api/kill_list').catch(() => ({ records: [] })),
       api('/api/field_checks').catch(() => ({ records: [] })),
+      api('/api/reports').catch(() => ({ records: [] })),
     ]);
     STATE.outreach = o.records || [];
     STATE.interviews = i.records || [];
@@ -78,6 +80,7 @@ export async function loadAllData(showStatus = false) {
     STATE.scripts = s.records || [];
     STATE.killList = kl.records || [];
     STATE.fieldChecks = fc.records || [];
+    STATE.reports = rp.records || [];
     STATE.loaded = true;
     setSync('Synced');
     renderCurrentRoute();

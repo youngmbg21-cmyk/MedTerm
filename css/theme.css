@@ -115,3 +115,11 @@ table.data td { padding: 11px 12px; border-bottom: 1px solid var(--line-soft); c
 @media (max-width: 768px) {
   .hamburger { display: flex; align-items: center; }
 }
+
+@media print {
+  .sidebar-nav, .chat-panel, .mobile-overlay, .hamburger, header, .modal-bg { display: none !important; }
+  .main-area { padding-left: 0 !important; }
+  .report-print-view { max-width: 700px; margin: 0 auto; font-size: 14px; line-height: 1.6; }
+  .report-print-view .micro { color: var(--clay) !important; }
+  @page { margin: 20mm; }
+}
