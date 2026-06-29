@@ -62,16 +62,22 @@ export async function api(path, opts = {}) {
 export async function loadAllData(showStatus = false) {
   setSync('Loading…');
   try {
-    const [o, i, m, d] = await Promise.all([
-      api('/api/Outreach').catch(() => ({ records: [] })),
-      api('/api/Interviews').catch(() => ({ records: [] })),
-      api('/api/Matrix').catch(() => ({ records: [] })),
-      api('/api/Deliverables').catch(() => ({ records: [] }))
+    const [o, i, m, d, s, kl, fc] = await Promise.all([
+      api('/api/outreach').catch(() => ({ records: [] })),
+      api('/api/interviews').catch(() => ({ records: [] })),
+      api('/api/matrix').catch(() => ({ records: [] })),
+      api('/api/deliverables').catch(() => ({ records: [] })),
+      api('/api/scripts').catch(() => ({ records: [] })),
+      api('/api/kill_list').catch(() => ({ records: [] })),
+      api('/api/field_checks').catch(() => ({ records: [] })),
     ]);
     STATE.outreach = o.records || [];
     STATE.interviews = i.records || [];
     STATE.matrix = m.records || [];
     STATE.deliverables = d.records || [];
+    STATE.scripts = s.records || [];
+    STATE.killList = kl.records || [];
+    STATE.fieldChecks = fc.records || [];
     STATE.loaded = true;
     setSync('Synced');
     renderCurrentRoute();
