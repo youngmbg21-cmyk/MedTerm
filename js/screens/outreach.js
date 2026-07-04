@@ -1,17 +1,32 @@
-import { STATE, SEGMENTS, OUTREACH_STATUS_OPTIONS, h, esc, statusChip, api, openModal, closeModal, formField, renderCurrentRoute, registerRoute } from '../app.js';
+/* Outreach — one question: "Who have we approached, and where do they stand?" */
+import {
+  STATE, registerRoute, renderCurrentRoute, h, chip, statusTone, emptyState,
+  openModal, closeModal, formField, isStalled, fmtDate,
+} from '../app.js';
+import { SEGMENT_NAMES, OUTREACH_STATUSES, CHANNELS, ownerOptions, STALL_DAYS } from '../config.js';
+import { data } from '../data.js';
 import { exportOutreach } from '../export.js';
 
 function renderOutreach(page) {
-  const filterState = { status: 'all', owner: 'all', q: '' };
+  const filterState = { status: 'all', q: '' };
+
+  /* Lead with the exception: stalled contacts */
+  const stalled = STATE.outreach.filter(isStalled);
+  if (stalled.length) {
+    page.appendChild(h('div', { class: 'banner banner-honey mb-4' }, [
+      h('span', { text: `${stalled.length} contact${stalled.length === 1 ? '' : 's'} stalled — no movement for ${STALL_DAYS}+ days after contact. Chase or close them.` }),
+    ]));
+  }
 
   const headerBar = h('div', { class: 'flex flex-wrap items-center gap-3 mb-4' }, [
-    h('input', { class: 'input flex-1 min-w-[200px]', placeholder: 'Search name, org, country…', oninput: e => { filterState.q = e.target.value; renderTable(); } }),
-    h('select', { class: 'select max-w-[160px]', onchange: e => { filterState.status = e.target.value; renderTable(); } }, [
+    h('input', { class: 'input flex-1 min-w-[180px]', placeholder: 'Search name, org, country…',
+      oninput: e => { filterState.q = e.target.value; renderTable(); } }),
+    h('select', { class: 'select max-w-[150px]', onchange: e => { filterState.status = e.target.value; renderTable(); } }, [
       h('option', { value: 'all' }, 'All statuses'),
-      ...OUTREACH_STATUS_OPTIONS.map(s => h('option', { value: s }, s))
+      ...OUTREACH_STATUSES.map(s => h('option', { value: s }, s)),
     ]),
     h('button', { class: 'btn btn-line', onclick: exportOutreach }, '↓ CSV'),
-    h('button', { class: 'btn btn-primary', onclick: () => openOutreachForm() }, '+ Add contact')
+    h('button', { class: 'btn btn-primary', onclick: () => openOutreachForm() }, '+ Add contact'),
   ]);
   page.appendChild(headerBar);
 
@@ -19,84 +34,75 @@ function renderOutreach(page) {
   page.appendChild(tableWrap);
 
   function renderTable() {
-    const rows = STATE.outreach.filter(r => {
-      const f = r.fields || {};
-      if (filterState.status !== 'all' && f.Status !== filterState.status) return false;
-      if (filterState.q) {
-        const q = filterState.q.toLowerCase();
-        const hay = [f.Name, f.Organisation, f.Country, f.Segment, f.Notes].filter(Boolean).join(' ').toLowerCase();
-        if (!hay.includes(q)) return false;
-      }
-      return true;
-    });
+    const rows = STATE.outreach
+      .filter(r => {
+        if (filterState.status !== 'all' && r.status !== filterState.status) return false;
+        if (filterState.q) {
+          const q = filterState.q.toLowerCase();
+          const hay = [r.name, r.organisation, r.country, r.segment, r.notes].filter(Boolean).join(' ').toLowerCase();
+          if (!hay.includes(q)) return false;
+        }
+        return true;
+      })
+      // stalled first, then most recent contact first
+      .sort((a, b) => (isStalled(b) - isStalled(a)) || String(b.first_contact || '').localeCompare(String(a.first_contact || '')));
 
     tableWrap.innerHTML = '';
-    const t = h('div', { class: 'table-wrap' });
-    const table = h('table', { class: 'data' });
+    if (!rows.length) {
+      tableWrap.appendChild(emptyState(
+        STATE.outreach.length === 0 ? 'No outreach yet.' : 'No matches with current filters.',
+        STATE.outreach.length === 0 ? 'Add your first contact — templates are ready under Reference.' : null));
+      return;
+    }
 
-    const thead = h('thead');
-    thead.innerHTML = '<tr><th>Name</th><th>Segment</th><th>Org</th><th>Country</th><th>Status</th><th>Owner</th><th></th></tr>';
-    table.appendChild(thead);
+    const table = h('table', { class: 'data stack' });
+    const headRow = h('tr');
+    ['Name', 'Segment', 'Org', 'Status', 'First contact', 'Owner', ''].forEach(th =>
+      headRow.appendChild(h('th', { text: th })));
+    table.appendChild(h('thead', {}, [headRow]));
 
     const tbody = h('tbody');
-    if (rows.length === 0) {
-      const td = h('td', { colspan: '7', class: 'text-center py-8' });
-      td.style.color = 'var(--ink-mute)';
-      td.textContent = STATE.outreach.length === 0 ? 'No outreach yet. Add your first contact.' : 'No matches.';
-      tbody.appendChild(h('tr', {}, [td]));
-    } else {
-      rows.forEach(r => {
-        const f = r.fields || {};
-        const editBtn = h('button', { class: 'btn btn-ghost', onclick: () => openOutreachForm(r) }, 'Edit');
-        const statusTd = h('td');
-        statusTd.innerHTML = statusChip(f.Status);
-        const tr = h('tr', { class: 'h-row' }, [
-          h('td', { class: 'font-medium', text: f.Name || '—' }),
-          h('td', { text: f.Segment || '—' }),
-          h('td', { text: f.Organisation || '—' }),
-          h('td', { text: f.Country || '—' }),
-          statusTd,
-          h('td', { text: f.Owner || '—' }),
-          h('td', {}, [editBtn])
-        ]);
-        tbody.appendChild(tr);
-      });
-    }
+    rows.forEach(r => {
+      const statusTd = h('td', { 'data-label': 'Status' }, [chip(r.status || 'Cold', statusTone(r.status))]);
+      if (isStalled(r)) statusTd.appendChild(chip('stalled', 'honey'));
+      tbody.appendChild(h('tr', { class: 'h-row' }, [
+        h('td', { class: 'font-medium', 'data-label': 'Name', text: r.name || '—' }),
+        h('td', { 'data-label': 'Segment', text: r.segment || '—' }),
+        h('td', { 'data-label': 'Org', text: r.organisation || '—' }),
+        statusTd,
+        h('td', { class: 'num', 'data-label': 'First contact', text: fmtDate(r.first_contact) }),
+        h('td', { 'data-label': 'Owner', text: r.owner || '—' }),
+        h('td', { 'data-label': '' }, [h('button', { class: 'btn btn-ghost text-xs', onclick: () => openOutreachForm(r) }, 'Edit')]),
+      ]));
+    });
     table.appendChild(tbody);
-    t.appendChild(table);
-    tableWrap.appendChild(t);
+    tableWrap.appendChild(h('div', { class: 'table-wrap' }, [table]));
   }
   renderTable();
 }
 
 function openOutreachForm(existing) {
-  const f = existing?.fields || {};
-  openModal('Outreach contact', [
-    formField('Name', 'Name', 'input', f.Name),
-    formField('Segment', 'Segment', 'select', f.Segment, SEGMENTS),
-    formField('Organisation', 'Organisation', 'input', f.Organisation),
-    formField('Country', 'Country', 'input', f.Country),
-    formField('Channel', 'Channel', 'select', f.Channel, ['LinkedIn','Email','In-person','Phone','WhatsApp','Facebook']),
-    formField('Status', 'Status', 'select', f.Status || 'Cold', OUTREACH_STATUS_OPTIONS),
-    formField('Owner', 'Owner', 'select', f.Owner, ['Young','Simon','Joint']),
-    formField('First contact', 'First contact', 'input', f['First contact'], null, 'date'),
-    formField('Notes', 'Notes', 'textarea', f.Notes)
-  ], async (data) => {
+  const r = existing || {};
+  openModal(existing ? 'Edit contact' : 'Add contact', [
+    formField('Name', 'name', 'input', r.name),
+    formField('Segment', 'segment', 'select', r.segment, SEGMENT_NAMES),
+    formField('Organisation', 'organisation', 'input', r.organisation),
+    formField('Country', 'country', 'input', r.country),
+    formField('Channel', 'channel', 'select', r.channel, CHANNELS),
+    formField('Status', 'status', 'select', r.status || 'Cold', OUTREACH_STATUSES),
+    formField('Owner', 'owner', 'select', r.owner, ownerOptions()),
+    formField('First contact', 'first_contact', 'input', r.first_contact, null, 'date'),
+    formField('Notes', 'notes', 'textarea', r.notes),
+  ], async (form) => {
     try {
-      if (existing) {
-        const updated = await api(`/api/Outreach/${existing.id}`, { method: 'PATCH', body: JSON.stringify({ fields: data }) });
-        const idx = STATE.outreach.findIndex(r => r.id === existing.id);
-        if (idx >= 0) STATE.outreach[idx] = updated;
-      } else {
-        const created = await api('/api/Outreach', { method: 'POST', body: JSON.stringify({ fields: data }) });
-        STATE.outreach.unshift(created.records ? created.records[0] : created);
-      }
+      if (existing) await data.update('outreach', existing.id, form);
+      else await data.create('outreach', form);
+      STATE.outreach = await data.list('outreach');
       closeModal();
       renderCurrentRoute();
-    } catch (e) {
-      alert('Save failed: ' + e.message);
-    }
+    } catch (e) { alert('Save failed: ' + e.message); }
   });
 }
 
-registerRoute('outreach', 'Outreach', renderOutreach);
+registerRoute('outreach', 'Outreach', renderOutreach,
+  'Who have we approached, and where do they stand?');

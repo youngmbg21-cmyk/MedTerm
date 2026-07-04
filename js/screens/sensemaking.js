@@ -1,196 +1,195 @@
-import { STATE, SEGMENTS, THEMES, h, esc, api, openModal, closeModal, formField, renderCurrentRoute, registerRoute } from '../app.js';
+/* Phase 3 — Sense-making screens.
+   All read the canonical snake_case shape via STATE / data.js. */
+import {
+  STATE, registerRoute, renderCurrentRoute, h, chip, emptyState, quoteBlock,
+  openModal, closeModal, formField, fmtDate,
+} from '../app.js';
+import { data } from '../data.js';
+import { exportKillList } from '../export.js';
 
-// --- Theme Analysis ---
-function renderThemeAnalysis(page) {
+/* ---------- Theme analysis — "Which themes are strongest?" ---------- */
+function rankThemes() {
   const themeData = {};
   STATE.matrix.forEach(r => {
-    const f = r.fields || {};
-    const tag = f['Theme tag'] || f.theme_tag;
-    if (!tag) return;
-    if (!themeData[tag]) themeData[tag] = { count: 0, totalSev: 0, wtpY: 0, quotes: [] };
-    themeData[tag].count++;
-    themeData[tag].totalSev += +(f.Severity || f.severity || 0);
-    if ((f.WTP || f.wtp) === 'Y') themeData[tag].wtpY++;
-    themeData[tag].quotes.push(f);
+    if (!r.theme_tag) return;
+    if (!themeData[r.theme_tag]) themeData[r.theme_tag] = { count: 0, totalSev: 0, wtpY: 0 };
+    const d = themeData[r.theme_tag];
+    d.count++;
+    d.totalSev += +r.severity || 0;
+    if (r.wtp === 'Y') d.wtpY++;
   });
-
-  const ranked = Object.entries(themeData)
+  return Object.entries(themeData)
     .map(([tag, d]) => ({
       tag,
       count: d.count,
-      avgSev: d.count ? (d.totalSev / d.count).toFixed(1) : 0,
+      avgSev: d.count ? d.totalSev / d.count : 0,
       wtpRate: d.count ? Math.round((d.wtpY / d.count) * 100) : 0,
       score: d.count * (d.totalSev / (d.count || 1)) * (1 + d.wtpY / (d.count || 1)),
-      quotes: d.quotes,
     }))
     .sort((a, b) => b.score - a.score);
+}
 
-  const title = h('div', { class: 'serif text-xl mb-1', text: 'Theme analysis' });
-  const subtitle = h('div', { class: 'text-sm mb-5', text: `Themes ranked by frequency × average severity × WTP signal. ${ranked.length} themes from ${STATE.matrix.length} matrix entries.` });
-  subtitle.style.color = 'var(--ink-soft)';
-  page.appendChild(title);
-  page.appendChild(subtitle);
+function renderThemeAnalysis(page) {
+  const ranked = rankThemes();
 
-  if (ranked.length === 0) {
-    const empty = h('div', { class: 'card p-8 text-center' });
-    empty.style.color = 'var(--ink-mute)';
-    empty.textContent = 'No matrix entries yet. Themes will appear here once quotes are tagged.';
-    page.appendChild(empty);
+  if (!ranked.length) {
+    page.appendChild(h('div', { class: 'card' }, [
+      emptyState('No matrix entries yet.', 'Themes will rank here once quotes are tagged.'),
+    ]));
     return;
   }
 
+  /* Lead with the exception: themes with thin evidence */
+  const thin = ranked.filter(t => t.count < 3);
+  if (thin.length) {
+    page.appendChild(h('div', { class: 'banner banner-honey mb-4' }, [
+      h('span', { text: `${thin.length} theme${thin.length === 1 ? '' : 's'} rest on fewer than 3 quotes — treat those rankings as provisional.` }),
+    ]));
+  }
+
+  page.appendChild(h('div', { class: 'text-sm mb-4', style: 'color:var(--ink-soft);', text: `Ranked by frequency × average severity × WTP signal. ${ranked.length} themes from ${STATE.matrix.length} matrix entries.` }));
+
   const table = h('table', { class: 'data' });
-  const thead = h('thead');
-  thead.innerHTML = '<tr><th>#</th><th>Theme</th><th>Count</th><th>Avg severity</th><th>WTP rate</th><th>Score</th></tr>';
-  table.appendChild(thead);
+  const headRow = h('tr');
+  ['#', 'Theme', 'Count', 'Avg severity', 'WTP rate', 'Score'].forEach(t => headRow.appendChild(h('th', { text: t })));
+  table.appendChild(h('thead', {}, [headRow]));
 
   const tbody = h('tbody');
   ranked.forEach((t, i) => {
-    const scoreTd = h('td', { class: 'num font-medium', text: t.score.toFixed(1) });
-    const sevColor = +t.avgSev >= 4 ? 'var(--rose)' : +t.avgSev >= 3 ? 'var(--honey)' : 'var(--ink)';
-    const sevTd = h('td', { class: 'num', text: t.avgSev });
-    sevTd.style.color = sevColor;
-
-    const tr = h('tr', { class: 'h-row' }, [
+    const sevColor = t.avgSev >= 4 ? 'var(--rose)' : t.avgSev >= 3 ? 'var(--honey-deep)' : 'var(--ink)';
+    const themeTd = h('td', {}, [chip(t.tag, 'plum'), t.count < 3 ? chip('thin', 'honey') : null].filter(Boolean));
+    themeTd.className = 'flex flex-wrap gap-1.5';
+    tbody.appendChild(h('tr', { class: 'h-row' }, [
       h('td', { class: 'num', text: `${i + 1}` }),
-      h('td', { class: 'font-medium', text: t.tag }),
+      themeTd,
       h('td', { class: 'num', text: `${t.count}` }),
-      sevTd,
+      h('td', { class: 'num', text: t.avgSev.toFixed(1), style: `color:${sevColor};` }),
       h('td', { class: 'num', text: `${t.wtpRate}%` }),
-      scoreTd,
-    ]);
-    tbody.appendChild(tr);
+      h('td', { class: 'num font-medium', text: t.score.toFixed(1) }),
+    ]));
   });
   table.appendChild(tbody);
-
-  const card = h('div', { class: 'card' });
-  const tw = h('div', { class: 'table-wrap' });
-  tw.appendChild(table);
-  card.appendChild(tw);
-  page.appendChild(card);
+  page.appendChild(h('div', { class: 'card' }, [h('div', { class: 'table-wrap' }, [table])]));
 }
 
-registerRoute('theme-analysis', 'Theme analysis', renderThemeAnalysis);
+registerRoute('theme-analysis', 'Theme analysis', renderThemeAnalysis,
+  'Which themes are strongest — and which rest on thin evidence?');
 
-// --- Segment Cards ---
+/* ---------- Segment cards — "What do we now know about each segment?" ---------- */
 function renderSegmentCards(page) {
-  const title = h('div', { class: 'serif text-xl mb-1', text: 'Segment cards' });
-  const subtitle = h('div', { class: 'text-sm mb-5', text: 'Build segment cards with supporting quotes from the matrix.' });
-  subtitle.style.color = 'var(--ink-soft)';
-  page.appendChild(title);
-  page.appendChild(subtitle);
+  const segments = [...new Set(STATE.matrix.map(r => r.segment).filter(Boolean))];
 
-  const segments = [...new Set(STATE.matrix.map(r => (r.fields || r).Segment || (r.fields || r).segment).filter(Boolean))];
-
-  if (segments.length === 0) {
-    const empty = h('div', { class: 'card p-8 text-center' });
-    empty.style.color = 'var(--ink-mute)';
-    empty.textContent = 'No segments in the matrix yet. Segment cards will be buildable once interviews are tagged.';
-    page.appendChild(empty);
+  if (!segments.length) {
+    page.appendChild(h('div', { class: 'card' }, [
+      emptyState('No segments in the matrix yet.', 'Segment cards build themselves as interviews are tagged.'),
+    ]));
     return;
   }
 
   segments.forEach(seg => {
-    const quotes = STATE.matrix.filter(r => {
-      const f = r.fields || r;
-      return (f.Segment || f.segment) === seg;
-    });
-    const highSev = quotes.filter(r => {
-      const f = r.fields || r;
-      return +(f.Severity || f.severity || 0) >= 4;
-    });
-    const wtpY = quotes.filter(r => {
-      const f = r.fields || r;
-      return (f.WTP || f.wtp) === 'Y';
-    });
+    const quotes = STATE.matrix.filter(r => r.segment === seg);
+    const highSev = quotes.filter(r => (+r.severity || 0) >= 4);
+    const wtpY = quotes.filter(r => r.wtp === 'Y');
 
     const themes = {};
-    quotes.forEach(r => {
-      const f = r.fields || r;
-      const t = f['Theme tag'] || f.theme_tag;
-      if (t) themes[t] = (themes[t] || 0) + 1;
-    });
+    quotes.forEach(r => { if (r.theme_tag) themes[r.theme_tag] = (themes[r.theme_tag] || 0) + 1; });
     const topThemes = Object.entries(themes).sort((a, b) => b[1] - a[1]).slice(0, 5);
 
     const card = h('div', { class: 'card p-6 mb-4 max-w-3xl' });
     card.appendChild(h('div', { class: 'serif text-lg mb-3', text: seg }));
+    card.appendChild(h('div', { class: 'flex flex-wrap gap-2 mb-4' }, [
+      chip(`${quotes.length} quotes`, 'line'),
+      chip(`${highSev.length} high-severity`, highSev.length ? 'rose' : 'line'),
+      chip(`${wtpY.length} WTP`, wtpY.length ? 'sage' : 'line'),
+    ]));
 
-    const stats = h('div', { class: 'flex flex-wrap gap-3 mb-4' }, [
-      h('span', { class: 'chip chip-line', text: `${quotes.length} quotes` }),
-      h('span', { class: 'chip chip-rose', text: `${highSev.length} high-severity` }),
-      h('span', { class: 'chip chip-sage', text: `${wtpY.length} WTP` }),
-    ]);
-    card.appendChild(stats);
-
-    if (topThemes.length > 0) {
-      const themeLabel = h('div', { class: 'micro mb-2', text: 'Top themes' });
-      themeLabel.style.color = 'var(--ink-mute)';
-      card.appendChild(themeLabel);
-      const themeChips = h('div', { class: 'flex flex-wrap gap-2 mb-4' });
-      topThemes.forEach(([t, n]) => {
-        themeChips.appendChild(h('span', { class: 'chip chip-sage', text: `${t} (${n})` }));
-      });
-      card.appendChild(themeChips);
+    if (topThemes.length) {
+      card.appendChild(h('div', { class: 'micro mb-2', style: 'color:var(--ink-mute);', text: 'Top themes' }));
+      card.appendChild(h('div', { class: 'flex flex-wrap gap-2 mb-4' },
+        topThemes.map(([t, n]) => chip(`${t} (${n})`, 'plum'))));
     }
 
-    // Show top 3 quotes
-    const topQuotes = quotes
-      .sort((a, b) => +((b.fields || b).Severity || (b.fields || b).severity || 0) - +((a.fields || a).Severity || (a.fields || a).severity || 0))
-      .slice(0, 3);
-
-    if (topQuotes.length > 0) {
-      const quotesLabel = h('div', { class: 'micro mb-2', text: 'Strongest quotes' });
-      quotesLabel.style.color = 'var(--ink-mute)';
-      card.appendChild(quotesLabel);
-      topQuotes.forEach(r => {
-        const f = r.fields || r;
-        const q = h('div', { class: 'text-sm mb-2 pl-3', style: 'border-left: 2px solid var(--sage-soft);' });
-        q.appendChild(h('div', { class: 'serif', text: `"${(f.Quote || f.quote || '').slice(0, 200)}"` }));
-        const meta = h('div', { class: 'text-xs mt-1', text: `${f['Interview ID'] || f.interview_id || '?'} · Severity ${f.Severity || f.severity || '?'}` });
-        meta.style.color = 'var(--ink-mute)';
-        q.appendChild(meta);
-        card.appendChild(q);
-      });
+    const topQuotes = [...quotes].sort((a, b) => (+b.severity || 0) - (+a.severity || 0)).slice(0, 3);
+    if (topQuotes.length) {
+      card.appendChild(h('div', { class: 'micro mb-1', style: 'color:var(--ink-mute);', text: 'Strongest quotes' }));
+      topQuotes.forEach(q => card.appendChild(quoteBlock(q)));
     }
 
     page.appendChild(card);
   });
 }
 
-registerRoute('segment-cards', 'Segment cards', renderSegmentCards);
+registerRoute('segment-cards', 'Segment cards', renderSegmentCards,
+  'What do we now know about each segment?');
 
-// --- Kill List ---
+/* ---------- Top-3 pains — "Which pains should the product solve?" ---------- */
+function renderTopPains(page) {
+  const painQuotes = STATE.matrix.filter(r => (r.theme_tag || '').startsWith('Pain') || (r.theme_tag || '').startsWith('Friction'));
+
+  const grouped = {};
+  painQuotes.forEach(r => {
+    if (!grouped[r.theme_tag]) grouped[r.theme_tag] = { quotes: [], totalSev: 0, wtpY: 0 };
+    grouped[r.theme_tag].quotes.push(r);
+    grouped[r.theme_tag].totalSev += +r.severity || 0;
+    if (r.wtp === 'Y') grouped[r.theme_tag].wtpY++;
+  });
+
+  const ranked = Object.entries(grouped)
+    .map(([tag, d]) => ({ tag, ...d, score: d.quotes.length * (d.totalSev / d.quotes.length) }))
+    .sort((a, b) => b.score - a.score)
+    .slice(0, 3);
+
+  if (!ranked.length) {
+    page.appendChild(h('div', { class: 'card' }, [
+      emptyState('No pain or friction themes tagged yet.', 'Top pains are derived from the matrix.'),
+    ]));
+    return;
+  }
+
+  ranked.forEach((pain, i) => {
+    const avgSev = pain.totalSev / pain.quotes.length;
+    const card = h('div', { class: 'card p-6 mb-4 max-w-3xl' });
+    card.appendChild(h('div', { class: 'flex flex-wrap items-baseline justify-between gap-2 mb-3' }, [
+      h('div', { class: 'serif text-lg', text: `${i + 1}. ${pain.tag}` }),
+      h('div', { class: 'flex gap-2' }, [
+        chip(`${pain.quotes.length} mentions`, 'line'),
+        chip(`Avg severity ${avgSev.toFixed(1)}`, avgSev >= 4 ? 'rose' : 'honey'),
+        chip(`${pain.wtpY} WTP`, pain.wtpY ? 'sage' : 'line'),
+      ]),
+    ]));
+    [...pain.quotes].sort((a, b) => (+b.severity || 0) - (+a.severity || 0)).slice(0, 3)
+      .forEach(q => card.appendChild(quoteBlock(q)));
+    page.appendChild(card);
+  });
+}
+
+registerRoute('top-pains', 'Top-3 pains', renderTopPains,
+  'Which three pains should any product be built around?');
+
+/* ---------- Kill list — "Which hypotheses has the evidence killed?" ---------- */
 function renderKillList(page) {
-  const title = h('div', { class: 'serif text-xl mb-1', text: 'Kill list' });
-  const subtitle = h('div', { class: 'text-sm mb-5', text: 'Hypotheses that evidence has killed. Append-only — entries cannot be edited or removed.' });
-  subtitle.style.color = 'var(--ink-soft)';
-  page.appendChild(title);
-  page.appendChild(subtitle);
-
-  page.appendChild(h('div', { class: 'mb-4' }, [
-    h('button', { class: 'btn btn-primary', onclick: () => openKillForm() }, '+ Kill a hypothesis')
+  page.appendChild(h('div', { class: 'flex flex-wrap items-center gap-3 mb-4' }, [
+    h('div', { class: 'text-sm flex-1', style: 'color:var(--ink-soft);', text: 'Append-only. Entries cannot be edited or removed — that is the point.' }),
+    h('button', { class: 'btn btn-line', onclick: exportKillList }, '↓ CSV'),
+    h('button', { class: 'btn btn-primary', onclick: openKillForm }, '+ Kill a hypothesis'),
   ]));
 
   const card = h('div', { class: 'card' });
-
-  if (!STATE.killList || STATE.killList.length === 0) {
-    const empty = h('div', { class: 'p-8 text-center' });
-    empty.style.color = 'var(--ink-mute)';
-    empty.textContent = 'No hypotheses killed yet. When evidence falsifies a hypothesis, record it here.';
-    card.appendChild(empty);
+  if (!STATE.kill_list.length) {
+    card.appendChild(emptyState('No hypotheses killed yet.', 'When evidence falsifies a hypothesis, record it here.'));
   } else {
-    STATE.killList.forEach(r => {
-      const f = r.fields || r;
-      const row = h('div', { class: 'px-6 py-4 border-b', style: 'border-color:var(--line-soft);' }, [
-        h('div', { class: 'flex items-center gap-2 mb-2' }, [
-          h('span', { class: 'chip chip-rose', text: 'Killed' }),
-          h('span', { class: 'text-xs', text: f.killed_date || '' }),
-        ]),
-        h('div', { class: 'serif text-base mb-1', text: f.hypothesis || '' }),
-        h('div', { class: 'text-sm', text: f.evidence || '' }),
-      ]);
-      card.appendChild(row);
-    });
+    [...STATE.kill_list]
+      .sort((a, b) => String(b.killed_date || '').localeCompare(String(a.killed_date || '')))
+      .forEach(r => {
+        card.appendChild(h('div', { class: 'px-6 py-4 border-b', style: 'border-color:var(--line-soft);' }, [
+          h('div', { class: 'flex items-center gap-2 mb-2' }, [
+            chip('Killed', 'rose'),
+            h('span', { class: 'text-xs', style: 'color:var(--ink-mute);', text: fmtDate(r.killed_date) }),
+          ]),
+          h('div', { class: 'serif text-base mb-1', text: r.hypothesis || '' }),
+          h('div', { class: 'text-sm', style: 'color:var(--ink-soft);', text: r.evidence || '' }),
+        ]));
+      });
   }
   page.appendChild(card);
 }
@@ -200,133 +199,58 @@ function openKillForm() {
     formField('Hypothesis', 'hypothesis', 'textarea', ''),
     formField('Evidence that killed it', 'evidence', 'textarea', ''),
     formField('Date', 'killed_date', 'input', new Date().toISOString().slice(0, 10), null, 'date'),
-  ], async (data) => {
+  ], async (form) => {
+    if (!form.hypothesis || !form.evidence) { alert('Hypothesis and evidence are both required.'); return; }
     try {
-      const created = await api('/api/kill_list', { method: 'POST', body: JSON.stringify(data) });
-      if (!STATE.killList) STATE.killList = [];
-      STATE.killList.unshift(created);
+      await data.create('kill_list', form);
+      STATE.kill_list = await data.list('kill_list');
       closeModal();
       renderCurrentRoute();
     } catch (e) { alert('Save failed: ' + e.message); }
-  });
+  }, 'Kill it');
 }
 
-registerRoute('kill-list', 'Kill list', renderKillList);
+registerRoute('kill-list', 'Kill list', renderKillList,
+  'Which hypotheses has the evidence killed?');
 
-// --- Top-3 Pains ---
-function renderTopPains(page) {
-  const title = h('div', { class: 'serif text-xl mb-1', text: 'Top-3 pains' });
-  const subtitle = h('div', { class: 'text-sm mb-5', text: 'The three strongest pains surfaced by the research, each with three supporting quotes.' });
-  subtitle.style.color = 'var(--ink-soft)';
-  page.appendChild(title);
-  page.appendChild(subtitle);
-
-  // Derive top pains from matrix
-  const painThemes = STATE.matrix.filter(r => {
-    const f = r.fields || r;
-    const tag = f['Theme tag'] || f.theme_tag || '';
-    return tag.startsWith('Pain') || tag.startsWith('Friction');
-  });
-
-  const grouped = {};
-  painThemes.forEach(r => {
-    const f = r.fields || r;
-    const tag = f['Theme tag'] || f.theme_tag;
-    if (!grouped[tag]) grouped[tag] = { quotes: [], totalSev: 0, wtpY: 0 };
-    grouped[tag].quotes.push(f);
-    grouped[tag].totalSev += +(f.Severity || f.severity || 0);
-    if ((f.WTP || f.wtp) === 'Y') grouped[tag].wtpY++;
-  });
-
-  const ranked = Object.entries(grouped)
-    .map(([tag, d]) => ({ tag, ...d, score: d.quotes.length * (d.totalSev / d.quotes.length) }))
-    .sort((a, b) => b.score - a.score)
-    .slice(0, 3);
-
-  if (ranked.length === 0) {
-    const empty = h('div', { class: 'card p-8 text-center' });
-    empty.style.color = 'var(--ink-mute)';
-    empty.textContent = 'No pain or friction themes tagged yet. Top pains will be derived from the matrix.';
-    page.appendChild(empty);
-    return;
-  }
-
-  ranked.forEach((pain, i) => {
-    const avgSev = (pain.totalSev / pain.quotes.length).toFixed(1);
-    const card = h('div', { class: 'card p-6 mb-4 max-w-3xl' });
-
-    const header = h('div', { class: 'flex items-baseline justify-between mb-3' }, [
-      h('div', { class: 'serif text-lg', text: `${i + 1}. ${pain.tag}` }),
-      h('div', { class: 'flex gap-2' }, [
-        h('span', { class: 'chip chip-line', text: `${pain.quotes.length} mentions` }),
-        h('span', { class: `chip ${+avgSev >= 4 ? 'chip-rose' : 'chip-honey'}`, text: `Avg severity ${avgSev}` }),
-        h('span', { class: 'chip chip-sage', text: `${pain.wtpY} WTP` }),
-      ]),
-    ]);
-    card.appendChild(header);
-
-    pain.quotes.sort((a, b) => +(b.Severity || b.severity || 0) - +(a.Severity || a.severity || 0)).slice(0, 3).forEach(q => {
-      const quote = h('div', { class: 'text-sm mb-3 pl-3', style: 'border-left: 2px solid var(--sage-soft);' });
-      quote.appendChild(h('div', { class: 'serif', text: `"${(q.Quote || q.quote || '').slice(0, 250)}"` }));
-      const meta = h('div', { class: 'text-xs mt-1', text: `${q['Interview ID'] || q.interview_id || '?'} · ${q.Segment || q.segment || '?'} · Severity ${q.Severity || q.severity || '?'}` });
-      meta.style.color = 'var(--ink-mute)';
-      quote.appendChild(meta);
-      card.appendChild(quote);
-    });
-
-    page.appendChild(card);
-  });
+/* ---------- State of the field — "Where does the research stand, in one paragraph?" ---------- */
+function findStateOfField() {
+  return STATE.deliverables.find(d => d.phase === 3 && d.deliverable === 'State of the field');
 }
 
-registerRoute('top-pains', 'Top-3 pains', renderTopPains);
-
-// --- State of the Field ---
 function renderStateOfField(page) {
-  const title = h('div', { class: 'serif text-xl mb-1', text: 'State of the field' });
-  const subtitle = h('div', { class: 'text-sm mb-5', text: 'A single paragraph capturing where the research stands. Dated and authored.' });
-  subtitle.style.color = 'var(--ink-soft)';
-  page.appendChild(title);
-  page.appendChild(subtitle);
-
+  const record = findStateOfField();
   const card = h('div', { class: 'card p-6 max-w-3xl' });
 
-  const saved = STATE.stateOfField;
-  if (saved) {
-    const meta = h('div', { class: 'text-xs mb-3', text: `Last updated ${saved.updated_at || saved.created_at || '—'} by ${saved.author || '—'}` });
-    meta.style.color = 'var(--ink-mute)';
-    card.appendChild(meta);
-    card.appendChild(h('div', { class: 'text-sm leading-relaxed whitespace-pre-line', text: saved.content || '' }));
-    card.appendChild(h('div', { class: 'mt-4' }, [
-      h('button', { class: 'btn btn-line', onclick: () => openFieldEditor(saved) }, 'Edit')
+  if (record?.evidence) {
+    card.appendChild(h('div', { class: 'text-xs mb-3', style: 'color:var(--ink-mute);', text: `Last updated ${fmtDate(record.updated_at || record.created_at)}` }));
+    card.appendChild(h('div', { class: 'quote-text', style: 'border:none; padding:0;', text: record.evidence }));
+    card.appendChild(h('div', { class: 'mt-5' }, [
+      h('button', { class: 'btn btn-line', onclick: () => openFieldEditor(record) }, 'Edit'),
     ]));
   } else {
-    const empty = h('div', { class: 'text-sm mb-4', text: 'No state-of-the-field written yet.' });
-    empty.style.color = 'var(--ink-mute)';
-    card.appendChild(empty);
-    card.appendChild(h('button', { class: 'btn btn-primary', onclick: () => openFieldEditor() }, 'Write the first one'));
+    card.appendChild(h('div', { class: 'text-sm mb-4', style: 'color:var(--ink-mute);', text: 'No state-of-the-field written yet. One dated paragraph, updated whenever the picture changes.' }));
+    card.appendChild(h('button', { class: 'btn btn-primary', onclick: () => openFieldEditor(record) }, 'Write the first one'));
   }
-
   page.appendChild(card);
 }
 
-function openFieldEditor(existing) {
+function openFieldEditor(record) {
   openModal('State of the field', [
-    formField('Content', 'content', 'textarea', existing?.content || ''),
-  ], async (data) => {
+    formField('One paragraph', 'content', 'textarea', record?.evidence || ''),
+  ], async (form) => {
     try {
-      data.author = 'You';
-      data.updated_at = new Date().toISOString().slice(0, 10);
-      if (existing?.id) {
-        const updated = await api(`/api/deliverables/${existing.id}`, { method: 'PATCH', body: JSON.stringify({ fields: { evidence: data.content } }) });
-        STATE.stateOfField = { ...existing, content: data.content, updated_at: data.updated_at };
+      if (record) {
+        await data.update('deliverables', record.id, { evidence: form.content, status: 'In progress' });
       } else {
-        const created = await api('/api/deliverables', { method: 'POST', body: JSON.stringify({ phase: 3, deliverable: 'State of the field', status: 'In progress', evidence: data.content }) });
-        STATE.stateOfField = { id: created.id, content: data.content, updated_at: data.updated_at, author: data.author };
+        await data.create('deliverables', { phase: 3, deliverable: 'State of the field', status: 'In progress', evidence: form.content });
       }
+      STATE.deliverables = await data.list('deliverables');
       closeModal();
       renderCurrentRoute();
     } catch (e) { alert('Save failed: ' + e.message); }
   });
 }
 
-registerRoute('state-of-field', 'State of the field', renderStateOfField);
+registerRoute('state-of-field', 'State of the field', renderStateOfField,
+  'Where does the research stand, in one dated paragraph?');

@@ -16,6 +16,11 @@
   --rose-soft: #F6E3E3;
   --honey:     #D4A24C;
   --honey-soft:#F5E9CF;
+  --honey-deep:#8a6a23;
+  --info:      #5B7B9A;
+  --info-soft: #E4EBF1;
+  --plum:      #7B5E7E;
+  --plum-soft: #EEE6EF;
 }
 
 html, body { background: var(--bg); color: var(--ink); }
@@ -34,6 +39,8 @@ body { font-family: 'Inter', system-ui, sans-serif; font-feature-settings: "ss01
 .chip-rose  { background: var(--rose-soft); color: #9a3f3f; border-color: #ecc9c9; }
 .chip-clay  { background: var(--clay-soft); color: #8a4a26; border-color: #ecd2bc; }
 .chip-line  { background: var(--paper); color: var(--ink-soft); border-color: var(--line); }
+.chip-info  { background: var(--info-soft); color: var(--info); border-color: #cddae5; }
+.chip-plum  { background: var(--plum-soft); color: var(--plum); border-color: #ddd0de; }
 
 .nav-item { display:flex; align-items:center; gap:10px; padding:9px 12px; border-radius:10px; color: var(--ink-soft); font-size: 14px; font-weight: 500; cursor: pointer; transition: all .15s ease; }
 .nav-item:hover { background: var(--bg-soft); color: var(--ink); }
@@ -126,4 +133,65 @@ table.data td { padding: 11px 12px; border-bottom: 1px solid var(--line-soft); c
   .report-print-view { max-width: 700px; margin: 0 auto; font-size: 14px; line-height: 1.6; }
   .report-print-view .micro { color: var(--clay) !important; }
   @page { margin: 20mm; }
+}
+
+/* ============================================================
+   Shared components added in the pipeline-IA rebuild
+   ============================================================ */
+
+/* Nav groups — phase-gated pipeline */
+.nav-divider { height: 1px; background: var(--line-soft); margin: 12px 4px; }
+.nav-group { margin-top: 14px; }
+.nav-group-header {
+  display: flex; align-items: center; justify-content: space-between; width: 100%;
+  padding: 4px 12px 6px; background: none; border: none; cursor: pointer;
+  color: var(--ink-mute); text-align: left;
+}
+.nav-group-header:hover { color: var(--ink-soft); }
+.nav-chevron { font-size: 13px; color: var(--ink-mute); transition: transform .15s ease; display: inline-block; }
+.nav-lock { font-size: 9.5px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--ink-mute); opacity: .8; }
+.nav-group.locked .nav-item { opacity: .45; }
+.nav-group.locked .nav-group-header .micro { opacity: .55; }
+.nav-group-list { padding-top: 2px; }
+
+/* Serif quote block — quotes read as evidence, not UI chrome */
+.quote-block { padding: 16px 20px; border-bottom: 1px solid var(--line-soft); }
+.quote-block:last-child { border-bottom: none; }
+.quote-text { font-family: 'Fraunces', Georgia, serif; font-size: 15.5px; line-height: 1.6; color: var(--ink); }
+
+/* Attention banner — red = data-quality breach, honey = attention */
+.banner {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  padding: 10px 14px; border-radius: 12px; font-size: 13px; font-weight: 500;
+}
+.banner-rose  { background: var(--rose-soft); color: #9a3f3f; border: 1px solid #ecc9c9; }
+.banner-honey { background: var(--honey-soft); color: var(--honey-deep); border: 1px solid #ecdcb6; }
+.banner-info  { background: var(--info-soft); color: var(--info); border: 1px solid #cddae5; }
+
+/* Phase rail on the Overview */
+.phase-rail { display: flex; gap: 6px; flex-wrap: wrap; }
+.phase-step {
+  flex: 1; min-width: 88px; padding: 10px 12px; border-radius: 12px; border: 1px solid var(--line-soft);
+  background: var(--bg-soft); color: var(--ink-mute);
+}
+.phase-step.done    { background: var(--sage-soft); border-color: #d4dfd5; color: var(--sage-deep); }
+.phase-step.current { background: var(--paper); border-color: var(--sage); color: var(--ink); box-shadow: 0 1px 4px rgba(63,90,77,.12); }
+
+/* Master–detail (Interviews) */
+.md-layout { display: grid; grid-template-columns: minmax(260px, 340px) 1fr; gap: 20px; align-items: start; }
+.md-list-item { padding: 12px 16px; border-bottom: 1px solid var(--line-soft); cursor: pointer; transition: background .15s ease; }
+.md-list-item:hover { background: var(--bg-soft); }
+.md-list-item.selected { background: var(--sage-soft); }
+.md-list-item:last-child { border-bottom: none; }
+@media (max-width: 900px) {
+  .md-layout { display: block; }
+  .md-detail { margin-top: 16px; }
+}
+
+/* Stacked rows for tables on small screens */
+@media (max-width: 640px) {
+  table.data.stack thead { display: none; }
+  table.data.stack tr { display: block; border-bottom: 1px solid var(--line-soft); padding: 10px 0; }
+  table.data.stack td { display: flex; justify-content: space-between; gap: 12px; border: none; padding: 4px 12px; }
+  table.data.stack td::before { content: attr(data-label); color: var(--ink-mute); font-size: 11px; text-transform: uppercase; letter-spacing: .06em; padding-top: 2px; }
 }
