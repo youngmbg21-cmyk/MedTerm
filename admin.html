@@ -1,0 +1,282 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>MedTerminal — Admin</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,300;9..144,400;9..144,500;9..144,600&family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/theme.css">
+<style>
+  .admin-wrap { max-width: 480px; margin: 80px auto; padding: 0 20px; }
+  .status-dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
+  .status-dot.active { background: var(--sage); }
+  .status-dot.inactive { background: var(--rose); }
+</style>
+</head>
+<body style="background:var(--bg);">
+
+<div class="admin-wrap">
+  <!-- Gate: password screen -->
+  <div id="gate-screen">
+    <div class="card p-8">
+      <div class="serif text-2xl mb-1" style="color:var(--ink);">Admin access</div>
+      <div class="text-sm mb-6" style="color:var(--ink-mute);">This page is restricted. Enter the admin password to continue.</div>
+      <form id="gate-form">
+        <label class="label">Password</label>
+        <input type="password" id="gate-password" class="input mb-4" placeholder="Enter admin password" autocomplete="off" />
+        <div id="gate-error" class="text-xs mb-3" style="color:var(--rose); display:none;">Incorrect password.</div>
+        <button type="submit" class="btn btn-primary w-full justify-center">Unlock</button>
+      </form>
+    </div>
+  </div>
+
+  <!-- Auth: Supabase login screen -->
+  <div id="auth-screen" style="display:none;">
+    <div class="card p-8">
+      <div class="serif text-2xl mb-1" style="color:var(--ink);">Admin sign in</div>
+      <div class="text-sm mb-6" style="color:var(--ink-mute);">Sign in with your admin email to manage settings.</div>
+      <form id="auth-form">
+        <label class="label">Email</label>
+        <input type="email" id="auth-email" class="input mb-4" placeholder="you@example.com" />
+        <div id="auth-message" class="text-xs mb-3" style="display:none;"></div>
+        <button type="submit" class="btn btn-primary w-full justify-center">Send magic link</button>
+      </form>
+    </div>
+  </div>
+
+  <!-- Main admin panel -->
+  <div id="admin-panel" style="display:none;">
+    <div class="flex items-center justify-between mb-6">
+      <div>
+        <div class="serif text-2xl" style="color:var(--ink);">Settings</div>
+        <div class="text-sm" style="color:var(--ink-mute);">Manage your Claude API key</div>
+      </div>
+      <button class="btn btn-ghost text-xs" id="sign-out-btn">Sign out</button>
+    </div>
+
+    <div class="card p-6 mb-6">
+      <div class="flex items-center justify-between mb-4">
+        <div class="label" style="margin-bottom:0;">Claude API key</div>
+        <div class="flex items-center gap-2">
+          <span class="status-dot" id="key-status-dot"></span>
+          <span class="text-xs" id="key-status-text" style="color:var(--ink-mute);"></span>
+        </div>
+      </div>
+
+      <div id="key-display" class="text-sm mb-4 p-3 rounded-lg" style="background:var(--bg-soft); border:1px solid var(--line-soft); color:var(--ink-soft); display:none;"></div>
+
+      <form id="key-form">
+        <input type="password" id="key-input" class="input mb-3" placeholder="sk-ant-api03-..." autocomplete="off" />
+        <div id="key-message" class="text-xs mb-3" style="display:none;"></div>
+        <div class="flex gap-2">
+          <button type="submit" class="btn btn-primary" id="save-key-btn">Save API key</button>
+          <button type="button" class="btn btn-line" id="delete-key-btn" style="display:none;">Remove key</button>
+        </div>
+      </form>
+    </div>
+
+    <div class="card p-6">
+      <div class="label mb-2">Connection test</div>
+      <div class="text-sm mb-3" style="color:var(--ink-mute);">Send a test message to verify the API key works.</div>
+      <button class="btn btn-line" id="test-btn">Test connection</button>
+      <div id="test-result" class="text-xs mt-3" style="display:none;"></div>
+    </div>
+  </div>
+</div>
+
+<script type="module">
+  import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+  import { SUPABASE_URL, SUPABASE_ANON_KEY } from './js/supabase.js';
+
+  const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+  // Hardcoded admin password — change this to your own secret
+  const ADMIN_PASSWORD = 'CHANGE-THIS-PASSWORD';
+
+  const gateScreen = document.getElementById('gate-screen');
+  const authScreen = document.getElementById('auth-screen');
+  const adminPanel = document.getElementById('admin-panel');
+
+  // === Gate: password check ===
+  document.getElementById('gate-form').addEventListener('submit', (e) => {
+    e.preventDefault();
+    const pw = document.getElementById('gate-password').value;
+    if (pw === ADMIN_PASSWORD) {
+      sessionStorage.setItem('admin_unlocked', '1');
+      gateScreen.style.display = 'none';
+      checkAuth();
+    } else {
+      document.getElementById('gate-error').style.display = 'block';
+    }
+  });
+
+  // If already unlocked this session, skip gate
+  if (sessionStorage.getItem('admin_unlocked') === '1') {
+    gateScreen.style.display = 'none';
+    checkAuth();
+  }
+
+  // === Auth: Supabase magic link ===
+  async function checkAuth() {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (session) {
+      showAdminPanel(session);
+    } else {
+      authScreen.style.display = 'block';
+    }
+  }
+
+  // Handle magic link callback (token in URL hash)
+  supabase.auth.onAuthStateChange(async (event, session) => {
+    if (event === 'SIGNED_IN' && session) {
+      authScreen.style.display = 'none';
+      showAdminPanel(session);
+    }
+  });
+
+  document.getElementById('auth-form').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const email = document.getElementById('auth-email').value.trim();
+    const msgEl = document.getElementById('auth-message');
+
+    const { error } = await supabase.auth.signInWithOtp({ email });
+    msgEl.style.display = 'block';
+    if (error) {
+      msgEl.style.color = 'var(--rose)';
+      msgEl.textContent = error.message;
+    } else {
+      msgEl.style.color = 'var(--sage-deep)';
+      msgEl.textContent = 'Check your email for the magic link.';
+    }
+  });
+
+  // === Admin panel ===
+  async function showAdminPanel(session) {
+    adminPanel.style.display = 'block';
+    await loadKeyStatus();
+  }
+
+  async function loadKeyStatus() {
+    const dotEl = document.getElementById('key-status-dot');
+    const textEl = document.getElementById('key-status-text');
+    const displayEl = document.getElementById('key-display');
+    const deleteBtn = document.getElementById('delete-key-btn');
+
+    const { data, error } = await supabase
+      .from('settings')
+      .select('value, updated_at')
+      .eq('key', 'claude_api_key')
+      .single();
+
+    if (data && data.value) {
+      const masked = data.value.slice(0, 10) + '...' + data.value.slice(-4);
+      const updatedAt = new Date(data.updated_at).toLocaleDateString('en-GB', {
+        day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit'
+      });
+      dotEl.className = 'status-dot active';
+      textEl.textContent = 'Active';
+      displayEl.style.display = 'block';
+      displayEl.textContent = `${masked}  ·  Last updated ${updatedAt}`;
+      deleteBtn.style.display = 'inline-flex';
+    } else {
+      dotEl.className = 'status-dot inactive';
+      textEl.textContent = 'Not set';
+      displayEl.style.display = 'none';
+      deleteBtn.style.display = 'none';
+    }
+  }
+
+  // Save / update API key
+  document.getElementById('key-form').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const value = document.getElementById('key-input').value.trim();
+    const msgEl = document.getElementById('key-message');
+
+    if (!value) {
+      msgEl.style.display = 'block';
+      msgEl.style.color = 'var(--rose)';
+      msgEl.textContent = 'Please enter an API key.';
+      return;
+    }
+
+    // Upsert: insert or update if key already exists
+    const { error } = await supabase
+      .from('settings')
+      .upsert({ key: 'claude_api_key', value, updated_at: new Date().toISOString() }, { onConflict: 'key' });
+
+    msgEl.style.display = 'block';
+    if (error) {
+      msgEl.style.color = 'var(--rose)';
+      msgEl.textContent = `Save failed: ${error.message}`;
+    } else {
+      msgEl.style.color = 'var(--sage-deep)';
+      msgEl.textContent = 'API key saved.';
+      document.getElementById('key-input').value = '';
+      await loadKeyStatus();
+    }
+  });
+
+  // Delete API key
+  document.getElementById('delete-key-btn').addEventListener('click', async () => {
+    if (!confirm('Remove the Claude API key? The chatbot will stop working until a new key is added.')) return;
+
+    const { error } = await supabase
+      .from('settings')
+      .delete()
+      .eq('key', 'claude_api_key');
+
+    if (!error) await loadKeyStatus();
+  });
+
+  // Test connection
+  document.getElementById('test-btn').addEventListener('click', async () => {
+    const resultEl = document.getElementById('test-result');
+    resultEl.style.display = 'block';
+    resultEl.style.color = 'var(--ink-mute)';
+    resultEl.textContent = 'Testing...';
+
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) throw new Error('Not signed in');
+
+      const res = await fetch(`${SUPABASE_URL}/functions/v1/claude-proxy`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${session.access_token}`,
+          'apikey': SUPABASE_ANON_KEY,
+        },
+        body: JSON.stringify({
+          messages: [{ role: 'user', content: 'Say "Connection successful" in exactly two words.' }],
+          dataContext: 'Test mode — no project data.',
+          tools: false,
+        }),
+      });
+
+      const data = await res.json();
+      if (res.ok && data.text) {
+        resultEl.style.color = 'var(--sage-deep)';
+        resultEl.textContent = `Success: "${data.text.slice(0, 100)}"`;
+      } else {
+        resultEl.style.color = 'var(--rose)';
+        resultEl.textContent = `Error: ${data.error || 'Unknown error'}`;
+      }
+    } catch (e) {
+      resultEl.style.color = 'var(--rose)';
+      resultEl.textContent = `Failed: ${e.message}`;
+    }
+  });
+
+  // Sign out
+  document.getElementById('sign-out-btn').addEventListener('click', async () => {
+    await supabase.auth.signOut();
+    sessionStorage.removeItem('admin_unlocked');
+    adminPanel.style.display = 'none';
+    gateScreen.style.display = 'block';
+  });
+</script>
+</body>
+</html>

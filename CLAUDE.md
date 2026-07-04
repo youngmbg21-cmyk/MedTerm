@@ -1,78 +1,71 @@
 # CLAUDE.md — MedTerminal Research Workspace
 
-This file is the first thing Claude Code should read. It defines what this project is, what the app does, and the rules that govern every code change.
+Read this first. It defines what this project is and the rules that govern every change.
 
----
+## What this is
 
-## What This Project Is
+A **research workspace** used by a 2-person team (a project lead on desktop, a field
+coordinator on a 375px phone) to run a six-phase qualitative research programme. The
+programme decides whether a patient-side medical-tourism service (Kenya → India) is
+viable enough to build. **This app is not that product** — it is the tool used to decide
+whether to build it.
 
-`index.html` is a **research workspace** — a single-file browser app used by Simon and Amina to manage a six-phase qualitative research programme. The research programme is investigating whether a patient-side medical tourism platform (for Kenyan patients travelling to India for treatment) is viable enough to build.
+Read `docs/project-overview.md` for research intent and `docs/features.md` for screen
+detail. `sql/schema.sql` and `worker.js` define the real data model.
 
-**This app is not the MedTerminal product.** It is the tool used to decide whether to build it.
+## Architecture in one paragraph
 
-Read `docs/project-overview.md` before making any product or UX decisions.
+`index.html` loads vanilla ES modules from `js/`. All configuration (data mode, current
+phase, segments + targets, themes, team display names) lives in `js/config.js`. All data
+access goes through `js/data.js` — one interface (`list/create/update/remove`), two
+adapters: `local` (localStorage, seeded from `js/seed.js`, the default) and `api`
+(Cloudflare Worker `worker.js` → Supabase, Bearer JWT from Supabase magic-link auth in
+`js/auth.js`). Records are flat snake_case matching `sql/schema.sql`. `js/app.js` holds
+state, the hash router, the phase-gated nav, and the shared component kit. One screen per
+file in `js/screens/`. The AI assistant (`js/chat.js`) requires the Claude API and is
+calmly disabled in local mode.
 
----
+## Core rules — never violate
 
-## What the App Does
+1. **No frameworks, no build step, no npm for the app.** Vanilla JS ES modules; Tailwind
+   via CDN; one `css/theme.css`. Opens directly in a browser.
+2. **Screens never call `fetch` or `localStorage` directly.** Everything goes through
+   `js/data.js`.
+3. **One canonical record shape**: flat snake_case (`interview_id`, `tagged_same_day`,
+   `theme_tag`, `first_contact`). No `.fields` wrapper, ever.
+4. **Config has one home.** Segments, themes, current phase, stall threshold, and team
+   names come from `js/config.js`. Never redefine them in a screen. Never hardcode a
+   person's name — use `getTeam()/interviewerOptions()/ownerOptions()`.
+5. **Never render user-supplied text via `innerHTML`.** Use the `h()` helper /
+   `textContent`. `innerHTML` is allowed only for clearing (`= ''`).
+6. **Respect the same-day-tag rule.** The red warnings for untagged interviews are the
+   app's most important data-quality mechanism. Never weaken them.
+7. **Keep the aesthetic**: warm/editorial, sage + clay palette, Fraunces for headings and
+   quotes, Inter for UI. Semantic colours: sage=done, honey=attention, rose=breach,
+   info-blue=informational, plum=theme tags. Use the existing component classes
+   (`.card`, `.chip`, `.banner`, `.quote-block`, `.bar-wrap`, `.btn`) before inventing new ones.
+8. **Mobile-first.** Every screen must be fully usable at 375px. Test both 375px and
+   1280px before committing.
+9. **Every screen answers one question**, shown as its subheader (the fourth argument to
+   `registerRoute`). List screens lead with the exception, not the totals.
+10. **No API keys in the frontend.** The Worker (or Supabase Edge Function) holds all
+    secrets in `api` mode.
 
-Nine screens. One AI assistant. One file. ~1,060 lines of vanilla HTML/JS/CSS.
+## File map
 
-The app:
-- Tracks outreach to interview subjects (patients, caregivers, hospital staff, brokers, clinicians)
-- - Logs qualitative interviews and enforces same-day tagging
-  - - Manages a theme matrix of de-identified quotes tagged by theme, severity, and WTP signal
-    - - Shows per-segment saturation progress toward Phase 2 exit criteria
-      - - Provides read-only reference: interview scripts, outreach templates, operating manual
-        - - Powers a Claude-backed AI assistant that knows the live state of the research
-         
-          - Read `docs/features.md` for the full screen-by-screen breakdown.
-         
-          - ---
-
-          ## Who Uses It
-
-          - **Simon** — project lead, strategy, synthesis. Desktop user.
-          - - **Amina** — field coordinator in Nairobi. Conducts interviews. Mobile user (375px viewport).
-           
-            - Both use the app simultaneously. Every screen must work on mobile.
-           
-            - ---
-
-            ## Core Rules — Never Violate These
-
-            1. **Single file.** Everything lives in `index.html`. Do not split into multiple files or introduce a build system without explicit instruction.
-            2. 2. **No frameworks.** Vanilla JavaScript only. No React, Vue, Alpine, or any other JS framework.
-               3. 3. **No build tools.** No npm, no Webpack, no Vite. The file opens directly in a browser.
-                  4. 4. **Tailwind CDN only.** `<script src="https://cdn.tailwindcss.com">`. No PostCSS pipeline.
-                     5. 5. **No direct API calls from the browser.** All Airtable and Claude calls go through the Cloudflare Worker. Never put API keys in the frontend.
-                        6. 6. **Use existing CSS variables and component classes.** Check `:root` and `.card`, `.chip`, `.bar-wrap`, `.btn` before creating anything new.
-                           7. 7. **Mobile-first.** Design for 375px first. Test at 375px before committing.
-                              8. 8. **Respect the same-day-tag rule.** This is the most important data quality mechanism in the app. Never weaken or remove the red warning for untagged interviews.
-                                
-                                 9. ---
-                                
-                                 10. ## Architecture in One Paragraph
-                                
-                                 11. The browser loads `index.html`, which on startup fetches all data from Airtable via a Cloudflare Worker and holds it in memory. Hash routing (`#dashboard`, `#outreach`, etc.) shows and hides screen sections. All writes POST to the Worker, which updates Airtable and returns the updated record. The AI assistant sends a live context snapshot + conversation history to the Worker, which prepends the research-director system prompt and forwards to Claude. Claude's response streams back to the panel.
-                                
-                                 12. Read `docs/tech-stack.md` for full technical detail and constraints.
-                                
-                                 13. ---
-                                
-                                 14. ## File Reference
-                                
-                                 15. | File | Purpose |
-                                 16. |------|---------|
-                                 17. | `index.html` | The entire app — HTML, CSS, JS in one file |
-                                 18. | `README.md` | Public-facing repository description |
-                                 19. | `CLAUDE.md` | This file — start here |
-                                 20. | `docs/project-overview.md` | What the research programme is and why |
-                                 21. | `docs/features.md` | Every screen and component, in detail |
-                                 22. | `docs/tech-stack.md` | Architecture, constraints, development workflow |
-                                
-                                 23. ---
-                                
-                                 24. ## Tone & Voice
-                                
-                                 25. The app's tone is calm, precise, and professional. It is a working tool, not a product demo. UI copy should be direct and functional. The AI assistant speaks in the voice of a senior research director — it references specific data, names specific interview IDs, and gives actionable recommendations, not generic advice.
+| Path | Purpose |
+|------|---------|
+| `index.html` | Shell: sidebar, header, chat panel, boot script |
+| `css/theme.css` | The entire design system |
+| `js/config.js` | All configuration — single source of truth |
+| `js/data.js` | Data interface + local/api adapters |
+| `js/seed.js` | Demo seed data (dates relative to today) |
+| `js/app.js` | State, router, phase-gated nav, component kit |
+| `js/auth.js` | Magic-link login (api mode only, lazy-loaded) |
+| `js/chat.js` | Assistant panel |
+| `js/export.js` | CSV exports |
+| `js/screens/*.js` | One screen per file |
+| `worker.js` | Cloudflare Worker backend (api mode) |
+| `sql/schema.sql` | Supabase schema + RLS |
+| `HANDOFF.md` | How to go live |
+| `DECISIONS.md` | Judgment calls made during the rebuild |

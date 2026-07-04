@@ -1,102 +1,41 @@
 /* ============================================================
-   CONFIG
+   APP CORE — state, router, phase-gated nav, shared components.
+   Data access lives in data.js. Config lives in config.js.
    ============================================================ */
-export const WORKER_URL = 'https://YOUR-WORKER.workers.dev';
+import { CURRENT_PHASE, PHASES, STALL_DAYS } from './config.js';
+import { data, isLocalMode } from './data.js';
 
-// Feature 1: Hardcoded API key — NEVER used directly from the browser.
-// This constant exists only as documentation. The actual key lives in the
-// Cloudflare Worker's environment variables (wrangler secret).
-// See docs/tech-stack.md for the proxy architecture.
-// In the Worker: env.CLAUDE_API_KEY is set via `wrangler secret put CLAUDE_API_KEY`
+export { CURRENT_PHASE, PHASES };
 
-export const PHASE_INFO = {
-  current: 0,
-  label: 'Phase 0 — Foundation & onboarding',
-  exitCriteria: [
-    { id: 'pre-work', label: "Simon's pre-work completed" },
-    { id: 'workspace', label: 'Workspace live, both have written content' },
-    { id: 'scripts-v1', label: 'Interview scripts v1 drafted' },
-    { id: 'wedge-locked', label: 'Wedge brief signed and dated' },
-    { id: 'simon-explains', label: 'Simon can explain the project unaided' },
-    { id: 'two-changes', label: 'Simon has flagged ≥2 plan changes' }
-  ]
-};
-
-/* ============================================================
-   STATE
-   ============================================================ */
+/* ------------------------------------------------------------
+   STATE — in-memory cache, loaded once, refreshed on demand.
+   ------------------------------------------------------------ */
 export const STATE = {
-  outreach: [],
-  interviews: [],
-  matrix: [],
-  deliverables: [],
-  targets: [],
+  outreach: [], interviews: [], matrix: [], deliverables: [],
+  scripts: [], kill_list: [], field_checks: [], economics: [],
+  segment_cards: [], decision_memos: [], reports: [],
   chatHistory: [],
-  reports: [],
   loaded: false,
 };
 
-/* ============================================================
-   SEGMENTS & CONSTANTS
-   ============================================================ */
-export const SEGMENTS = ['Patient','Caregiver','Hospital IPD','Aggregator','Agent','Insurance broker','Diaspora family'];
-export const OUTREACH_STATUS_OPTIONS = ['Cold','Sent','Replied','Booked','Done','Declined'];
-export const OUTREACH_FIELDS = ['Name','Segment','Organisation','Country','Channel','Status','Owner','First contact','Notes'];
+const TABLES = ['outreach', 'interviews', 'matrix', 'deliverables', 'scripts',
+  'kill_list', 'field_checks', 'economics', 'segment_cards', 'decision_memos', 'reports'];
 
-export const THEMES = [
-  'Discovery — WhatsApp/personal','Discovery — search/online','Discovery — broker/agent',
-  'Trust — doctor reputation','Trust — price clarity','Trust — speed of reply','Trust — accreditation',
-  'Friction — slow response','Friction — paperwork','Friction — language','Friction — money transfer','Friction — quote chasing',
-  'Pain — financial','Pain — emotional','Pain — coordination','Pain — outcome',
-  'Money — willingness to pay','Money — broker commission','Money — insurance',
-  'Buyer — family abroad','Buyer — Nairobi family','Buyer — Hospital IPD'
-];
-
-/* ============================================================
-   API CLIENT
-   ============================================================ */
-export async function api(path, opts = {}) {
-  const url = `${WORKER_URL}${path}`;
-  const res = await fetch(url, {
-    ...opts,
-    headers: { 'Content-Type': 'application/json', ...(opts.headers || {}) },
-    credentials: 'include'
-  });
-  if (!res.ok) throw new Error(`API ${res.status}: ${await res.text()}`);
-  return res.json();
-}
-
-export async function loadAllData(showStatus = false) {
+export async function loadAllData() {
   setSync('Loading…');
   try {
-    const [o, i, m, d, s, kl, fc, rp] = await Promise.all([
-      api('/api/outreach').catch(() => ({ records: [] })),
-      api('/api/interviews').catch(() => ({ records: [] })),
-      api('/api/matrix').catch(() => ({ records: [] })),
-      api('/api/deliverables').catch(() => ({ records: [] })),
-      api('/api/scripts').catch(() => ({ records: [] })),
-      api('/api/kill_list').catch(() => ({ records: [] })),
-      api('/api/field_checks').catch(() => ({ records: [] })),
-      api('/api/reports').catch(() => ({ records: [] })),
-    ]);
-    STATE.outreach = o.records || [];
-    STATE.interviews = i.records || [];
-    STATE.matrix = m.records || [];
-    STATE.deliverables = d.records || [];
-    STATE.scripts = s.records || [];
-    STATE.killList = kl.records || [];
-    STATE.fieldChecks = fc.records || [];
-    STATE.reports = rp.records || [];
+    const results = await Promise.all(TABLES.map(t => data.list(t).catch(() => [])));
+    TABLES.forEach((t, i) => { STATE[t] = results[i]; });
     STATE.loaded = true;
     setSync('Synced');
     renderCurrentRoute();
   } catch (e) {
-    setSync('Offline · using cache', 'rose');
+    setSync(isLocalMode ? 'Storage error' : 'Offline · using cache', 'rose');
     console.error(e);
   }
 }
 
-export function setSync(text, tone='line') {
+export function setSync(text, tone = 'line') {
   const el = document.getElementById('sync-status');
   if (!el) return;
   el.className = `chip chip-${tone === 'rose' ? 'rose' : tone === 'sage' ? 'sage' : 'line'}`;
@@ -104,30 +43,60 @@ export function setSync(text, tone='line') {
   if (text === 'Synced') {
     setTimeout(() => {
       el.className = 'chip chip-sage';
-      el.textContent = `✓ ${STATE.outreach.length + STATE.interviews.length + STATE.matrix.length} records`;
-    }, 600);
+      const n = STATE.outreach.length + STATE.interviews.length + STATE.matrix.length;
+      el.textContent = isLocalMode ? `✓ ${n} records · demo` : `✓ ${n} records`;
+    }, 500);
   }
 }
 
-/* ============================================================
-   ROUTER
-   ============================================================ */
+/* ------------------------------------------------------------
+   DATE HELPERS
+   ------------------------------------------------------------ */
+export function daysSince(dateStr) {
+  if (!dateStr) return null;
+  const then = new Date(dateStr + 'T00:00:00');
+  return Math.floor((Date.now() - then.getTime()) / 86400000);
+}
+
+export function fmtDate(dateStr) {
+  if (!dateStr) return '—';
+  const d = new Date(dateStr.slice(0, 10) + 'T00:00:00');
+  if (isNaN(d)) return dateStr;
+  return d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
+}
+
+/* The single most important data-quality signal in the app. */
+export function isUntaggedOverdue(interview) {
+  return interview.tagged_same_day !== 'Y' && (daysSince(interview.date) ?? 0) >= 1;
+}
+
+export function isStalled(contact) {
+  return ['Sent', 'Replied'].includes(contact.status) &&
+    (daysSince(contact.first_contact) ?? 0) >= STALL_DAYS;
+}
+
+/* ------------------------------------------------------------
+   ROUTER — routes carry a group and the one question they answer.
+   ------------------------------------------------------------ */
 const ROUTES = {};
 
-export function registerRoute(name, title, renderFn) {
-  ROUTES[name] = { title, render: renderFn };
+export function registerRoute(name, title, renderFn, question = '') {
+  ROUTES[name] = { title, question, render: renderFn };
 }
 
 export function go(route) {
-  if (!ROUTES[route]) route = 'dashboard';
+  if (!ROUTES[route]) route = 'overview';
   location.hash = route;
 }
 
 export function renderCurrentRoute() {
-  const route = (location.hash || '#dashboard').slice(1);
-  const r = ROUTES[route] || ROUTES.dashboard;
+  let route = (location.hash || '#overview').slice(1);
+  if (route === 'dashboard') route = 'overview'; // legacy hash
+  const r = ROUTES[route] || ROUTES.overview;
   if (!r) return;
   document.getElementById('page-title').textContent = r.title;
+  const q = document.getElementById('page-question');
+  if (q) q.textContent = r.question || '';
   document.querySelectorAll('[data-route]').forEach(el => {
     el.classList.toggle('active', el.dataset.route === route);
   });
@@ -138,15 +107,114 @@ export function renderCurrentRoute() {
   setTimeout(() => page.classList.remove('fade-in'), 300);
 }
 
-/* ============================================================
-   DOM HELPERS
-   ============================================================ */
+/* ------------------------------------------------------------
+   NAV — one axis: the research pipeline. Phase-gated.
+   ------------------------------------------------------------ */
+const NAV = [
+  { type: 'route', route: 'overview', label: 'Overview' },
+  {
+    type: 'group', id: 'fieldwork', label: 'Fieldwork', phaseLabel: 'phase 1–2',
+    unlockAt: 1, activeThrough: 2,
+    routes: [['outreach', 'Outreach'], ['interviews', 'Interviews'], ['matrix', 'Theme matrix'], ['saturation', 'Saturation']],
+  },
+  {
+    type: 'group', id: 'sensemaking', label: 'Sense-making', phaseLabel: 'phase 3',
+    unlockAt: 3, activeThrough: 3,
+    routes: [['theme-analysis', 'Theme analysis'], ['segment-cards', 'Segment cards'], ['top-pains', 'Top-3 pains'], ['kill-list', 'Kill list'], ['state-of-field', 'State of the field']],
+  },
+  {
+    type: 'group', id: 'economics', label: 'Economics', phaseLabel: 'phase 4',
+    unlockAt: 4, activeThrough: 4,
+    routes: [['economics', 'Unit economics'], ['alt-models', 'Alternate models'], ['field-checks', 'Field checks']],
+  },
+  {
+    type: 'group', id: 'decision', label: 'Decision', phaseLabel: 'phase 5',
+    unlockAt: 5, activeThrough: 5,
+    routes: [['decision-memo', 'Decision memo'], ['mvp-scope', 'MVP scope'], ['confirmatory-tests', 'Confirmatory tests']],
+  },
+  { type: 'divider' },
+  {
+    type: 'group', id: 'reference', label: 'Reference', phaseLabel: '',
+    unlockAt: 0, activeThrough: 99, startCollapsed: true,
+    routes: [['scripts', 'Scripts'], ['templates', 'Templates'], ['manual', 'Operating manual']],
+  },
+  { type: 'route', route: 'reports', label: 'Reports' },
+];
+
+export function buildNav() {
+  const nav = document.getElementById('nav-root');
+  nav.innerHTML = '';
+
+  NAV.forEach(item => {
+    if (item.type === 'divider') {
+      nav.appendChild(h('div', { class: 'nav-divider' }));
+      return;
+    }
+    if (item.type === 'route') {
+      nav.appendChild(h('a', { class: 'nav-item', 'data-route': item.route }, [
+        h('span', { class: 'dot' }), item.label,
+      ]));
+      return;
+    }
+
+    const locked = CURRENT_PHASE < item.unlockAt;
+    const isCurrent = CURRENT_PHASE >= item.unlockAt && CURRENT_PHASE <= item.activeThrough;
+    let collapsed = item.startCollapsed || !isCurrent;
+
+    const group = h('div', { class: `nav-group${locked ? ' locked' : ''}` });
+    const chevron = h('span', { class: 'nav-chevron', text: '›' });
+    const header = h('button', { class: 'nav-group-header', type: 'button' }, [
+      h('span', { class: 'micro', text: locked ? item.label : item.label + (item.phaseLabel ? ` · ${item.phaseLabel}` : '') }),
+      locked ? h('span', { class: 'nav-lock', title: `Unlocks at phase ${item.unlockAt}`, text: `🔒 phase ${item.unlockAt}` }) : chevron,
+    ]);
+    const list = h('div', { class: 'nav-group-list' });
+    item.routes.forEach(([route, label]) => {
+      list.appendChild(h('a', { class: 'nav-item', 'data-route': route }, [
+        h('span', { class: 'dot' }), label,
+      ]));
+    });
+
+    function applyCollapsed() {
+      list.style.display = collapsed ? 'none' : '';
+      chevron.style.transform = collapsed ? '' : 'rotate(90deg)';
+    }
+    header.addEventListener('click', () => { collapsed = !collapsed; applyCollapsed(); });
+    applyCollapsed();
+
+    group.appendChild(header);
+    group.appendChild(list);
+    nav.appendChild(group);
+  });
+
+  // route clicks (delegated per element so .active toggling keeps working)
+  nav.querySelectorAll('[data-route]').forEach(el => {
+    el.addEventListener('click', () => {
+      go(el.dataset.route);
+      closeSidebar();
+    });
+  });
+}
+
+export function openSidebar() {
+  document.getElementById('sidebar').classList.add('open');
+  document.getElementById('mobile-overlay').classList.add('open');
+}
+export function closeSidebar() {
+  document.getElementById('sidebar').classList.remove('open');
+  document.getElementById('mobile-overlay').classList.remove('open');
+}
+
+/* ------------------------------------------------------------
+   DOM HELPERS — h() builds elements; all text goes through
+   textContent, never innerHTML, so user data cannot inject HTML.
+   ------------------------------------------------------------ */
 export function h(tag, attrs = {}, children = []) {
   const el = document.createElement(tag);
   for (const [k, v] of Object.entries(attrs)) {
+    if (v == null) continue;
     if (k === 'class') el.className = v;
     else if (k === 'text') el.textContent = v;
-    else if (k.startsWith('on')) el.addEventListener(k.slice(2).toLowerCase(), v);
+    else if (k.startsWith('on') && typeof v === 'function') el.addEventListener(k.slice(2).toLowerCase(), v);
     else el.setAttribute(k, v);
   }
   (Array.isArray(children) ? children : [children]).forEach(c => {
@@ -157,68 +225,106 @@ export function h(tag, attrs = {}, children = []) {
   return el;
 }
 
-export function esc(str) {
-  if (!str) return '';
-  const d = document.createElement('div');
-  d.textContent = str;
-  return d.innerHTML;
+/* ------------------------------------------------------------
+   SHARED COMPONENTS — the six building blocks every screen uses.
+   Semantic colour: sage = done/on-track · honey = attention ·
+   rose = blocked/breach · info = current/informational · plum = themes.
+   ------------------------------------------------------------ */
+
+/* 1 · Metric card */
+export function kpiCard(label, value, sub, tone) {
+  const toneColor = { rose: 'var(--rose)', honey: 'var(--honey-deep)', sage: 'var(--sage-deep)', info: 'var(--info)' }[tone];
+  const num = h('div', { class: 'kpi-num', text: String(value) });
+  if (toneColor) num.style.color = toneColor;
+  const card = h('div', { class: 'card kpi' }, [num, h('div', { class: 'kpi-label', text: label })]);
+  if (sub) card.appendChild(h('div', { class: 'text-xs mt-2', style: 'color:var(--ink-mute);', text: sub }));
+  return card;
 }
 
-export function statusChip(status) {
-  const map = {
-    'Cold': 'chip-line', 'Sent': 'chip-honey', 'Replied': 'chip-honey',
-    'Booked': 'chip-sage', 'Done': 'chip-sage', 'Declined': 'chip-rose',
-    'In progress': 'chip-honey', 'Complete': 'chip-sage', 'Blocked': 'chip-rose',
-    'Not started': 'chip-line'
-  };
-  return `<span class="chip ${map[status] || 'chip-line'}">${esc(status) || '—'}</span>`;
+/* 2 · Pill chip with semantic tone */
+export function chip(text, tone = 'line') {
+  return h('span', { class: `chip chip-${tone}`, text });
 }
 
-export function severityDots(sev) {
-  if (!sev) return '<span style="color:var(--ink-mute);">—</span>';
-  const n = parseInt(sev, 10) || 0;
-  let html = '<span class="inline-flex gap-0.5">';
-  for (let i = 1; i <= 5; i++) {
-    html += `<i style="display:inline-block;width:5px;height:5px;border-radius:50%;background:${i<=n ? (n>=4?'var(--rose)':n>=3?'var(--honey)':'var(--sage)') : 'var(--line)'};"></i>`;
-  }
-  return html + '</span>';
+export function statusTone(status) {
+  return {
+    Cold: 'line', Sent: 'info', Replied: 'honey', Booked: 'sage', Done: 'sage', Declined: 'rose',
+    'Not started': 'line', 'In progress': 'honey', Complete: 'sage', Blocked: 'rose',
+  }[status] || 'line';
 }
 
-/* ============================================================
+/* 3 · Progress bar */
+export function progressBar(pct, color) {
+  const fill = h('i');
+  fill.style.width = `${Math.max(0, Math.min(100, pct))}%`;
+  if (color) fill.style.background = color;
+  return h('div', { class: 'bar-wrap' }, [fill]);
+}
+
+/* 4 · Serif quote block — quotes must look different from UI chrome */
+export function quoteBlock(entry, { showEdit } = {}) {
+  const sevTone = entry.severity >= 4 ? 'rose' : entry.severity >= 3 ? 'honey' : 'line';
+  const chips = h('div', { class: 'flex flex-wrap gap-1.5' }, [
+    entry.theme_tag ? chip(entry.theme_tag, 'plum') : null,
+    entry.segment ? chip(entry.segment, 'line') : null,
+    entry.severity ? chip(`Sev ${entry.severity}`, sevTone) : null,
+    entry.wtp ? chip(`WTP ${entry.wtp}`, entry.wtp === 'Y' ? 'sage' : 'line') : null,
+    entry.interview_id ? chip(entry.interview_id, 'info') : null,
+  ].filter(Boolean));
+
+  const head = h('div', { class: 'flex items-start justify-between gap-3 mb-2' }, [chips]);
+  if (showEdit) head.appendChild(showEdit);
+
+  const block = h('div', { class: 'quote-block' }, [
+    head,
+    h('div', { class: 'quote-text', text: entry.quote ? `“${entry.quote}”` : '(no quote)' }),
+  ]);
+  if (entry.notes) block.appendChild(h('div', { class: 'text-xs mt-2', style: 'color:var(--ink-mute);', text: entry.notes }));
+  return block;
+}
+
+/* 5 · Empty state — no blank panels, ever */
+export function emptyState(title, sub) {
+  return h('div', { class: 'p-10 text-center' }, [
+    h('div', { class: 'text-sm', style: 'color:var(--ink-mute);', text: title }),
+    sub ? h('div', { class: 'text-xs mt-1', style: 'color:var(--ink-mute);', text: sub }) : null,
+  ].filter(Boolean));
+}
+
+/* 6 · Attention banners are plain divs with .banner .banner-{rose|honey|info} —
+   see theme.css. Red = data-quality breach, honey = attention, info = calm note. */
+
+/* ------------------------------------------------------------
    MODAL + FORM HELPERS
-   ============================================================ */
-let currentModalFields = [];
-
-export function openModal(title, fields, onSubmit) {
-  currentModalFields = fields;
+   ------------------------------------------------------------ */
+export function openModal(title, fields, onSubmit, submitLabel = 'Save') {
   const root = document.getElementById('modal-root');
   root.innerHTML = '';
 
   const form = h('form', { onsubmit: (e) => {
     e.preventDefault();
-    const data = {};
+    const out = {};
     fields.forEach(f => {
       const el = form.querySelector(`[name="${f.key}"]`);
-      if (el && el.value !== '') data[f.key] = el.value;
+      if (el) out[f.key] = el.value;
     });
-    onSubmit(data);
-  }});
+    onSubmit(out);
+  } });
   form.appendChild(h('div', { class: 'serif text-xl mb-5', text: title }));
   fields.forEach(f => form.appendChild(f.el));
   form.appendChild(h('div', { class: 'flex gap-3 mt-5 justify-end pt-4 border-t', style: 'border-color:var(--line-soft);' }, [
     h('button', { type: 'button', class: 'btn btn-line', onclick: closeModal }, 'Cancel'),
-    h('button', { type: 'submit', class: 'btn btn-primary' }, 'Save')
+    h('button', { type: 'submit', class: 'btn btn-primary' }, submitLabel),
   ]));
 
-  const modal = h('div', { class: 'modal-bg fade-in', onclick: (e) => { if (e.target.classList.contains('modal-bg')) closeModal(); } }, [
-    h('div', { class: 'modal p-6' }, [form])
-  ]);
-  root.appendChild(modal);
+  root.appendChild(h('div', {
+    class: 'modal-bg fade-in',
+    onclick: (e) => { if (e.target.classList.contains('modal-bg')) closeModal(); },
+  }, [h('div', { class: 'modal p-6' }, [form])]));
 }
 
 export function closeModal() {
   document.getElementById('modal-root').innerHTML = '';
-  currentModalFields = [];
 }
 
 export function formField(label, key, type, value, options, inputType) {
@@ -234,9 +340,9 @@ export function formField(label, key, type, value, options, inputType) {
     });
   } else if (type === 'textarea') {
     input = h('textarea', { class: 'textarea', name: key, rows: '3' });
-    if (value) input.textContent = value;
+    if (value) input.value = value;
   } else {
-    input = h('input', { class: 'input', name: key, type: inputType || 'text', value: value || '' });
+    input = h('input', { class: 'input', name: key, type: inputType || 'text', value: value ?? '' });
   }
   wrap.appendChild(input);
   return { key, el: wrap };

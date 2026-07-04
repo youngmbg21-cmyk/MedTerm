@@ -13,7 +13,7 @@
 <body>
 
 <!-- Mobile overlay -->
-<div id="mobile-overlay" class="mobile-overlay" onclick="closeSidebar()"></div>
+<div id="mobile-overlay" class="mobile-overlay"></div>
 
 <!-- Sidebar nav -->
 <aside id="sidebar" class="sidebar-nav fixed top-0 left-0 bottom-0 w-[240px] border-r flex flex-col z-30" style="border-color:var(--line); background:var(--bg);">
@@ -29,75 +29,43 @@
     </div>
   </div>
 
-  <nav class="flex-1 px-3 py-4 space-y-0.5 overflow-y-auto">
-    <div class="micro px-3 mb-2" style="color:var(--ink-mute);">Daily</div>
-    <a class="nav-item" data-route="dashboard"><span class="dot"></span>Dashboard</a>
-    <a class="nav-item" data-route="outreach"><span class="dot"></span>Outreach</a>
-    <a class="nav-item" data-route="interviews"><span class="dot"></span>Interviews</a>
-    <a class="nav-item" data-route="matrix"><span class="dot"></span>Theme matrix</a>
-    <a class="nav-item" data-route="saturation"><span class="dot"></span>Saturation</a>
-
-    <div class="micro px-3 mt-5 mb-2" style="color:var(--ink-mute);">Reference</div>
-    <a class="nav-item" data-route="scripts"><span class="dot"></span>Scripts</a>
-    <a class="nav-item" data-route="templates"><span class="dot"></span>Templates</a>
-    <a class="nav-item" data-route="manual"><span class="dot"></span>Operating manual</a>
-
-    <div class="micro px-3 mt-5 mb-2" style="color:var(--ink-mute);">Phase 3 · Sense-making</div>
-    <a class="nav-item" data-route="theme-analysis"><span class="dot"></span>Theme analysis</a>
-    <a class="nav-item" data-route="segment-cards"><span class="dot"></span>Segment cards</a>
-    <a class="nav-item" data-route="top-pains"><span class="dot"></span>Top-3 pains</a>
-    <a class="nav-item" data-route="kill-list"><span class="dot"></span>Kill list</a>
-    <a class="nav-item" data-route="state-of-field"><span class="dot"></span>State of the field</a>
-
-    <div class="micro px-3 mt-5 mb-2" style="color:var(--ink-mute);">Phase 4 · Economics</div>
-    <a class="nav-item" data-route="economics"><span class="dot"></span>Unit economics</a>
-    <a class="nav-item" data-route="alt-models"><span class="dot"></span>Alternate models</a>
-    <a class="nav-item" data-route="field-checks"><span class="dot"></span>Field checks</a>
-
-    <div class="micro px-3 mt-5 mb-2" style="color:var(--ink-mute);">Phase 5 · Decision</div>
-    <a class="nav-item" data-route="decision-memo"><span class="dot"></span>Decision memo</a>
-    <a class="nav-item" data-route="mvp-scope"><span class="dot"></span>MVP scope</a>
-    <a class="nav-item" data-route="confirmatory-tests"><span class="dot"></span>Confirmatory tests</a>
-
-    <div class="micro px-3 mt-5 mb-2" style="color:var(--ink-mute);">Output</div>
-    <a class="nav-item" data-route="reports"><span class="dot"></span>Reports</a>
-  </nav>
+  <nav id="nav-root" class="flex-1 px-3 py-4 overflow-y-auto"></nav>
 
   <div class="px-4 py-4 border-t" style="border-color:var(--line-soft);">
-    <button class="btn btn-line w-full justify-center" onclick="toggleChat()">
-      <span>💬</span><span>Open assistant</span>
+    <button class="btn btn-line w-full justify-center" id="open-chat-btn">
+      <span>💬</span><span>Assistant</span>
     </button>
-    <div class="micro mt-3 text-center" style="color:var(--ink-mute);">v0.2 · phase 0</div>
+    <div class="flex items-center justify-between mt-3">
+      <a class="text-xs cursor-pointer" id="settings-link" style="color:var(--ink-mute);">Settings</a>
+      <span class="micro" id="version-tag" style="color:var(--ink-mute);">v0.3</span>
+    </div>
   </div>
 </aside>
 
 <!-- Main area -->
 <main class="main-area" style="padding-left:240px; min-height:100vh;">
-  <!-- Top bar -->
   <header class="sticky top-0 z-20" style="background:rgba(245,241,234,0.92); backdrop-filter:saturate(150%) blur(8px); border-bottom:1px solid var(--line-soft);">
     <div class="px-8 py-4 flex items-center justify-between">
       <div class="flex items-center gap-3">
-        <button class="hamburger" onclick="openSidebar()" aria-label="Menu">
+        <button class="hamburger" id="hamburger-btn" aria-label="Menu">
           <svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5"><line x1="3" y1="5" x2="17" y2="5"/><line x1="3" y1="10" x2="17" y2="10"/><line x1="3" y1="15" x2="17" y2="15"/></svg>
         </button>
         <div>
-          <div class="micro" style="color:var(--ink-mute);">Current phase</div>
-          <h1 id="page-title" class="serif text-xl mt-0.5">Dashboard</h1>
+          <h1 id="page-title" class="serif text-xl">Overview</h1>
+          <div id="page-question" class="text-xs mt-0.5" style="color:var(--ink-mute);"></div>
         </div>
       </div>
       <div class="flex items-center gap-3">
         <span id="sync-status" class="chip chip-line">Loading…</span>
-        <button class="btn btn-ghost" onclick="window.__refresh()">↻ Refresh</button>
-        <button class="btn btn-primary" onclick="toggleChat()">Ask assistant</button>
+        <button class="btn btn-ghost" id="refresh-btn">↻ Refresh</button>
       </div>
     </div>
   </header>
 
-  <!-- Page container -->
   <div id="page" class="px-8 py-8 max-w-[1200px]"></div>
 </main>
 
-<!-- Chatbot side panel -->
+<!-- Assistant side panel -->
 <aside id="chat-panel" class="chat-panel closed">
   <div class="px-5 py-4 border-b flex items-center justify-between" style="border-color:var(--line-soft);">
     <div>
@@ -105,24 +73,19 @@
       <div class="micro mt-1" style="color:var(--ink-mute);">Reads your data · advises next steps</div>
     </div>
     <div class="flex items-center gap-2">
-      <button class="btn btn-ghost text-xs" onclick="clearChat()" aria-label="Clear chat" title="Clear conversation">Clear</button>
-      <button class="btn btn-ghost" onclick="toggleChat()" aria-label="Close">✕</button>
+      <button class="btn btn-ghost text-xs" id="clear-chat-btn" title="Clear conversation">Clear</button>
+      <button class="btn btn-ghost" id="close-chat-btn" aria-label="Close">✕</button>
     </div>
   </div>
 
   <div id="chat-messages" class="flex-1 overflow-y-auto px-5 py-4 flex flex-col gap-3"></div>
 
-  <div class="px-5 py-3 border-t flex flex-wrap gap-2" style="border-color:var(--line-soft);">
-    <button class="quick-action" onclick="quickPrompt('Give me a one-paragraph status of where the project is right now. Be specific. Use the data.')">Status check</button>
-    <button class="quick-action" onclick="quickPrompt('Assess our progress against the current phase exit criteria. What still needs to be done?')">Phase exit check</button>
-    <button class="quick-action" onclick="quickPrompt('What is the single most important thing I should do today, given the state of the project? Be specific — name a person, a deliverable, or an interview.')">What now?</button>
-    <button class="quick-action" onclick="quickPrompt('Surface the strongest themes emerging from the matrix. Quote specific entries. Flag where evidence is still thin.')">Surface themes</button>
-  </div>
+  <div id="chat-quick" class="px-5 py-3 border-t flex flex-wrap gap-2" style="border-color:var(--line-soft);"></div>
 
   <div class="px-5 py-4 border-t" style="border-color:var(--line-soft);">
     <div class="flex gap-2 items-end">
-      <textarea id="chat-input" class="textarea" rows="2" placeholder="Ask anything about the project state…" onkeydown="if(event.key==='Enter' && !event.shiftKey){event.preventDefault();sendChat();}"></textarea>
-      <button class="btn btn-primary" onclick="sendChat()">Send</button>
+      <textarea id="chat-input" class="textarea" rows="2" placeholder="Ask anything about the project state…"></textarea>
+      <button class="btn btn-primary" id="send-chat-btn">Send</button>
     </div>
   </div>
 </aside>
@@ -130,13 +93,14 @@
 <!-- Modal container -->
 <div id="modal-root"></div>
 
-<!-- Boot: load modules -->
+<!-- Boot -->
 <script type="module">
-  import { WORKER_URL, loadAllData, setSync, renderCurrentRoute, go } from './js/app.js';
-  import './js/chat.js';
+  import { loadAllData, renderCurrentRoute, buildNav, go, openSidebar, closeSidebar } from './js/app.js';
+  import { DATA_MODE } from './js/config.js';
+  import { initChat } from './js/chat.js';
 
-  // Load all screen modules
-  import './js/screens/dashboard.js';
+  // Screen modules (each registers its routes)
+  import './js/screens/overview.js';
   import './js/screens/outreach.js';
   import './js/screens/interviews.js';
   import './js/screens/matrix.js';
@@ -144,42 +108,29 @@
   import './js/screens/scripts.js';
   import './js/screens/templates.js';
   import './js/screens/manual.js';
-  import './js/screens/decisions.js';
   import './js/screens/sensemaking.js';
   import './js/screens/economics.js';
   import './js/screens/decision.js';
   import './js/screens/reports.js';
+  import './js/screens/settings.js';
 
-  // Mobile sidebar
-  window.openSidebar = () => {
-    document.getElementById('sidebar').classList.add('open');
-    document.getElementById('mobile-overlay').classList.add('open');
-  };
-  window.closeSidebar = () => {
-    document.getElementById('sidebar').classList.remove('open');
-    document.getElementById('mobile-overlay').classList.remove('open');
-  };
+  document.getElementById('hamburger-btn').addEventListener('click', openSidebar);
+  document.getElementById('mobile-overlay').addEventListener('click', closeSidebar);
+  document.getElementById('refresh-btn').addEventListener('click', () => loadAllData());
+  document.getElementById('settings-link').addEventListener('click', () => { go('settings'); closeSidebar(); });
 
-  // Refresh button
-  window.__refresh = () => loadAllData(true);
+  buildNav();
+  initChat();
 
-  // Router wiring
   window.addEventListener('hashchange', renderCurrentRoute);
-  document.querySelectorAll('[data-route]').forEach(el => {
-    el.addEventListener('click', () => {
-      go(el.dataset.route);
-      window.closeSidebar();
-    });
-  });
-
-  // Boot
-  if (!location.hash) location.hash = 'dashboard';
+  if (!location.hash) location.hash = 'overview';
   renderCurrentRoute();
-  if (WORKER_URL.includes('YOUR-WORKER')) {
-    setSync('Set WORKER_URL in js/app.js', 'rose');
-  } else {
-    await loadAllData();
+
+  if (DATA_MODE === 'api') {
+    const { requireLogin } = await import('./js/auth.js');
+    await requireLogin();
   }
+  await loadAllData();
 </script>
 </body>
 </html>
