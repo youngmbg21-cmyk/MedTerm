@@ -1,104 +1,107 @@
 # Tech Stack — MedTerminal Research Workspace
 
-> The simplest architecture that works. No build step. No framework. Supabase as the full backend.
-
----
+> Vanilla modules, one CSS file, zero build. Two data adapters behind one interface.
 
 ## Overview
 
 | Layer | Technology | Notes |
 |-------|-----------|-------|
-| Frontend | Vanilla HTML/CSS/JS | Modular: `index.html` + `js/` modules |
-| Styling | Tailwind CSS (CDN) | No build step — CDN only |
-| Fonts | Google Fonts | Fraunces (headings) + Inter (body) |
-| Routing | Hash routing | `#dashboard`, `#outreach`, etc. |
-| State | In-memory JavaScript | Loaded from Supabase on page load |
-| Data store | Supabase (PostgreSQL) | Via Supabase JS client (with RLS) |
-| API layer | Supabase Edge Functions | Claude API proxy + system prompt injection |
-| AI | Claude (Anthropic) | Via Supabase Edge Function `claude-proxy` |
-| Auth | Supabase Auth | Magic link, admin-only settings page |
-| Hosting | TBD | Static files — any host works |
+| Frontend | Vanilla JS ES modules | `index.html` + `js/` — no framework, no bundler |
+| Styling | Tailwind CDN + `css/theme.css` | Component classes own the visual identity |
+| Fonts | Google Fonts | Fraunces (headings, quotes) + Inter (UI) |
+| Routing | Hash routing | `#overview`, `#outreach`, … phase-gated nav |
+| State | In-memory `STATE` in `js/app.js` | Loaded once via `js/data.js`, Refresh re-fetches |
+| Data (local) | localStorage | Seeded demo data, default mode |
+| Data (api) | Supabase Postgres | Via Cloudflare Worker only — schema in `sql/schema.sql` |
+| Auth (api) | Supabase magic link | `js/auth.js`, lazy-loaded; JWT sent as Bearer to Worker |
+| AI (api) | Claude via Worker `/api/chat` | Disabled with a calm notice in local mode |
 
----
+## The data layer (the important part)
 
-## Frontend
+`js/data.js` exposes exactly:
 
-### Rules
-- **No JavaScript frameworks.** No React, Vue, Svelte, Alpine, or any other framework. Vanilla JS only.
-- **No build tools.** No Webpack, Vite, Parcel, or npm. The file must open directly in a browser without any build step.
-- **Tailwind via CDN only.** `<script src="https://cdn.tailwindcss.com">`. Do not introduce a PostCSS pipeline.
-- **Supabase JS client via ESM CDN.** Loaded from `https://esm.sh/@supabase/supabase-js@2` — no npm install needed.
+```
+data.list(table)              -> array
+data.create(table, record)    -> created record
+data.update(table, id, patch) -> updated record
+data.remove(table, id)        -> { deleted: true }
+data.reset()                  -> local mode only: re-seed
+```
 
-### CSS Architecture
-- `:root` CSS variables define the colour palette. Always use these — never hardcode hex values.
-- Component classes: `.card`, `.chip`, `.bar-wrap`, `.btn` — already defined. Use these before creating new component classes.
-- Tailwind utility classes are used for layout and spacing. Component classes handle visual identity.
+`DATA_MODE` in `js/config.js` selects the adapter:
 
-### State Management
-- All data loads from Supabase **once on page load** via the JS client.
-- Data is stored in memory as JavaScript objects/arrays.
-- All reads come from memory — never re-fetch on every render.
-- A **Refresh button** in the top bar triggers a full re-fetch.
-- Writes POST immediately via the Supabase JS client. Update in-memory state optimistically on success.
+- **`local`** (default) — persists the whole DB as one JSON blob in localStorage
+  (`medterm_data_v1`), seeded from `js/seed.js` on first run. Interview IDs (`INT-nnn`)
+  are assigned by the adapter.
+- **`api`** — calls `WORKER_URL/api/<table>` (always lowercase) with the Supabase session
+  JWT in the `Authorization` header. The Worker enforces roles and writes to Supabase;
+  Postgres assigns interview IDs via trigger.
 
----
+**Records are flat snake_case matching `sql/schema.sql`** in both modes:
+`interview_id`, `date`, `segment`, `tagged_same_day`, `theme_tag`, `severity`, `wtp`,
+`first_contact`, `deliverable`, `status`, `evidence`, … No `.fields` wrapper.
 
-## Supabase
+Screens never call `fetch` or `localStorage` directly.
 
-### Database (PostgreSQL)
-The data store. Key tables:
+## Configuration (`js/config.js`)
 
-| Table | Key fields |
-|-------|-----------|
-| outreach | name, organisation, segment, status, last_contact, notes |
-| interviews | id, date, segment, participant_code, interviewer, notes, tagged_same_day |
-| matrix | interview_id, segment, quote, theme_tag, severity, wtp |
-| settings | key (unique), value, updated_at |
-| chat_sessions | user_id, title |
-| chat_messages | session_id, role, content, tool_calls |
+Single source of truth for:
 
-- Row Level Security (RLS) is enabled on all tables.
-- The `settings` table stores the Claude API key — only the admin user can read/write it.
-- The Edge Function uses the `service_role` key to read the API key at runtime.
+- `DATA_MODE` — `'local' | 'api'`
+- `WORKER_URL` — api mode only
+- `CURRENT_PHASE` — drives nav gating and the Overview; change it here to advance
+- `PHASES`, `SEGMENTS` (name + interview target), `THEMES`, `OUTREACH_STATUSES`,
+  `CHANNELS`, `STALL_DAYS`
+- Team roles: `getTeam()/setTeam()` (persisted separately from data so demo resets keep
+  names), `interviewerOptions()`, `ownerOptions()`, `onTeamChange()`
 
-### Auth
-- **Supabase Auth** with magic link (email-based, passwordless).
-- Admin page (`admin.html`) is additionally gated by a hardcoded password.
-- Only the admin email can access the `settings` table (enforced by RLS).
+## Design system (`css/theme.css`)
 
-### Edge Functions
-- **`claude-proxy`**: The only Edge Function. Handles all Claude API calls.
-  - Reads the Claude API key from the `settings` table at call time.
-  - Prepends the research-director system prompt.
-  - Supports tool use (query_outreach, query_interviews, etc.).
-  - Persists chat sessions and messages.
-  - The frontend never touches the Claude API directly.
+Semantic colour, learned once, used everywhere:
 
----
+| Colour | Meaning |
+|--------|---------|
+| sage (green) | done / on-track |
+| honey (amber) | attention / thin evidence |
+| rose (red) | blocked / data-quality breach |
+| info (blue) | current / informational |
+| plum (purple) | theme tags |
 
-## AI Assistant
+Shared components: `.card`, `.kpi`, `.chip chip-*`, `.bar-wrap`, `.quote-block`
+(serif — evidence must look different from chrome), `.banner banner-*`, `.phase-rail`,
+`.md-layout` (master–detail, stacks under 900px), `table.data.stack` (stacked rows under
+640px). Compose screens from these; don't hand-style.
 
-- **Model:** Claude (Anthropic) — model version specified in the Edge Function.
-- **Context window strategy:** The frontend builds a compact context snapshot (not raw data dumps) to stay within token limits, plus a full content snapshot from all tabs.
-- **System prompt:** Lives in the Edge Function. Defines Claude as a research director with deep knowledge of the MedTerminal project.
-- **API key management:** Stored in the `settings` table, managed via the admin page. Never exposed to the frontend.
+## Backend (api mode)
 
----
+`worker.js` (Cloudflare Worker) is the only backend. It:
 
-## Constraints — Do Not Change Without Discussion
+1. Verifies the Supabase JWT on every `/api/*` call and maps the user to `team_members`.
+2. Proxies CRUD to Supabase REST with the service key (never in the browser), enforcing
+   lead/partner roles and writing an audit log.
+3. Handles `/api/chat`: prepends the research-director system prompt, forwards to the
+   Claude API with tool use (query tools + propose_action), and persists chat history.
 
-1. **Supabase as the only backend.** No Cloudflare Workers, no separate Node.js server.
-2. **No npm/package.json.** This project has no dependency manifest and no `node_modules`.
-3. **Supabase as the only persistence layer.** Do not introduce Firebase, Airtable, or any other database.
-4. **Never call Claude directly from the browser.** All AI calls go through the `claude-proxy` Edge Function.
-5. **No API keys in the frontend.** The Supabase anon key is safe to expose (RLS enforces security). The Claude API key lives only in the `settings` table and is read server-side.
+Secrets (Worker env): `SUPABASE_URL`, `SUPABASE_SERVICE_KEY`, `SUPABASE_ANON_KEY`,
+`CLAUDE_API_KEY`, `ALLOWED_ORIGIN`.
 
----
+An alternative Supabase-only backend (Edge Function `supabase/functions/claude-proxy` +
+`admin.html` key management) exists from an earlier iteration — see HANDOFF.md. The
+documented, wired path is the Worker.
 
-## Development Workflow
+## How to go live
 
-1. Edit files locally or directly on GitHub.
-2. Open `index.html` in any browser — no server needed for most work.
-3. For Supabase-dependent features, the Supabase project must be running (cloud or local via `supabase start`).
-4. Deploy Edge Functions via `supabase functions deploy claude-proxy`.
-5. Test on both desktop (1280px+) and mobile (375px) before committing.
+1. Create a Supabase project; run `sql/schema.sql`; insert both team members into
+   `team_members` (status `active`, roles `lead`/`partner`).
+2. Deploy `worker.js` (`wrangler deploy`) with the five secrets above.
+3. In `js/supabase.js`, set the Supabase URL + anon key (used by the login).
+4. In `js/config.js`, set `WORKER_URL` and flip `DATA_MODE = 'api'`.
+5. Open the app — the magic-link login appears; data now syncs for both users and the
+   assistant comes alive.
+
+## Development workflow
+
+1. Edit files; open `index.html` in a browser (serve the folder with any static server
+   if your browser blocks module imports from `file://`).
+2. Test at 375px and 1280px. Zero console errors is the bar.
+3. Local mode needs no backend. For api-mode work, run the Worker via `wrangler dev`.

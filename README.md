@@ -1,74 +1,50 @@
-# MedTerm
+# MedTerminal — Research Workspace
 
-> A medical tourism platform connecting patients with world-class international healthcare providers.
->
-> ---
->
-> ## Overview
->
-> MedTerm is a web-based application designed to simplify and streamline the medical tourism experience. It bridges the gap between patients seeking affordable, high-quality medical care abroad and vetted healthcare providers around the world. The platform manages every stage of the medical travel journey — from initial consultation and provider discovery to travel planning, documentation, and post-treatment follow-up.
->
-> ---
->
-> ## Features
->
-> - **Provider Directory** — Browse and search accredited international hospitals, clinics, and specialists by specialty, location, and cost.
-> - - **Treatment Planning** — Build a personalised treatment itinerary including procedures, travel dates, accommodation, and logistics.
->   - - **Patient Dashboard** — Centralised dashboard for patients to track their medical journey, appointments, and documents.
->     - - **Document Management** — Securely upload and manage medical records, passports, insurance documents, and consent forms.
->       - - **Cost Estimator** — Compare estimated treatment costs across different countries and providers.
->         - - **Appointment Booking** — Request and confirm appointments with healthcare providers directly through the platform.
->           - - **Communication Hub** — Secure messaging between patients and providers for pre- and post-treatment consultations.
->             - - **GitHub Integration** — Built with Claude Code for transparent project management, issue tracking, and iterative development.
->              
->               - ---
->
-> ## Tech Stack
->
-> - **Frontend:** HTML5, CSS3, JavaScript
-> - - **Version Control:** GitHub
->   - - **AI Development:** Claude Code (Anthropic)
->    
->     - ---
->
-> ## Getting Started
->
-> 1. Clone the repository:
-> 2.    ```bash
->          git clone https://github.com/youngmbg21-cmyk/MedTerm.git
->          ```
->       2. Open `index.html` in your browser to launch the app locally.
->   
->       3. ---
->   
->       4. ## Project Structure
->   
->       5. ```
-> MedTerm/
-> ├── index.html          # Main application file
-> ├── README.md           # Project documentation
-> └── docs/               # Additional documentation (coming soon)
-> ```
->
-> ---
->
-> ## Roadmap
->
-> - [ ] Backend API integration
-> - [ ] User authentication & patient profiles
-> - [ ] Provider verification system
-> - [ ] Multi-language support
-> - [ ] Mobile-responsive design
-> - [ ] Payment gateway integration
->
-> ---
->
-> ## Contributing
->
-> This is currently a private repository. Contributions are by invitation only. Please contact the project owner to get involved.
->
-> ---
->
-> ## License
->
-> Private — All rights reserved. © 2026 MedTerm.
+An internal tool for a 2-person team running a six-phase qualitative research programme.
+The programme decides whether a medical-tourism concierge for Kenyan families seeking
+treatment abroad (mainly the Kenya → India corridor) is worth building.
+
+**This is not the patient-facing product.** It is the workspace used to decide whether to
+build that product.
+
+## Run it
+
+Open `index.html` in any modern browser. That's it — no build step, no credentials.
+
+The app starts in **local demo mode**: data is seeded with realistic sample research,
+persists in `localStorage`, and every screen is populated and editable. Use
+**Settings → Reset demo data** to restore the seed.
+
+## What's inside
+
+- **Overview** — command center: phase rail, KPIs, current-phase exit criteria,
+  saturation, and a needs-attention panel (untagged interviews, stalled outreach).
+- **Fieldwork** (phases 1–2) — Outreach pipeline, Interviews (master–detail with linked
+  quotes and the same-day-tag hard rule), Theme matrix, Saturation.
+- **Sense-making** (phase 3) — Theme analysis, Segment cards, Top-3 pains, append-only
+  Kill list, State of the field.
+- **Economics** (phase 4) — Unit economics with break-point checks, Alternate models,
+  Field checks.
+- **Decision** (phase 5) — Verdict-first decision memo with co-sign, MVP scope,
+  Confirmatory tests.
+- **Reference** — Interview scripts (versioned), outreach templates, operating manual.
+- **Reports** — print-ready weekly status / phase exit / investor briefing, generated
+  from live data.
+
+The sidebar is gated by the current phase: future phases are dimmed but still openable.
+
+## Stack
+
+Vanilla JS ES modules, Tailwind via CDN, one `css/theme.css`. No framework, no build
+step, no npm. Data access goes through `js/data.js`, which has two adapters selected by
+`DATA_MODE` in `js/config.js`:
+
+- `local` (default) — localStorage, seeded, zero credentials.
+- `api` — Cloudflare Worker (`worker.js`) → Supabase (`sql/schema.sql`) → Claude, with
+  magic-link login.
+
+## Going live
+
+See `HANDOFF.md` for the full checklist. Short version: stand up Supabase with
+`sql/schema.sql`, deploy `worker.js` with its secrets, set `WORKER_URL` and
+`DATA_MODE = 'api'` in `js/config.js`.
