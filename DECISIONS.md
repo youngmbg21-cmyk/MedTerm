@@ -282,3 +282,76 @@ Dated 2026-07-04. Each entry is a decision the brief left open, plus the reasoni
     section was added at the top with an explicit note that the code and CLAUDE.md
     are the live truth — a full historical rewrite is outside this build's scope
     and would have touched screens the brief says not to touch.
+
+## Interviews and matrix restructure — 2026-07-05
+
+53. **The theme-ranking formula (`count × avgSev × (1 + wtpY/count)`) was
+    duplicated in three places** (`sensemaking.js`, `reports.js`, and now needed
+    by `matrix.js`). Consolidated into one exported `rankThemes(rows = STATE.matrix)`
+    in `js/app.js`, alongside a newly-shared `segmentCoverageRows()` (moved from
+    `reports.js`, where it was also used verbatim). All four screens
+    (theme-analysis, matrix, reports ×2 report types) now compute from the same
+    function, so their numbers cannot disagree. `sensemaking.js`'s local
+    duplicate was deleted even though the brief only named Interviews/Matrix/
+    Reports — it was the exact same formula and leaving it would mean four
+    copies became three, not zero.
+
+54. **Discovered mid-build that hypothesis-linking is real, not hypothetical.**
+    An earlier read of this brief (before the decision-engine branch had been
+    merged to `main`) found no `evidence.js`, no `maybeProposeLinks`, no Link
+    button, and concluded the brief's references to hypothesis-linking
+    described a non-existent feature to be omitted. Restarting this branch
+    from the latest `main` (per the merged-PR protocol) surfaced that a
+    concurrent build had since added exactly that feature — `js/evidence.js`
+    (`openLinkModal`, `existingLinkChips`, `maybeProposeLinks`), a `Link`
+    button on every quote block, and hypothesis-link chips on both quotes and
+    interviews. The restructure was redone to *preserve* this feature rather
+    than omit it: Matrix's Quotes-view theme groups keep the Link button,
+    existing-link chips, and the post-save `maybeProposeLinks('matrix', saved)`
+    call exactly as they were in the flat version; Interviews' detail-card
+    hypothesis-links section (unrelated to the list-side restructure) was left
+    completely untouched. Group-header rollups in Quotes view still show only
+    count/avg severity/WTP rate — a "total hypothesis-link count" per theme
+    genuinely isn't computed anywhere and was left out as a smaller, reversible
+    gap rather than inventing new aggregation logic sight-unseen.
+
+55. **Interviews' segment groups use a plain object (`collapseOverrides`,
+    module scope, keyed by group name) for manual collapse state**, exactly
+    mirroring the existing `let selectedId` pattern in the same file — set only
+    on an explicit header tap, never written to storage, and reset to nothing on
+    a hard page reload. The default (auto) collapse state is *recomputed on every
+    render* from live data (total count ≤ 15, or the group contains the selected
+    row or an overdue-untagged row) rather than cached, so it can't go stale as
+    interviews are added or tagged.
+
+56. **The pinned "Needs tagging" block is a genuine shortcut, not a real group**:
+    its rows still appear in their normal segment group underneath. It has its
+    own collapse-override key (`__needs_tagging`) and a distinct rose header
+    style so it reads as an alert, not part of the segment taxonomy.
+
+57. **Matrix's Grid-view row/column/grand totals only count cells for
+    recognised `SEGMENT_NAMES`.** A quote with a segment value outside the
+    config list still counts toward that theme's evidence in Quotes view
+    (which reads `STATE.matrix` directly, unfiltered by segment membership),
+    but is excluded from the Grid's totals so `sum(row totals) ===
+    sum(column totals) === grand total` always holds.
+
+58. **Found and fixed a real bug during verification, not introduced by the
+    brief**: the Grid/Quotes default-view choice (`rows.length >= 10 ? 'grid'
+    : 'quotes'`) was originally computed once, guarded by `if (activeView ===
+    null)`. `index.html` calls `renderCurrentRoute()` synchronously before
+    `loadAllData()` resolves, so on a direct load of `#matrix` the very first
+    render sees an empty `STATE.matrix` (length 0), locks the view to
+    `'quotes'`, and never reconsiders even after 18 seeded quotes arrive.
+    Fixed by recomputing the default on every render, gated by a separate
+    `viewManuallySet` flag that only becomes `true` once the user taps a
+    toggle button or drills into a Grid cell — verified with a Playwright
+    script that loads `#matrix` directly (now correctly opens in Grid) versus
+    navigating there mid-session after manually picking Quotes (correctly
+    stays put, matching the "persist for the session" behaviour the brief
+    asks for).
+
+59. **Quotes-view filters (segment/severity/wtp) and the cell drill-down
+    filter are independent, both AND'd together** — tapping a Grid cell sets
+    a dismissible `{theme, segment}` filter, and the three dropdowns still
+    narrow further from there.
