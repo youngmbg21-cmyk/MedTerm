@@ -127,3 +127,77 @@ Dated 2026-07-04. Each entry is a decision the brief left open, plus the reasoni
     banner: de-identify, never upload consent forms or identity documents — matching
     the operating manual's privacy rules, because documents are sent to the Claude API
     when the assistant reads them.
+
+## Data portability, safer resets, executive reporting — 2026-07-05
+
+27. **No charting library.** The brief explicitly allowed one, but the project's own
+    core rules forbid external libraries and CDNs the field can't rely on. Built
+    `js/charts.js` instead: dependency-free inline SVG (bar chart, percent meter,
+    2×2 risk matrix) using `document.createElementNS`, with colours as resolved hex
+    constants (not CSS `var()`) so the same markup renders identically on-screen and
+    in the print window, which is a separate document with no access to the app's
+    `:root` variables.
+
+28. **Import replaces, never merges.** Merging two independent record sets safely
+    (matching by content, resolving id collisions, deciding which side wins on
+    conflicting edits) is a hard problem with no good UI answer for a 2-person team.
+    Replace-with-a-safety-export-first is simple, honest about what it does, and
+    recoverable if wrong.
+
+29. **Schema version is a hard gate, not a warning.** `SCHEMA_VERSION` (in
+    `js/config.js`, currently 1) must match exactly or the import is refused with
+    the specific mismatch shown. Silently importing a differently-shaped file risks
+    corrupting the local database in ways that are hard to detect until much later.
+
+30. **Both destructive actions (import, "start fresh") automatically trigger a full
+    export before touching anything**, in addition to requiring the operator to type
+    a confirmation word (RESET / IMPORT, case-sensitive). Two independent safety
+    nets for actions that cannot be undone from within the app.
+
+31. **Import and both resets are local-mode only**, enforced in `js/data.js`
+    (`apiAdapter.importAll/startFresh` throw explanatory errors) and hidden from the
+    Settings UI in api mode. A one-click wipe or replace on the live backend would
+    affect the whole team's shared data at once — that must stay a deliberate
+    Supabase-side operation, never a button in the app.
+
+32. **"Start fresh" resets `scripts` to the stock v1 content**, discarding any
+    edited versions — this is what "restore the stock interview questions" means in
+    practice, since scripts are the only versioned/editable "framework" table.
+    Deliverables are reset to "Not started" with evidence cleared, using the same
+    literal checklist the app ships with (refactored into `buildDeliverables()` in
+    `seed.js` so the demo seed and the fresh-fieldwork seed can't drift apart).
+    Segments, themes, outreach templates, and the operating manual need no reset
+    action at all — they live in `js/config.js` and the Reference screens' source
+    code, not in storage, so they were never at risk.
+
+33. **Binary documents are embedded as base64 only when there is no `text_content`.**
+    Text-based uploads already carry their full content in `text_content` (see
+    decision 22) — duplicating that as base64 too would double the backup's size for
+    no benefit. Only genuinely binary files (images, PDFs) get the base64 treatment,
+    keeping "Export everything" a complete, self-contained backup either way.
+
+34. **Executive briefing risk matrix uses a heuristic for impact**, not a fixed
+    table: any unconfirmed field-check assumption is flagged High impact if its text
+    matches economics-related keywords (cost, pay, price, fee, money, insurance,
+    CAC, conversion, margin), Low impact otherwise. This is a simplification — a
+    human reading the risk matrix should sanity-check the impact column, not treat
+    it as authoritative. All three unit-economics break-points are always plotted
+    (their impact is High by definition; likelihood is High only if currently
+    broken under the saved assumptions).
+
+35. **The executive summary is hard-truncated to 150 words programmatically**
+    (word-split, slice, rejoin, ellipsis), not just written short — the summary text
+    is built from live data and could exceed the cap on some runs if trusted to stay
+    short by construction alone.
+
+36. **Existing reports keep exactly one supplementary chart each** (weekly status:
+    tagging-rate meter; phase exit: segment coverage bars; investor briefing:
+    willingness-to-pay-by-segment bars, only rendered if that data is non-empty) —
+    the weekly status report explicitly describes itself as "single page," so it
+    was not loaded with multiple charts. The new executive briefing is the fuller,
+    multi-chart report the brief asked for.
+
+37. **`economics.js`'s `DEFAULT_ASSUMPTIONS`, `BREAKPOINTS`, and `derive()` are now
+    exported** so the executive briefing can reuse the exact same unit-economics
+    model instead of re-implementing break-point logic in `reports.js` — one model,
+    two consumers.

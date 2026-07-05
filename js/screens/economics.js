@@ -7,7 +7,9 @@ import { interviewerOptions } from '../config.js';
 import { data } from '../data.js';
 
 /* ---------- Unit economics — "Does the patient-pays model survive its break-points?" ---------- */
-const DEFAULT_ASSUMPTIONS = {
+/* Exported so reports.js can reuse the exact model for the Risk Assessment
+   section instead of re-deriving break-point logic from scratch. */
+export const DEFAULT_ASSUMPTIONS = {
   procedure_cost_usd: 8000,
   take_rate_pct: 8,
   cac_usd: 150,
@@ -18,7 +20,7 @@ const DEFAULT_ASSUMPTIONS = {
 };
 
 /* The three break-points that kill the patient-pays model. */
-const BREAKPOINTS = [
+export const BREAKPOINTS = [
   {
     label: 'CAC per closed case must stay below revenue per case',
     broken: (a, d) => d.cacPerCase > d.revenuePerCase,
@@ -36,7 +38,7 @@ const BREAKPOINTS = [
   },
 ];
 
-function derive(a) {
+export function derive(a) {
   const revenuePerCase = a.procedure_cost_usd * a.take_rate_pct / 100;
   const leadsPerCase = 100 / Math.max(a.consult_to_travel_pct, 0.01);
   const cacPerCase = a.cac_usd * leadsPerCase;
