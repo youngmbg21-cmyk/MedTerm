@@ -41,7 +41,6 @@ export function initChat() {
     input.disabled = true;
     input.placeholder = 'Assistant not connected';
     document.getElementById('send-chat-btn').disabled = true;
-    quick.querySelectorAll('button').forEach(b => { b.style.opacity = '.5'; b.style.cursor = 'default'; });
   }
 }
 

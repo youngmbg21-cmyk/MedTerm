@@ -347,7 +347,7 @@ function escapeHtml(str) {
 function printReport(report) {
   const content = report.content || {};
   const bodyHtml = (content.sections || []).map(s => {
-    const heading = `<h2 style="font-family:Fraunces,Georgia,serif; color:#B8693E; margin-top:24px; text-transform:uppercase; letter-spacing:0.1em; font-size:10.5px;">${escapeHtml(s.title || '')}</h2>`;
+    const heading = `<h2>${escapeHtml(s.title || '')}</h2>`;
     const body = s.body ? `<div style="white-space:pre-line; line-height:1.6;">${escapeHtml(s.body)}</div>` : '';
     const chart = s.chart ? chartToHtml(s.chart) : '';
     return heading + body + chart;
@@ -359,18 +359,32 @@ function printReport(report) {
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600&family=Inter:wght@400;500&display=swap" rel="stylesheet">
 <style>
   body { font-family: Inter, sans-serif; color: #1F2A28; max-width: 720px; margin: 40px auto; padding: 0 20px; font-size: 14px; line-height: 1.6; }
-  h1 { font-family: Fraunces, Georgia, serif; font-size: 24px; margin-bottom: 4px; }
-  .meta { font-size: 11px; color: #8A8478; margin-bottom: 32px; }
+  h1 { font-family: Fraunces, Georgia, serif; font-size: 26px; line-height: 1.25; margin-bottom: 4px; }
+  h2 { font-family: Fraunces, Georgia, serif; color: #96501F; margin-top: 24px; text-transform: uppercase; letter-spacing: 0.1em; font-size: 10.5px; }
+  .meta { font-size: 11px; color: #6E6A5E; margin-bottom: 8px; }
+  .title-block { padding-bottom: 20px; margin-bottom: 28px; border-bottom: 2px solid #1F2A28; }
   .logo { display: flex; align-items: center; gap: 8px; margin-bottom: 16px; }
   .logo-mark { width: 24px; height: 24px; background: #3F5A4D; border-radius: 6px; display: flex; align-items: center; justify-content: center; color: white; font-family: Fraunces, Georgia, serif; font-size: 14px; }
   svg { max-width: 100%; height: auto; }
-  @media print { body { margin: 0; } }
+  .print-foot { display: none; }
+  @media print {
+    body { margin: 0; padding-bottom: 36px; }
+    .print-foot {
+      display: flex; justify-content: space-between; position: fixed; bottom: 0; left: 0; right: 0;
+      font-size: 9.5px; color: #6E6A5E; border-top: 1px solid #E5DDD0;
+      padding: 6px 4px 0; background: #fff;
+      font-variant-numeric: tabular-nums;
+    }
+  }
 </style></head>
 <body>
-  <div class="logo"><div class="logo-mark">M</div><span style="text-transform:uppercase; letter-spacing:0.14em; font-size:10.5px; font-weight:500;">MedTerminal</span></div>
-  <h1>${escapeHtml(report.title || 'Report')}</h1>
-  <div class="meta">Generated ${escapeHtml(fmtDate(report.created_at))}</div>
+  <div class="title-block">
+    <div class="logo"><div class="logo-mark">M</div><span style="text-transform:uppercase; letter-spacing:0.14em; font-size:10.5px; font-weight:500;">MedTerminal</span></div>
+    <h1>${escapeHtml(report.title || 'Report')}</h1>
+    <div class="meta">Generated ${escapeHtml(fmtDate(report.created_at))} · Confidential — internal research working document</div>
+  </div>
   ${bodyHtml}
+  <div class="print-foot"><span>MedTerminal · ${escapeHtml(report.title || 'Report')}</span><span>Generated ${escapeHtml(fmtDate(report.created_at))}</span></div>
 </body></html>`);
   w.document.close();
   setTimeout(() => w.print(), 500);
