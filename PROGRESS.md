@@ -35,7 +35,14 @@ between the evidence and the verdict. Task ledger (execute in order):
        trajectory strip (tap → read-only modal), divergence panel.
        Shared helpers in js/evidence.js (latestAssessment, resolveLink,
        openLinkModal, renderMarkdown, runAssessment).
-6. [ ] Decision memo rebuild (three seats, override rationale, draft-from-evidence)
+6. [x] Decision memo rebuild: three verdict seats (lead / field via getTeam,
+       AI read-only from latest assessment); content.verdict now derived —
+       only set when both human seats match (reports/divergence keep reading
+       it); required override_rationale when the agreed verdict diverges
+       from the AI leaning; co-sign gate opens only on agreement and
+       snapshots signed_assessment_id + signed_leaning; per-section
+       "Draft from evidence" (AI mode) lands in the edit modal, never
+       auto-saves.
 7. [ ] Evidence linking in matrix / interviews / field checks (manual always;
        AI proposals when available)
 8. [ ] Overview additions (leaning panel, phase-exit review button/banner)

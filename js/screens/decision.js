@@ -1,10 +1,11 @@
 /* Phase 5 — Decision screens. */
 import {
   STATE, registerRoute, renderCurrentRoute, h, chip, emptyState,
-  openModal, closeModal, formField, fmtDate,
+  openModal, closeModal, formField, fmtDate, go,
 } from '../app.js';
-import { getTeam } from '../config.js';
-import { data } from '../data.js';
+import { getTeam, CURRENT_PHASE, SEGMENTS } from '../config.js';
+import { data, aiAvailable, draftSectionRequest, aiDataSlices } from '../data.js';
+import { latestAssessment, LEANING_TONE } from '../evidence.js';
 
 /* ---------- Decision memo — "GO, PIVOT, or NO-GO — and on what evidence?" ---------- */
 const VERDICTS = ['Undecided', 'GO', 'PIVOT', 'NO-GO'];
@@ -30,29 +31,91 @@ async function saveMemo(patch) {
   renderCurrentRoute();
 }
 
+/* The agreed human verdict: both seats must pick the same non-Undecided
+   answer. Stored back into content.verdict so reports and the Decision
+   Brief's divergence panel read one canonical field. */
+function agreedVerdict(content) {
+  const a = content.verdict_lead || 'Undecided';
+  const b = content.verdict_field || 'Undecided';
+  return a !== 'Undecided' && a === b ? a : 'Undecided';
+}
+
 function renderDecisionMemo(page) {
   const memo = getMemo();
   const content = memo?.content || {};
-  const verdict = content.verdict || 'Undecided';
+  const team = getTeam();
+  const latest = latestAssessment();
+  const agreed = agreedVerdict(content);
+  /* Overriding the AI is allowed — but it must be written down. */
+  const divergent = agreed !== 'Undecided' && !!latest && agreed !== latest.leaning;
 
-  /* Verdict first — the reader should know the answer before the argument */
+  async function pickVerdict(key, v) {
+    const next = { ...content, [key]: v };
+    next.verdict = agreedVerdict(next);
+    try { await saveMemo({ content: next }); }
+    catch (e) { alert('Save failed: ' + e.message); }
+  }
+
+  function humanSeat(name, roleLabel, key) {
+    const current = content[key] || 'Undecided';
+    const seat = h('div', {}, [
+      h('div', { class: 'micro mb-1', style: 'color:var(--ink-mute);', text: `${name} · ${roleLabel}` }),
+    ]);
+    const row = h('div', { class: 'flex flex-wrap gap-1.5' });
+    VERDICTS.forEach(v => {
+      row.appendChild(h('button', {
+        class: `btn text-xs ${v === current ? 'btn-primary' : 'btn-line'}`,
+        style: 'padding:5px 10px;',
+        onclick: () => pickVerdict(key, v),
+      }, v));
+    });
+    seat.appendChild(row);
+    return seat;
+  }
+
+  /* Verdict first — three seats at the table */
   const verdictCard = h('div', { class: 'card p-6 mb-4 max-w-3xl' });
-  verdictCard.appendChild(h('div', { class: 'micro mb-2', style: 'color:var(--ink-mute);', text: 'Verdict' }));
-  const verdictRow = h('div', { class: 'flex flex-wrap items-center gap-2' });
-  VERDICTS.forEach(v => {
-    const isActive = v === verdict;
-    const btn = h('button', {
-      class: `btn ${isActive ? 'btn-primary' : 'btn-line'}`,
-      onclick: async () => {
-        try { await saveMemo({ content: { ...content, verdict: v } }); }
-        catch (e) { alert('Save failed: ' + e.message); }
-      },
-    }, v);
-    verdictRow.appendChild(btn);
-  });
-  verdictCard.appendChild(verdictRow);
-  if (verdict !== 'Undecided') {
-    verdictCard.appendChild(h('div', { class: 'mt-3' }, [chip(`Current verdict: ${verdict}`, VERDICT_TONE[verdict])]));
+  verdictCard.appendChild(h('div', { class: 'micro mb-3', style: 'color:var(--ink-mute);', text: 'Verdict — three seats at the table. Humans decide; the AI argues.' }));
+
+  const aiSeat = h('div', {}, [
+    h('div', { class: 'micro mb-1', style: 'color:var(--ink-mute);', text: 'AI assessment · advisory' }),
+    latest
+      ? h('div', { class: 'flex flex-wrap items-center gap-2' }, [
+        chip(latest.leaning, LEANING_TONE[latest.leaning] || 'line'),
+        h('span', { class: 'text-xs', style: 'color:var(--ink-mute);', text: fmtDate(latest.created_at) }),
+      ])
+      : h('div', { class: 'text-xs', style: 'color:var(--ink-mute);', text: 'No assessment yet.' }),
+    h('button', { class: 'btn btn-ghost text-xs mt-1', style: 'padding-left:0;', onclick: () => go('decision-brief') }, 'Open Decision Brief →'),
+  ]);
+
+  verdictCard.appendChild(h('div', { class: 'grid sm:grid-cols-3 gap-4' }, [
+    humanSeat(team.lead, 'lead', 'verdict_lead'),
+    humanSeat(team.field, 'field', 'verdict_field'),
+    aiSeat,
+  ]));
+
+  const leadV = content.verdict_lead || 'Undecided';
+  const fieldV = content.verdict_field || 'Undecided';
+  if (agreed !== 'Undecided') {
+    verdictCard.appendChild(h('div', { class: 'mt-4' }, [chip(`Agreed verdict: ${agreed}`, VERDICT_TONE[agreed])]));
+  } else if (leadV !== 'Undecided' && fieldV !== 'Undecided' && leadV !== fieldV) {
+    verdictCard.appendChild(h('div', { class: 'banner banner-honey mt-4' }, [
+      h('span', { text: `The seats disagree (${team.lead}: ${leadV} · ${team.field}: ${fieldV}). Co-signing needs one shared verdict — talk it through.` }),
+    ]));
+  }
+
+  /* Override rationale — a record, not a block. Required before signing. */
+  if (divergent) {
+    const ta = h('textarea', { class: 'textarea', rows: '3', placeholder: 'The assessment leans ' + latest.leaning + '; we decided ' + agreed + ' because…' });
+    ta.value = content.override_rationale || '';
+    const saveBtn = h('button', { class: 'btn btn-line text-xs mt-2', onclick: async () => {
+      try { await saveMemo({ content: { ...content, override_rationale: ta.value.trim() } }); }
+      catch (e) { alert('Save failed: ' + e.message); }
+    } }, 'Save rationale');
+    verdictCard.appendChild(h('div', { class: 'mt-4 pt-4 border-t', style: 'border-color:var(--line-soft);' }, [
+      h('div', { class: 'micro mb-1', style: 'color:var(--honey-deep);', text: `Why we're overriding the assessment (AI leans ${latest.leaning}) — required` }),
+      ta, saveBtn,
+    ]));
   }
   page.appendChild(verdictCard);
 
@@ -61,49 +124,99 @@ function renderDecisionMemo(page) {
   MEMO_SECTIONS.forEach(s => {
     const section = h('div', { class: 'px-6 py-5 border-b', style: 'border-color:var(--line-soft);' });
     section.appendChild(h('div', { class: 'micro mb-2', style: 'color:var(--clay);', text: s.label }));
+    const buttons = h('div', { class: 'mt-2 flex flex-wrap gap-2' });
     if (content[s.key]) {
       section.appendChild(h('div', { class: 'text-sm leading-relaxed whitespace-pre-line', text: content[s.key] }));
-      section.appendChild(h('div', { class: 'mt-2' }, [
-        h('button', { class: 'btn btn-ghost text-xs', onclick: () => editMemoSection(s, content) }, 'Edit'),
-      ]));
+      buttons.appendChild(h('button', { class: 'btn btn-ghost text-xs', onclick: () => editMemoSection(s, content) }, 'Edit'));
     } else {
       section.appendChild(h('div', { class: 'text-sm', style: 'color:var(--ink-mute);', text: s.placeholder }));
-      section.appendChild(h('div', { class: 'mt-2' }, [
-        h('button', { class: 'btn btn-line text-xs', onclick: () => editMemoSection(s, content) }, 'Write this section'),
-      ]));
+      buttons.appendChild(h('button', { class: 'btn btn-line text-xs', onclick: () => editMemoSection(s, content) }, 'Write this section'));
     }
+    if (aiAvailable) {
+      const draftBtn = h('button', { class: 'btn btn-ghost text-xs', onclick: () => draftMemoSection(s, content, draftBtn) }, 'Draft from evidence');
+      buttons.appendChild(draftBtn);
+    }
+    section.appendChild(buttons);
     card.appendChild(section);
   });
 
-  /* Co-sign block */
-  const team = getTeam();
+  /* Co-sign block — opens only when both human seats match. Signing
+     snapshots the assessment the AI held at decision time. */
   const sig = h('div', { class: 'px-6 py-5' });
   sig.appendChild(h('div', { class: 'micro mb-3', style: 'color:var(--ink-mute);', text: 'Co-signatures' }));
   if (memo?.co_signed_at) {
-    sig.appendChild(chip(`Co-signed by ${team.lead} & ${team.field} · ${fmtDate(memo.co_signed_at)}`, 'sage'));
+    sig.appendChild(h('div', { class: 'flex flex-wrap items-center gap-2' }, [
+      chip(`Co-signed by ${team.lead} & ${team.field} · ${fmtDate(memo.co_signed_at)}`, 'sage'),
+      content.signed_leaning
+        ? chip(`AI leaning at signing: ${content.signed_leaning}`, LEANING_TONE[content.signed_leaning] || 'line')
+        : null,
+    ].filter(Boolean)));
   } else {
-    sig.appendChild(h('div', { class: 'text-sm mb-3', style: 'color:var(--ink-soft);', text: `Not yet co-signed. ${team.lead} and ${team.field} must both agree to finalise.` }));
-    sig.appendChild(h('button', { class: 'btn btn-primary', onclick: async () => {
+    const ready = agreed !== 'Undecided';
+    sig.appendChild(h('div', { class: 'text-sm mb-3', style: 'color:var(--ink-soft);', text: ready
+      ? `Both seats agree on ${agreed}. Signing finalises the memo and records what the AI said at decision time.`
+      : `Not yet co-signed. ${team.lead} and ${team.field} must each pick the same verdict above to enable signing.` }));
+    const signBtn = h('button', { class: `btn ${ready ? 'btn-primary' : 'btn-line'}`, onclick: async () => {
       if (!memo) { alert('Write the memo before signing it.'); return; }
-      if (verdict === 'Undecided') { alert('Pick a verdict before signing.'); return; }
-      if (!confirm(`Sign this memo as final? Verdict: ${verdict}.`)) return;
-      try { await saveMemo({ co_signed_at: new Date().toISOString().slice(0, 10) }); }
-      catch (e) { alert('Sign failed: ' + e.message); }
-    } }, 'Sign this memo'));
+      if (agreed === 'Undecided') { alert('Both seats must pick the same verdict before signing.'); return; }
+      if (divergent && !(content.override_rationale || '').trim()) {
+        alert(`The verdict (${agreed}) differs from the AI leaning (${latest.leaning}). Write the override rationale first — divergence is allowed, but it must be written down.`);
+        return;
+      }
+      if (!confirm(`Sign this memo as final? Verdict: ${agreed}.${latest ? ` AI leaning at signing: ${latest.leaning}.` : ''}`)) return;
+      try {
+        await saveMemo({
+          co_signed_at: new Date().toISOString().slice(0, 10),
+          content: {
+            ...content,
+            verdict: agreed,
+            signed_assessment_id: latest?.id || null,
+            signed_leaning: latest?.leaning || null,
+          },
+        });
+      } catch (e) { alert('Sign failed: ' + e.message); }
+    } }, 'Sign this memo');
+    if (!ready) signBtn.disabled = true;
+    sig.appendChild(signBtn);
   }
   card.appendChild(sig);
   page.appendChild(card);
 }
 
-function editMemoSection(section, content) {
-  openModal(`Edit: ${section.label}`, [
-    formField(section.label, section.key, 'textarea', content[section.key] || ''),
+function editMemoSection(section, content, draftText) {
+  const isDraft = draftText != null;
+  openModal(isDraft ? `AI draft: ${section.label} — edit before saving` : `Edit: ${section.label}`, [
+    formField(section.label, section.key, 'textarea', isDraft ? draftText : (content[section.key] || '')),
   ], async (form) => {
     try {
       await saveMemo({ content: { ...content, [section.key]: form[section.key] } });
       closeModal();
     } catch (e) { alert('Save failed: ' + e.message); }
   });
+}
+
+/* Draft one section from the evidence ledger. The draft lands in the edit
+   modal pre-filled — the human edits and saves. Never auto-saved. */
+async function draftMemoSection(section, content, btn) {
+  const label = btn.textContent;
+  btn.disabled = true;
+  btn.textContent = 'Drafting…';
+  try {
+    const { text } = await draftSectionRequest({
+      section_key: section.key,
+      section_label: section.label,
+      placeholder: section.placeholder,
+      phase: CURRENT_PHASE,
+      segments: SEGMENTS,
+      localData: aiDataSlices(STATE),
+    });
+    editMemoSection(section, content, text || '');
+  } catch (e) {
+    alert('Draft failed: ' + e.message);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = label;
+  }
 }
 
 registerRoute('decision-memo', 'Decision memo', renderDecisionMemo,

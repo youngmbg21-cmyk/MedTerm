@@ -265,3 +265,14 @@ Dated 2026-07-04. Each entry is a decision the brief left open, plus the reasoni
     `validateProposals`, `extractJson`) as named exports alongside the default
     Worker handler — Cloudflare ignores them; the offline smoke harness tests
     the exact code that gates real assessments.
+
+50. **`content.verdict` is now derived, not directly picked** — it is set only
+    when both human seats (verdict_lead / verdict_field) match, and cleared to
+    'Undecided' otherwise. Reports and the Decision Brief divergence panel keep
+    reading the same canonical field they always did; old memos with only a
+    `verdict` simply show both seats as Undecided until re-picked.
+
+51. **Signing snapshots `signed_assessment_id` and `signed_leaning` into the memo
+    content** (not a new column) — memo content is already the record's JSONB
+    home, and the leaning copy keeps the record legible even if the assessment
+    list is later filtered.
