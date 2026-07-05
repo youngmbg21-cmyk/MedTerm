@@ -4,8 +4,10 @@ import {
   STATE, registerRoute, renderCurrentRoute, h, chip, emptyState, quoteBlock,
   openModal, closeModal, formField, fmtDate, rankThemes, setPageActions,
 } from '../app.js';
-import { data } from '../data.js';
+import { CURRENT_PHASE, SEGMENTS } from '../config.js';
+import { data, draftSectionRequest, aiDataSlices } from '../data.js';
 import { exportKillList } from '../export.js';
+import { aiDraftControls, AI_DRAFT_HELPER } from '../ai-draft.js';
 
 /* ---------- Theme analysis — "Which themes are strongest?" ---------- */
 function renderThemeAnalysis(page) {
@@ -201,24 +203,46 @@ function findStateOfField() {
 
 function renderStateOfField(page) {
   const record = findStateOfField();
+  const filled = !!record?.evidence;
   const card = h('div', { class: 'card p-6 max-w-3xl' });
 
-  if (record?.evidence) {
+  if (filled) {
     card.appendChild(h('div', { class: 'text-xs mb-3 t-mute', text: `Last updated ${fmtDate(record.updated_at || record.created_at)}` }));
     card.appendChild(h('div', { class: 'quote-text', style: 'border:none; padding:0;', text: record.evidence }));
-    card.appendChild(h('div', { class: 'mt-5' }, [
-      h('button', { class: 'btn btn-line', onclick: () => openFieldEditor(record) }, 'Edit'),
-    ]));
   } else {
-    card.appendChild(h('div', { class: 'text-sm mb-4 t-mute', text: 'No state-of-the-field written yet. One dated paragraph, updated whenever the picture changes.' }));
-    card.appendChild(h('button', { class: 'btn btn-primary', onclick: () => openFieldEditor(record) }, 'Write the first one'));
+    card.appendChild(h('div', { class: 'text-sm mb-1 t-mute', text: 'No state-of-the-field written yet. One dated paragraph, updated whenever the picture changes.' }));
+    card.appendChild(h('div', { class: 'text-xs t-mute', text: AI_DRAFT_HELPER }));
   }
+
+  /* AI-first: the assistant drafts the paragraph from the whole ledger;
+     the draft lands in the editor for the human to shape and save. */
+  card.appendChild(aiDraftControls({
+    filled,
+    draftLabel: 'Draft from evidence',
+    redraftLabel: 'Redraft from evidence',
+    manualLabel: 'Write manually',
+    editLabel: 'Edit',
+    compact: false,
+    onDraft: async () => {
+      const { text } = await draftSectionRequest({
+        section_label: 'State of the field',
+        placeholder: 'One dated paragraph: where the research stands right now — signal, gaps, and what changed since the last update.',
+        doc_kind: 'the state-of-the-field paragraph',
+        phase: CURRENT_PHASE,
+        segments: SEGMENTS,
+        localData: aiDataSlices(STATE),
+      });
+      openFieldEditor(record, text || '');
+    },
+    onManual: () => openFieldEditor(record),
+  }));
   page.appendChild(card);
 }
 
-function openFieldEditor(record) {
-  openModal('State of the field', [
-    formField('One paragraph', 'content', 'textarea', record?.evidence || ''),
+function openFieldEditor(record, draftText) {
+  const isDraft = draftText != null;
+  openModal(isDraft ? 'AI draft: State of the field — edit before saving' : 'State of the field', [
+    formField('One paragraph', 'content', 'textarea', isDraft ? draftText : (record?.evidence || '')),
   ], async (form) => {
     try {
       if (record) {

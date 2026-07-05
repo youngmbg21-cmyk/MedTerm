@@ -169,6 +169,24 @@ function validateAssessment(a, hypotheses) {
   return { ok: errors.length === 0, errors };
 }
 
+/* Structured-draft validation — every requested field key present as a
+   non-empty string, no extras, no numeric confidence anywhere. Pure, so
+   the smoke harness can test it. */
+function validateDraftFields(parsed, fields) {
+  const errors = [];
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+    return { ok: false, errors: ['Response is not a JSON object'] };
+  }
+  const wanted = fields.map(f => f.key);
+  wanted.forEach(k => {
+    const v = parsed[k];
+    if (typeof v !== 'string' || !v.trim()) errors.push(`${k}: required, must be a non-empty string`);
+    else if (/\d+(\.\d+)?\s*%\s*(confiden|certain|sure|probab|likel)/i.test(v)) errors.push(`${k}: no numeric confidence scores anywhere`);
+  });
+  Object.keys(parsed).forEach(k => { if (!wanted.includes(k)) errors.push(`unexpected field ${k}`); });
+  return { ok: errors.length === 0, errors };
+}
+
 /* Link-proposal validation — 0–2 proposals, known codes, enum fields, a note. */
 function validateProposals(arr, hypotheses) {
   const errors = [];
@@ -595,9 +613,14 @@ Return the JSON array now.`;
     return jsonResponse({ proposals }, 200, origin, env);
   }
 
-  // --- Draft one decision-memo section from the evidence ledger ---
-  // Accepts { section_key, section_label, placeholder?, phase, segments?, localData? }.
-  // Returns { text } — the draft lands in the edit modal; it is never auto-saved.
+  // --- Draft any evidence-grounded document from the ledger ---
+  // The ONE drafting seam for every AI-first surface (memo sections, state of
+  // the field, MVP scope, report narratives). Accepts:
+  //   { section_label, placeholder?, doc_kind?, phase, segments?, localData?,
+  //     fields?: [{ key, label, placeholder? }] }
+  // Prose mode (no fields) returns { text }; structured mode returns
+  // { fields: { key: text } }, validated with one retry then a loud 502.
+  // Drafts land in an edit modal client-side — they are never auto-saved.
   if (path === '/api/draft-section' && request.method === 'POST') {
     if (!isWriteRole) return errorResponse('Insufficient permissions', 403, origin, env);
     const body = await request.json();
@@ -605,20 +628,53 @@ Return the JSON array now.`;
     const localData = body.localData || null;
     const phase = Number.isInteger(body.phase) ? body.phase : 0;
     const ws = await gatherWorkspace(env, localData);
+    const docKind = body.doc_kind || 'a section of the human decision memo';
+    const structured = Array.isArray(body.fields) && body.fields.length > 0;
+
+    const shapeInstruction = structured
+      ? `Return ONLY a JSON object with exactly these string fields, nothing else:
+${body.fields.map(f => `- "${f.key}": ${f.label}${f.placeholder ? ` (${f.placeholder})` : ''}`).join('\n')}
+Each field: 1–3 sentences of plain prose. Cite inline — interview IDs (INT-007), matrix entry ids, filenames. If the evidence for a field is thin or missing, say so in that field rather than smoothing over it.`
+      : `Write 150–300 words of plain prose (no headings, no JSON). Cite inline as you go — interview IDs (INT-007), matrix entry ids, filenames. If the evidence for a claim is thin or missing, say so in the text rather than smoothing over it.`;
 
     const system = `${SYSTEM_PROMPT}
 
 ${OUTPUT_SHAPE_RULES}
 
-You are drafting ONE section of the human decision memo: "${body.section_label}"${body.placeholder ? ` (${body.placeholder})` : ''}.
-Write 150–300 words of plain prose (no headings, no JSON). Cite inline as you go — interview IDs (INT-007), matrix entry ids, filenames. If the evidence for a claim is thin or missing, say so in the text rather than smoothing over it. This is a draft the humans will edit; argue from the ledger, do not decide for them.`;
+You are drafting ${docKind}: "${body.section_label}"${body.placeholder ? ` (${body.placeholder})` : ''}.
+${shapeInstruction}
+This is a draft the humans will edit; argue from the ledger, do not decide for them.`;
 
     const userMsg = `${workspaceContextText(ws, { phase, segments: body.segments })}
 
-Draft the "${body.section_label}" section now.`;
+Draft "${body.section_label}" now.`;
 
-    const result = await callClaude(env, { model: CLAUDE_MODEL, max_tokens: 1500, system, messages: [{ role: 'user', content: userMsg }] });
-    return jsonResponse({ text: claudeText(result).trim() }, 200, origin, env);
+    const claudeBase = { model: CLAUDE_MODEL, max_tokens: 2000, system };
+    let result = await callClaude(env, { ...claudeBase, messages: [{ role: 'user', content: userMsg }] });
+    if (!structured) {
+      return jsonResponse({ text: claudeText(result).trim() }, 200, origin, env);
+    }
+
+    let raw = claudeText(result);
+    let parsed = null;
+    let check;
+    try { parsed = extractJson(raw); check = validateDraftFields(parsed, body.fields); }
+    catch (e) { check = { ok: false, errors: [e.message] }; }
+    if (!check.ok) {
+      // One retry with the validation errors — then give up loudly.
+      result = await callClaude(env, { ...claudeBase, messages: [
+        { role: 'user', content: userMsg },
+        { role: 'assistant', content: raw || '(empty)' },
+        { role: 'user', content: `Your response failed validation:\n- ${check.errors.join('\n- ')}\n\nReturn the corrected JSON object only — no prose, no code fences.` },
+      ] });
+      raw = claudeText(result);
+      try { parsed = extractJson(raw); check = validateDraftFields(parsed, body.fields); }
+      catch (e) { check = { ok: false, errors: [e.message] }; }
+    }
+    if (!check.ok) {
+      return errorResponse(`Draft failed validation after one retry: ${check.errors.join('; ')}`, 502, origin, env);
+    }
+    return jsonResponse({ fields: parsed }, 200, origin, env);
   }
 
   // --- Document files (Supabase Storage) — before the generic table routes ---
@@ -1285,4 +1341,4 @@ export default {
 
 /* Pure helpers exported for the offline smoke harness (no runtime effect
    in Cloudflare — Workers only use the default export). */
-export { validateAssessment, validateProposals, extractJson, hypothesesPromptSection };
+export { validateAssessment, validateProposals, validateDraftFields, extractJson, hypothesesPromptSection };
