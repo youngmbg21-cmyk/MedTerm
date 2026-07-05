@@ -43,8 +43,13 @@ between the evidence and the verdict. Task ledger (execute in order):
        snapshots signed_assessment_id + signed_leaning; per-section
        "Draft from evidence" (AI mode) lands in the edit modal, never
        auto-saves.
-7. [ ] Evidence linking in matrix / interviews / field checks (manual always;
-       AI proposals when available)
+7. [x] Evidence linking woven into capture: matrix quotes get Link buttons +
+       link chips + a quiet skippable AI proposal card after save; interview
+       detail gets a Hypothesis links block; field checks get per-row Link +
+       an AI proposal when a check resolves; unit economics gets
+       "Link to kill criterion" + a proposal when assumptions change. All
+       manual paths work in local mode with AI off (openLinkModal in
+       js/evidence.js, source 'human'); maybeProposeLinks fails soft.
 8. [ ] Overview additions (leaning panel, phase-exit review button/banner)
 9. [ ] Docs: CLAUDE.md, docs/*, DECISIONS.md, HANDOFF.md
 10. [ ] Final full verification vs Definition of done (375px + 1280px reasoning)

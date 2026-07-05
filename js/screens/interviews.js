@@ -7,6 +7,7 @@ import {
 import { SEGMENT_NAMES, interviewerOptions } from '../config.js';
 import { data } from '../data.js';
 import { exportInterviews } from '../export.js';
+import { openLinkModal, existingLinkChips } from '../evidence.js';
 
 let selectedId = null;
 
@@ -110,6 +111,21 @@ function renderInterviews(page) {
         ? h('div', { class: 'text-sm leading-relaxed whitespace-pre-line', text: r.notes_markdown })
         : h('div', { class: 'text-sm', style: 'color:var(--ink-mute);', text: 'No notes yet. Write the full debrief here — this app is the single repository, and the assistant can only search what lives in it.' }),
     ]));
+
+    /* Hypothesis links — how this conversation bears on the decision */
+    if (r.interview_id) {
+      const linkChips = existingLinkChips('interview', r.interview_id);
+      detailCard.appendChild(h('div', { class: 'px-6 pt-4' }, [
+        h('div', { class: 'flex items-center justify-between mb-1' }, [
+          h('div', { class: 'micro', style: 'color:var(--ink-mute);', text: `Hypothesis links (${linkChips.length})` }),
+          h('button', { class: 'btn btn-ghost text-xs',
+            onclick: () => openLinkModal({ evidence_type: 'interview', evidence_id: r.interview_id, cite: r.interview_id }) }, 'Link to hypothesis'),
+        ]),
+        linkChips.length
+          ? h('div', { class: 'flex flex-wrap gap-1.5' }, linkChips)
+          : h('div', { class: 'text-xs', style: 'color:var(--ink-mute);', text: 'Not linked to the hypothesis board yet.' }),
+      ]));
+    }
 
     /* Documents attached to this interview */
     const docs = STATE.documents.filter(d => d.interview_id === r.interview_id);

@@ -33,8 +33,9 @@ async function saveMemo(patch) {
 
 /* The agreed human verdict: both seats must pick the same non-Undecided
    answer. Stored back into content.verdict so reports and the Decision
-   Brief's divergence panel read one canonical field. */
-function agreedVerdict(content) {
+   Brief's divergence panel read one canonical field. Exported for the
+   offline smoke harness — the co-sign gate rides on this. */
+export function agreedVerdict(content) {
   const a = content.verdict_lead || 'Undecided';
   const b = content.verdict_field || 'Undecided';
   return a !== 'Undecided' && a === b ? a : 'Undecided';

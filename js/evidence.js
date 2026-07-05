@@ -9,7 +9,8 @@ import {
   STATE, h, chip, openModal, closeModal, formField, renderCurrentRoute,
 } from './app.js';
 import { CURRENT_PHASE, SEGMENTS } from './config.js';
-import { data, assessmentRequest, aiDataSlices } from './data.js';
+import { data, aiAvailable, assessmentRequest, proposeLinksRequest, aiDataSlices } from './data.js';
+import { actionConfirmation } from './actions.js';
 
 /* Semantic tones — sage=GO, honey=PIVOT, rose=NO-GO, line=INSUFFICIENT. */
 export const LEANING_TONE = { GO: 'sage', PIVOT: 'honey', 'NO-GO': 'rose', INSUFFICIENT: 'line' };
@@ -150,6 +151,51 @@ export function topQuotesFor(hypothesisId, n = 2) {
     .map(l => resolveLink(l).record)
     .filter(Boolean)
     .slice(0, n);
+}
+
+/* ------------------------------------------------------------
+   Quiet AI link proposals after a save. One skippable card at the
+   top of the screen — never a blocking modal, never an error. The
+   human confirms each proposal through the shared actions.js
+   pattern; confirmed links are stamped source: 'ai_confirmed'.
+   ------------------------------------------------------------ */
+export async function maybeProposeLinks(entryType, entry) {
+  if (!aiAvailable || !entry?.id) return;
+  try {
+    const { proposals } = await proposeLinksRequest({
+      entry_type: entryType,
+      entry,
+      localData: aiDataSlices(STATE),
+    });
+    if (!proposals?.length) return;
+    const page = document.getElementById('page');
+    if (!page) return;
+
+    let remaining = proposals.length;
+    const wrap = h('div', { class: 'card p-4 mb-4 fade-in', style: 'border-color:var(--info);' });
+    wrap.appendChild(h('div', { class: 'micro mb-2', style: 'color:var(--info);', text: 'The assistant suggests linking what you just saved — confirm or skip' }));
+    proposals.forEach(p => {
+      wrap.appendChild(actionConfirmation({
+        action_type: 'add_evidence_link',
+        description: `Link to ${p.hypothesis_code} · ${p.hypothesis_title} — ${p.direction} (${p.strength}): ${p.note}`,
+        payload: {
+          hypothesis_id: p.hypothesis_id,
+          evidence_type: p.evidence_type,
+          evidence_id: p.evidence_id,
+          direction: p.direction,
+          strength: p.strength,
+          note: p.note,
+        },
+      }, {
+        rerender: false, // keep sibling proposals on screen
+        onDone: () => {
+          remaining -= 1;
+          if (remaining === 0) setTimeout(() => renderCurrentRoute(), 900);
+        },
+      }));
+    });
+    page.prepend(wrap);
+  } catch { /* fail soft — a proposal is a nicety, never worth an error after a save */ }
 }
 
 /* ------------------------------------------------------------

@@ -19,8 +19,10 @@ const TABLE_FOR_ACTION = {
   update_hypothesis_status: 'hypotheses',
 };
 
-/* Perform a confirmed action through data.js and refresh STATE. */
-export async function applyAction(action) {
+/* Perform a confirmed action through data.js and refresh STATE.
+   rerender:false lets a caller with its own in-flight UI (e.g. a stack of
+   link proposals) decide when the screen redraws. */
+export async function applyAction(action, { rerender = true } = {}) {
   const table = TABLE_FOR_ACTION[action.action_type];
   if (!table) throw new Error(`Unknown action: ${action.action_type}`);
   if (action.action_type.startsWith('add')) {
@@ -33,7 +35,7 @@ export async function applyAction(action) {
     await data.update(table, id, patch);
   }
   STATE[table] = await data.list(table);
-  renderCurrentRoute();
+  if (rerender) renderCurrentRoute();
 }
 
 /**
@@ -42,12 +44,12 @@ export async function applyAction(action) {
  * list, a quiet card under a form, …). Never blocks; Skip is always
  * one tap. onDone(result) fires with 'confirmed' | 'skipped'.
  */
-export function actionConfirmation(action, { onDone } = {}) {
+export function actionConfirmation(action, { onDone, rerender = true } = {}) {
   const buttons = h('div', { class: 'flex gap-2' });
 
   buttons.appendChild(h('button', { class: 'btn btn-primary text-xs', onclick: async () => {
     try {
-      await applyAction(action);
+      await applyAction(action, { rerender });
       buttons.innerHTML = '';
       buttons.appendChild(h('span', { class: 'chip chip-sage', text: 'Done' }));
       onDone?.('confirmed');
