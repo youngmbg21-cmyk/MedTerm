@@ -1,5 +1,34 @@
 # PROGRESS.md
 
+## Decision engine re-architecture — IN PROGRESS (started 2026-07-05)
+
+Hypotheses, kill criteria, evidence links, and versioned AI assessments become
+first-class records; a Decision Brief screen and a three-seat Decision memo sit
+between the evidence and the verdict. Task ledger (execute in order):
+
+1. [ ] Schema: hypotheses / evidence_links / ai_assessments in sql/schema.sql,
+       data.js KNOWN_TABLES, app.js STATE, settings export list, seed.js
+       (6 hypotheses, ~15 demo links, 2 demo assessments INSUFFICIENT→PIVOT)
+2. [ ] Config: AI_MODE; decouple all AI touchpoints from isLocalMode
+3. [ ] Worker: DB-injected hypotheses in prompts; POST /api/assessment;
+       POST /api/propose-links; POST /api/draft-section; new chat tools +
+       action types; body-provided-data mode for local-first setups
+4. [ ] Shared confirm/skip helper extracted from js/chat.js (js/actions.js)
+5. [ ] Decision Brief screen + nav entry (ungated, phase 0 onward)
+6. [ ] Decision memo rebuild (three seats, override rationale, draft-from-evidence)
+7. [ ] Evidence linking in matrix / interviews / field checks (manual always;
+       AI proposals when available)
+8. [ ] Overview additions (leaning panel, phase-exit review button/banner)
+9. [ ] Docs: CLAUDE.md, docs/*, DECISIONS.md, HANDOFF.md
+10. [ ] Final full verification vs Definition of done (375px + 1280px reasoning)
+
+Verification per unit: node --check every changed js file, import audit,
+convention audit (no fetch/localStorage outside data.js, h() not innerHTML,
+no hardcoded names/hypotheses), data-shape audit vs sql/schema.sql, smoke
+harness in scratchpad.
+
+---
+
 Status of the autonomous rebuild, 2026-07-04.
 
 ## Milestone 1 — Usable MVP ✅

@@ -11,6 +11,40 @@ function daysAgo(n) {
   return d.toISOString().slice(0, 10);
 }
 
+/* Full timestamp version — the assessment trajectory needs real datetimes
+   spanning weeks, not the minute-staggered created_at buildDb assigns. */
+function daysAgoIso(n) {
+  return new Date(Date.now() - n * 86400000).toISOString();
+}
+
+/* The six hypotheses / kill criteria the programme ships with, in their
+   stock state (statuses fresh, no notes). Same statements as sql/schema.sql —
+   the DB (or this seed, in local mode) is the single source of truth; no
+   screen or prompt may hardcode these. Stable ids so seeded evidence_links
+   can reference them. */
+export function buildHypotheses() {
+  return [
+    { id: 'hyp-h1', code: 'H1', kind: 'buyer_hypothesis', title: 'Family abroad',
+      description: 'Diaspora children pay for a Nairobi parent\'s care.',
+      status: 'open', status_note: '', sort_order: 1 },
+    { id: 'hyp-h2', code: 'H2', kind: 'buyer_hypothesis', title: 'Patient or Nairobi family pays',
+      description: 'The patient or their Nairobi family pays directly for coordination.',
+      status: 'open', status_note: '', sort_order: 2 },
+    { id: 'hyp-h3', code: 'H3', kind: 'buyer_hypothesis', title: 'Hospital IPD pays',
+      description: 'Hospital IPD (International Patient Department) pays for qualified leads or software.',
+      status: 'open', status_note: '', sort_order: 3 },
+    { id: 'hyp-k1', code: 'K1', kind: 'kill_criterion', title: 'CAC exceeds revenue',
+      description: 'CAC per closed case > revenue per case kills the patient-pays model.',
+      status: 'unknown', status_note: '', sort_order: 4 },
+    { id: 'hyp-k2', code: 'K2', kind: 'kill_criterion', title: 'Conversion below 15%',
+      description: 'Consult-to-travelled conversion < 15% kills the patient-pays model.',
+      status: 'unknown', status_note: '', sort_order: 5 },
+    { id: 'hyp-k3', code: 'K3', kind: 'kill_criterion', title: 'Service cost above $300',
+      description: 'Service cost per case > USD 300 kills the patient-pays model.',
+      status: 'unknown', status_note: '', sort_order: 6 },
+  ];
+}
+
 /* The stock deliverables checklist for all six phases. Reused, with every
    status reset to 'Not started', by buildFreshFieldworkSeed() below — this
    is the literal list of "stock research protocols" the app ships with. */
@@ -129,25 +163,27 @@ export function buildSeed() {
     { interview_id: 'INT-012', date: daysAgo(2), segment: 'Agent', initials: 'DK', interviewer: FIELD, format: 'Phone', recorded: 'N', tagged_same_day: 'N', brief_topic: 'Freelance facilitator, Eastleigh — NOT YET TAGGED', link_to_notes: '' },
   ];
 
+  /* Rows referenced by seeded evidence_links carry stable ids (buildDb keeps
+     an explicit id instead of generating one), so the links always resolve. */
   const matrix = [
-    { interview_id: 'INT-001', quote: 'I found the hospital because my cousin\'s friend had gone there. We didn\'t trust anything we found on Google.', theme_tag: 'Discovery — WhatsApp/personal', segment: 'Patient', severity: 3, wtp: 'Maybe', notes: '' },
-    { interview_id: 'INT-001', quote: 'The hospital quoted $9,000, then when we arrived it became $13,500. Nobody could explain the difference.', theme_tag: 'Trust — price clarity', segment: 'Patient', severity: 5, wtp: 'Y', notes: 'Strongest quote so far on price opacity.' },
+    { id: 'mx-int001-discovery', interview_id: 'INT-001', quote: 'I found the hospital because my cousin\'s friend had gone there. We didn\'t trust anything we found on Google.', theme_tag: 'Discovery — WhatsApp/personal', segment: 'Patient', severity: 3, wtp: 'Maybe', notes: '' },
+    { id: 'mx-int001-price', interview_id: 'INT-001', quote: 'The hospital quoted $9,000, then when we arrived it became $13,500. Nobody could explain the difference.', theme_tag: 'Trust — price clarity', segment: 'Patient', severity: 5, wtp: 'Y', notes: 'Strongest quote so far on price opacity.' },
     { interview_id: 'INT-002', quote: 'I sent the same scans to four hospitals. Two never replied. One replied after three weeks. By then my mother was worse.', theme_tag: 'Friction — slow response', segment: 'Caregiver', severity: 5, wtp: 'Y', notes: '' },
-    { interview_id: 'INT-002', quote: 'I would have paid anyone serious 50,000 shillings just to handle the back-and-forth. I was working two jobs and doing this at night.', theme_tag: 'Money — willingness to pay', segment: 'Caregiver', severity: 4, wtp: 'Y', notes: 'Unprompted WTP number (~USD 380).' },
-    { interview_id: 'INT-003', quote: 'Half my week goes on chasing quotes from hospitals. The same forms, the same follow-ups, every single case.', theme_tag: 'Friction — quote chasing', segment: 'Agent', severity: 4, wtp: 'Maybe', notes: 'Agent-side pain mirrors patient-side pain.' },
+    { id: 'mx-int002-wtp', interview_id: 'INT-002', quote: 'I would have paid anyone serious 50,000 shillings just to handle the back-and-forth. I was working two jobs and doing this at night.', theme_tag: 'Money — willingness to pay', segment: 'Caregiver', severity: 4, wtp: 'Y', notes: 'Unprompted WTP number (~USD 380).' },
+    { id: 'mx-int003-chasing', interview_id: 'INT-003', quote: 'Half my week goes on chasing quotes from hospitals. The same forms, the same follow-ups, every single case.', theme_tag: 'Friction — quote chasing', segment: 'Agent', severity: 4, wtp: 'Maybe', notes: 'Agent-side pain mirrors patient-side pain.' },
     { interview_id: 'INT-003', quote: 'The hospital pays me 10 to 15 percent of the package. The patient doesn\'t know that. That\'s the business.', theme_tag: 'Money — broker commission', segment: 'Agent', severity: 3, wtp: 'N', notes: 'Confirms commission range.' },
-    { interview_id: 'INT-004', quote: 'Eighty percent of African inquiries are missing the basic documents. A case that arrives complete gets a doctor\'s opinion in 48 hours.', theme_tag: 'Buyer — Hospital IPD', segment: 'Hospital IPD', severity: 4, wtp: 'Y', notes: 'IPD would pay for pre-qualified cases — probe pricing next time.' },
-    { interview_id: 'INT-004', quote: 'We reply fast to agents we know. An unknown patient email sits in a queue.', theme_tag: 'Trust — speed of reply', segment: 'Hospital IPD', severity: 3, wtp: 'N', notes: '' },
+    { id: 'mx-int004-ipd', interview_id: 'INT-004', quote: 'Eighty percent of African inquiries are missing the basic documents. A case that arrives complete gets a doctor\'s opinion in 48 hours.', theme_tag: 'Buyer — Hospital IPD', segment: 'Hospital IPD', severity: 4, wtp: 'Y', notes: 'IPD would pay for pre-qualified cases — probe pricing next time.' },
+    { id: 'mx-int004-agents', interview_id: 'INT-004', quote: 'We reply fast to agents we know. An unknown patient email sits in a queue.', theme_tag: 'Trust — speed of reply', segment: 'Hospital IPD', severity: 3, wtp: 'N', notes: '' },
     { interview_id: 'INT-005', quote: 'I was wiring money from London and praying. No receipts, no tracking. My father was in the hospital and I couldn\'t verify anything.', theme_tag: 'Friction — money transfer', segment: 'Diaspora family', severity: 5, wtp: 'Y', notes: '' },
-    { interview_id: 'INT-005', quote: 'It was me paying — my father would never spend that on himself. The children abroad are the real customers.', theme_tag: 'Buyer — family abroad', segment: 'Diaspora family', severity: 4, wtp: 'Y', notes: 'Direct support for H1.' },
-    { interview_id: 'INT-006', quote: 'We gave up. Too many forms, no answers, and the agent wanted money upfront just to "register the case".', theme_tag: 'Pain — coordination', segment: 'Patient', severity: 5, wtp: 'Maybe', notes: 'Abandonment case — the wedge moment.' },
+    { id: 'mx-int005-payer', interview_id: 'INT-005', quote: 'It was me paying — my father would never spend that on himself. The children abroad are the real customers.', theme_tag: 'Buyer — family abroad', segment: 'Diaspora family', severity: 4, wtp: 'Y', notes: 'Direct support for H1.' },
+    { id: 'mx-int006-gaveup', interview_id: 'INT-006', quote: 'We gave up. Too many forms, no answers, and the agent wanted money upfront just to "register the case".', theme_tag: 'Pain — coordination', segment: 'Patient', severity: 5, wtp: 'Maybe', notes: 'Abandonment case — the wedge moment.' },
     { interview_id: 'INT-007', quote: 'Being a nurse, I could read the reports. An ordinary family has no chance of comparing two hospital quotes.', theme_tag: 'Trust — price clarity', segment: 'Caregiver', severity: 4, wtp: 'Y', notes: '' },
     { interview_id: 'INT-007', quote: 'The visa letter took two weeks because the hospital kept sending it with the wrong passport number.', theme_tag: 'Friction — paperwork', segment: 'Caregiver', severity: 3, wtp: 'Maybe', notes: '' },
-    { interview_id: 'INT-008', quote: 'The village raised 800,000 shillings in one harambee. Money was not the blocker — knowing where to send it was.', theme_tag: 'Pain — financial', segment: 'Patient', severity: 4, wtp: 'Maybe', notes: 'Financing is communal; trust is the gap.' },
+    { id: 'mx-int008-harambee', interview_id: 'INT-008', quote: 'The village raised 800,000 shillings in one harambee. Money was not the blocker — knowing where to send it was.', theme_tag: 'Pain — financial', segment: 'Patient', severity: 4, wtp: 'Maybe', notes: 'Financing is communal; trust is the gap.' },
     { interview_id: 'INT-008', quote: 'I chose the hospital because the doctor there had treated another man from our mosque. One name carried everything.', theme_tag: 'Trust — doctor reputation', segment: 'Patient', severity: 3, wtp: 'N', notes: '' },
-    { interview_id: 'INT-009', quote: 'If someone sent us complete, verified case files for East African patients, yes — that is worth paying for. Our desk wastes days on incomplete files.', theme_tag: 'Buyer — Hospital IPD', segment: 'Hospital IPD', severity: 4, wtp: 'Y', notes: 'Second independent IPD WTP signal.' },
+    { id: 'mx-int009-ipdwtp', interview_id: 'INT-009', quote: 'If someone sent us complete, verified case files for East African patients, yes — that is worth paying for. Our desk wastes days on incomplete files.', theme_tag: 'Buyer — Hospital IPD', segment: 'Hospital IPD', severity: 4, wtp: 'Y', notes: 'Second independent IPD WTP signal.' },
     { interview_id: 'INT-010', quote: 'I compared three hospitals for months. In the end I picked the one whose WhatsApp replied the same day.', theme_tag: 'Trust — speed of reply', segment: 'Diaspora family', severity: 4, wtp: 'Y', notes: 'Response speed as trust proxy — recurring.' },
-    { interview_id: 'INT-010', quote: 'Sending $12,000 through three different transfer services cost me almost $600 in fees and a week of anxiety.', theme_tag: 'Friction — money transfer', segment: 'Diaspora family', severity: 4, wtp: 'Y', notes: '' },
+    { id: 'mx-int010-fees', interview_id: 'INT-010', quote: 'Sending $12,000 through three different transfer services cost me almost $600 in fees and a week of anxiety.', theme_tag: 'Friction — money transfer', segment: 'Diaspora family', severity: 4, wtp: 'Y', notes: '' },
   ];
 
   const deliverables = buildDeliverables();
@@ -159,14 +195,15 @@ export function buildSeed() {
   ];
 
   const field_checks = [
-    { assumption: 'Agents charge patients a registration fee upfront', confirmed: true, confirmed_by: FIELD, confirmed_date: daysAgo(7), notes: 'Confirmed at two Nairobi agencies: KES 5,000–15,000 upfront.' },
-    { assumption: 'Hospitals reply faster to known agents than to direct patients', confirmed: true, confirmed_by: LEAD, confirmed_date: daysAgo(5), notes: 'Confirmed by both IPD interviews (INT-004, INT-009).' },
+    { id: 'fc-registration-fee', assumption: 'Agents charge patients a registration fee upfront', confirmed: true, confirmed_by: FIELD, confirmed_date: daysAgo(7), notes: 'Confirmed at two Nairobi agencies: KES 5,000–15,000 upfront.' },
+    { id: 'fc-agent-reply-speed', assumption: 'Hospitals reply faster to known agents than to direct patients', confirmed: true, confirmed_by: LEAD, confirmed_date: daysAgo(5), notes: 'Confirmed by both IPD interviews (INT-004, INT-009).' },
     { assumption: 'M-Pesa cannot be used directly for Indian hospital deposits', confirmed: false, confirmed_by: '', confirmed_date: null, notes: 'Needs checking with a bank or forex bureau.' },
     { assumption: 'Diaspora payers outnumber local payers for planned procedures', confirmed: false, confirmed_by: '', confirmed_date: null, notes: 'Directional from interviews; needs a bigger sample.' },
   ];
 
   const documents = [
     {
+      id: 'doc-agent-debrief',
       filename: 'debrief-agent-walkins.md', mime_type: 'text/markdown', size_bytes: 1180,
       segment: 'Agent', interview_id: 'INT-003', uploaded_by: FIELD,
       description: 'Same-evening debrief after the MediLink office visit and two other agent walk-ins.',
@@ -184,6 +221,7 @@ Watch: the smaller operators are hungrier and may talk more openly about economi
 Next step: return to MediLink with the follow-up template (done — became INT-003).`,
     },
     {
+      id: 'doc-apollo-prices',
       filename: 'apollo-ipd-price-indication.csv', mime_type: 'text/csv', size_bytes: 610,
       segment: 'Hospital IPD', interview_id: 'INT-004', uploaded_by: LEAD,
       description: 'Indicative package prices shared by the Apollo IPD deputy head after INT-004. Not a formal quote.',
@@ -196,6 +234,7 @@ Oncology consult + PET-CT,900-1400,2,Often the entry point
 Liver transplant,32000-40000,30,Requires committee approval`,
     },
     {
+      id: 'doc-diaspora-transfer',
       filename: 'diaspora-money-transfer-notes.md', mime_type: 'text/markdown', size_bytes: 760,
       segment: 'Diaspora family', interview_id: 'INT-005', uploaded_by: LEAD,
       description: 'Notes on how money actually moved in the two diaspora cases (INT-005, INT-010).',
@@ -214,9 +253,136 @@ tagged under Friction — money transfer.`,
     },
   ];
 
+  /* Demo hypothesis board: stock statements with lively statuses so the
+     Decision Brief reads like a programme three weeks in. */
+  const hypotheses = buildHypotheses().map(hyp => {
+    const demo = {
+      H1: { status: 'strengthening', status_note: 'Two independent diaspora payers (INT-005, INT-010); no WTP number from that side yet.' },
+      H2: { status: 'weakening', status_note: 'Stated WTP exists (INT-002) but INT-006 abandoned rather than pay upfront; financing is communal (INT-008).' },
+      H3: { status: 'strengthening', status_note: 'Both IPD interviews (INT-004, INT-009) independently said verified case files are worth paying for.' },
+      K1: { status: 'unknown', status_note: 'No CAC data yet — Phase 4 work.' },
+      K2: { status: 'unknown', status_note: 'No conversion data yet; INT-006 abandonment is a warning sign.' },
+      K3: { status: 'unknown', status_note: 'Coordination is heavily manual today (INT-003) — cost per case unmeasured.' },
+    }[hyp.code];
+    return { ...hyp, ...demo };
+  });
+
+  /* ~15 demo evidence links, mixed directions across H1–H3 plus one per kill
+     criterion. For kill criteria, 'supports' means the evidence pushes the
+     criterion toward breach. evidence_id: interviews link by their INT-nnn
+     string; everything else by record id (stable ids assigned above). */
+  const evidence_links = [
+    // H1 — family abroad
+    { hypothesis_id: 'hyp-h1', evidence_type: 'matrix', evidence_id: 'mx-int005-payer', direction: 'supports', strength: 'strong', note: 'Diaspora daughter was the payer, unprompted: "the children abroad are the real customers."', source: 'human' },
+    { hypothesis_id: 'hyp-h1', evidence_type: 'interview', evidence_id: 'INT-010', direction: 'supports', strength: 'moderate', note: 'Second independent diaspora payer — daughter in Toronto paid for the hip replacement.', source: 'human' },
+    { hypothesis_id: 'hyp-h1', evidence_type: 'matrix', evidence_id: 'mx-int010-fees', direction: 'supports', strength: 'moderate', note: '$600 in fees tolerated on $12k moved — the diaspora payer absorbs cost, the channel is broken.', source: 'ai_confirmed' },
+    { hypothesis_id: 'hyp-h1', evidence_type: 'document', evidence_id: 'doc-diaspora-transfer', direction: 'supports', strength: 'moderate', note: 'Both diaspora cases show the payer abroad carrying the whole transaction blind.', source: 'human' },
+    // H2 — patient / Nairobi family pays
+    { hypothesis_id: 'hyp-h2', evidence_type: 'matrix', evidence_id: 'mx-int002-wtp', direction: 'supports', strength: 'strong', note: 'Unprompted KES 50,000 willingness-to-pay for coordination (~USD 380).', source: 'human' },
+    { hypothesis_id: 'hyp-h2', evidence_type: 'matrix', evidence_id: 'mx-int001-price', direction: 'supports', strength: 'moderate', note: 'Price opacity is the pain patients say they would pay to remove.', source: 'ai_confirmed' },
+    { hypothesis_id: 'hyp-h2', evidence_type: 'matrix', evidence_id: 'mx-int006-gaveup', direction: 'contradicts', strength: 'strong', note: 'Family abandoned mid-journey rather than pay an upfront registration fee.', source: 'human' },
+    { hypothesis_id: 'hyp-h2', evidence_type: 'matrix', evidence_id: 'mx-int008-harambee', direction: 'neutral', strength: 'moderate', note: 'Financing is communal (harambee); unclear one individual buyer exists at decision time.', source: 'human' },
+    { hypothesis_id: 'hyp-h2', evidence_type: 'field_check', evidence_id: 'fc-registration-fee', direction: 'supports', strength: 'weak', note: 'Patients already pay agents KES 5–15K upfront — some direct willingness exists today.', source: 'human' },
+    // H3 — Hospital IPD pays
+    { hypothesis_id: 'hyp-h3', evidence_type: 'matrix', evidence_id: 'mx-int004-ipd', direction: 'supports', strength: 'strong', note: '80% of inquiries arrive incomplete; complete cases reviewed in 48h — the IPD pain is real.', source: 'human' },
+    { hypothesis_id: 'hyp-h3', evidence_type: 'matrix', evidence_id: 'mx-int009-ipdwtp', direction: 'supports', strength: 'strong', note: 'Second independent IPD: verified case files are "worth paying for".', source: 'human' },
+    { hypothesis_id: 'hyp-h3', evidence_type: 'document', evidence_id: 'doc-apollo-prices', direction: 'supports', strength: 'moderate', note: 'IPD shared indicative package prices after one call — engagement signal from the buyer side.', source: 'ai_confirmed' },
+    { hypothesis_id: 'hyp-h3', evidence_type: 'matrix', evidence_id: 'mx-int004-agents', direction: 'contradicts', strength: 'weak', note: 'IPDs already have trusted agent channels; a new entrant must displace them.', source: 'human' },
+    // Kill criteria — one early warning each
+    { hypothesis_id: 'hyp-k1', evidence_type: 'matrix', evidence_id: 'mx-int001-discovery', direction: 'supports', strength: 'weak', note: 'Discovery is social, not searched — paid acquisition channels unproven, CAC risk.', source: 'human' },
+    { hypothesis_id: 'hyp-k2', evidence_type: 'interview', evidence_id: 'INT-006', direction: 'supports', strength: 'weak', note: 'Mid-journey abandonment — conversion risk if coordination stays this hard.', source: 'human' },
+    { hypothesis_id: 'hyp-k3', evidence_type: 'matrix', evidence_id: 'mx-int003-chasing', direction: 'supports', strength: 'weak', note: 'Coordination is heavily manual today — service cost per case could exceed $300.', source: 'human' },
+  ];
+
+  /* Two historical demo assessments so the Decision Brief and trajectory
+     strip are alive: an early honest INSUFFICIENT, then a PIVOT leaning.
+     Append-only in real use — these are never updated. */
+  const ai_assessments = [
+    {
+      id: 'assess-early',
+      created_at: daysAgoIso(12),
+      trigger: 'manual', phase: 1, leaning: 'INSUFFICIENT', model: 'demo-seed',
+      summary_markdown: 'If we had to decide today, the honest answer is **INSUFFICIENT**. Five interviews across three segments is a sketch, not a picture. The pains are loud and consistent — price opacity (INT-001), slow hospital response (INT-002), manual coordination (INT-003) — but pain is not a buyer. Only one willingness-to-pay number exists (INT-002, unprompted, ~USD 380) and no hypothesis has more than one independent source behind it.\n\nWhat the early signal does say: the Hospital IPD side (H3) produced the most concrete language about paying for anything — INT-004 called complete case files a quality problem worth money. That is worth chasing before the patient-side story hardens.\n\n### The case against this leaning\nWaiting has a cost. The pains repeat across every interview so far, and an INSUFFICIENT verdict can become a habit that outlasts its honesty. If the next five interviews repeat the same three pains with the same intensity, the evidence base is thicker than the interview count suggests, and this caution should be re-examined rather than renewed by default.',
+      per_hypothesis: [
+        {
+          hypothesis_code: 'H1', direction: 'unclear', strength: 'thin',
+          key_evidence: [
+            { type: 'matrix', id: 'mx-int005-payer', cite: 'INT-005', why: 'diaspora daughter was the payer, unprompted' },
+          ],
+          gaps: 'Only one diaspora payer interviewed; no willingness-to-pay number from the diaspora side.',
+          what_would_change: 'Three or more diaspora interviews with a concrete per-case payment number.',
+        },
+        {
+          hypothesis_code: 'H2', direction: 'unclear', strength: 'thin',
+          key_evidence: [
+            { type: 'matrix', id: 'mx-int002-wtp', cite: 'INT-002', why: 'unprompted KES 50,000 coordination willingness-to-pay' },
+          ],
+          gaps: 'A single stated-WTP datapoint; no test of actual payment behaviour.',
+          what_would_change: 'A second unprompted WTP number, or one refusal pattern repeating.',
+        },
+        {
+          hypothesis_code: 'H3', direction: 'strengthening', strength: 'thin',
+          key_evidence: [
+            { type: 'matrix', id: 'mx-int004-ipd', cite: 'INT-004', why: '80% of African inquiries incomplete; IPD would "rather pay for quality than volume"' },
+          ],
+          gaps: 'One IPD voice; no price point.',
+          what_would_change: 'A second IPD confirming independently, with an indicative per-case fee.',
+        },
+      ],
+      breakpoints: [
+        { code: 'K1', status: 'unknown', evidence: [], note: 'No unit-economics inputs exist yet — Phase 4 work.' },
+        { code: 'K2', status: 'unknown', evidence: [], note: 'No conversion data yet.' },
+        { code: 'K3', status: 'unknown', evidence: [], note: 'No service-cost data yet.' },
+      ],
+      data_snapshot: { interviews: 5, matrix_entries: 9, evidence_links: 6, field_checks: 2, documents: 1 },
+    },
+    {
+      id: 'assess-recent',
+      created_at: daysAgoIso(2),
+      trigger: 'weekly', phase: 1, leaning: 'PIVOT', model: 'demo-seed',
+      summary_markdown: 'The leaning this week is **PIVOT** — away from patient-pays as the lead wedge, toward the hospital side. Not NO-GO: the corridor pain is real and repeating. But the buyer evidence is diverging. H3 now has two independent IPD sources saying verified case files are worth paying for (INT-004, INT-009), plus an indicative price list volunteered after a single call. H2 is moving the other way: stated willingness exists (INT-002) yet the one family actually asked for money upfront walked away (INT-006), and INT-008 shows financing is communal — a harambee is not a checkout flow. H1 has two genuine diaspora payers (INT-005, INT-010) but still no number from that side.\n\nIf this trajectory holds, the next phase should lead with the IPD wedge and treat diaspora-pays as the secondary test. The kill criteria remain unknown — nothing here is an economics verdict yet.\n\n### The case against this leaning\nTwelve interviews skew toward the loudest voices, and IPDs are professionally enthusiastic about free pipeline improvements — enthusiasm is not a purchase order. H2\'s "weakening" rests heavily on one abandonment (INT-006) that had confounding factors (an untrusted agent, not a tested price). A dozen more patient-side interviews could restore H2; do not preempt Phase 3 sense-making with an early pivot.',
+      per_hypothesis: [
+        {
+          hypothesis_code: 'H1', direction: 'strengthening', strength: 'moderate',
+          key_evidence: [
+            { type: 'matrix', id: 'mx-int005-payer', cite: 'INT-005', why: 'diaspora daughter was the payer, unprompted' },
+            { type: 'interview', id: 'INT-010', cite: 'INT-010', why: 'second independent diaspora payer (Toronto → Mumbai hip replacement)' },
+          ],
+          gaps: 'No diaspora-side interviews yet on payment willingness — payers confirmed, price untested.',
+          what_would_change: 'Three or more diaspora interviews confirming willingness to pay >$200 per case.',
+        },
+        {
+          hypothesis_code: 'H2', direction: 'weakening', strength: 'moderate',
+          key_evidence: [
+            { type: 'matrix', id: 'mx-int006-gaveup', cite: 'INT-006', why: 'family abandoned mid-journey rather than pay upfront' },
+            { type: 'matrix', id: 'mx-int008-harambee', cite: 'INT-008', why: 'financing is communal — no individual buyer at decision time' },
+          ],
+          gaps: 'Willingness is stated (INT-002), never revealed — no one has actually paid for coordination.',
+          what_would_change: 'One caregiver actually paying a deposit for coordination — or a third upfront-payment refusal.',
+        },
+        {
+          hypothesis_code: 'H3', direction: 'strengthening', strength: 'moderate',
+          key_evidence: [
+            { type: 'matrix', id: 'mx-int004-ipd', cite: 'INT-004', why: '80% of inquiries incomplete; complete cases reviewed in 48h' },
+            { type: 'matrix', id: 'mx-int009-ipdwtp', cite: 'INT-009', why: 'second IPD: verified case files "worth paying for"' },
+            { type: 'document', id: 'doc-apollo-prices', cite: 'apollo-ipd-price-indication.csv', why: 'indicative prices volunteered after one call' },
+          ],
+          gaps: 'No IPD has named a per-case fee; no Kenyan referring-side view yet.',
+          what_would_change: 'An IPD naming a per-case fee of $200 or more — or refusing to name one.',
+        },
+      ],
+      breakpoints: [
+        { code: 'K1', status: 'unknown', evidence: [{ type: 'matrix', id: 'mx-int001-discovery', cite: 'INT-001', why: 'discovery is social, not searched — paid CAC channels unproven' }], note: 'No CAC data yet; social discovery hints acquisition may not be paid-media shaped.' },
+        { code: 'K2', status: 'unknown', evidence: [{ type: 'interview', id: 'INT-006', cite: 'INT-006', why: 'mid-journey abandonment' }], note: 'No conversion data; one abandonment is a warning, not a rate.' },
+        { code: 'K3', status: 'unknown', evidence: [{ type: 'matrix', id: 'mx-int003-chasing', cite: 'INT-003', why: 'half an agent\'s week goes on quote-chasing' }], note: 'Manual coordination load is the main service-cost risk.' },
+      ],
+      data_snapshot: { interviews: 12, matrix_entries: 18, evidence_links: 16, field_checks: 4, documents: 3 },
+    },
+  ];
+
   return {
     outreach, interviews, matrix, deliverables, scripts, kill_list, field_checks,
-    documents,
+    documents, hypotheses, evidence_links, ai_assessments,
     economics: [], segment_cards: [], decision_memos: [], reports: [],
   };
 }
@@ -224,17 +390,21 @@ tagged under Friction — money transfer.`,
 /**
  * "Start fresh for real fieldwork" seed: every research input is wiped
  * (outreach, interviews, matrix, documents, reports, kill list, field
- * checks, economics, memos, segment cards), but the stock framework the
- * app ships with is restored — the three interview scripts at their
- * original version, and the six phases' deliverables checklist reset to
- * "Not started" (evidence cleared). Segments/themes/templates/the manual
- * are not stored data at all (they live in js/config.js and the Reference
- * screens), so they survive automatically without any action here.
+ * checks, economics, memos, segment cards, evidence links, AI assessments),
+ * but the stock framework the app ships with is restored — the three
+ * interview scripts at their original version, the six phases' deliverables
+ * checklist reset to "Not started" (evidence cleared), and the six
+ * hypotheses / kill criteria in their stock open/unknown state. Segments/
+ * themes/templates/the manual are not stored data at all (they live in
+ * js/config.js and the Reference screens), so they survive automatically
+ * without any action here.
  */
 export function buildFreshFieldworkSeed() {
   return {
     outreach: [], interviews: [], matrix: [], documents: [], reports: [],
     kill_list: [], field_checks: [], economics: [], segment_cards: [], decision_memos: [],
+    evidence_links: [], ai_assessments: [],
+    hypotheses: buildHypotheses(),
     scripts: buildScripts(),
     deliverables: buildDeliverables().map(d => ({ ...d, status: 'Not started', evidence: '' })),
   };

@@ -20,7 +20,7 @@
    Records are flat snake_case objects matching sql/schema.sql.
    ============================================================ */
 import { DATA_MODE, WORKER_URL } from './config.js';
-import { buildSeed, buildFreshFieldworkSeed } from './seed.js';
+import { buildSeed, buildFreshFieldworkSeed, buildHypotheses } from './seed.js';
 
 const LS_KEY = 'medterm_data_v1';
 const IDB_NAME = 'medterm_files_v1';
@@ -29,7 +29,7 @@ const IDB_NAME = 'medterm_files_v1';
    so a malformed or hand-edited backup file can't inject arbitrary state. */
 const KNOWN_TABLES = ['outreach', 'interviews', 'matrix', 'deliverables', 'scripts',
   'kill_list', 'field_checks', 'economics', 'segment_cards', 'decision_memos',
-  'reports', 'documents'];
+  'reports', 'documents', 'hypotheses', 'evidence_links', 'ai_assessments'];
 
 /* ------------------------------------------------------------
    IndexedDB blob store — local-mode home for uploaded files.
@@ -228,6 +228,9 @@ const localAdapter = {
         db[table].push(clean);
       }
     }
+    // Backups made before the decision engine carry no hypotheses — restore
+    // the stock framework rather than leaving the hypothesis board empty.
+    if (!db.hypotheses.length) db.hypotheses = buildHypotheses();
     localDb = db;
     persistLocal();
   },

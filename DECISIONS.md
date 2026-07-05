@@ -201,3 +201,26 @@ Dated 2026-07-04. Each entry is a decision the brief left open, plus the reasoni
     exported** so the executive briefing can reuse the exact same unit-economics
     model instead of re-implementing break-point logic in `reports.js` — one model,
     two consumers.
+
+---
+
+## Decision engine re-architecture (2026-07-05)
+
+38. **Seeded cross-referenced records carry stable, readable ids** (`hyp-h1`,
+    `mx-int002-wtp`, `doc-apollo-prices`) instead of generated UUIDs. `buildDb()`
+    already lets an explicit id win over `makeId()`, so seeded evidence_links and
+    assessment citations always resolve without a lookup pass. Local demo mode
+    only — Supabase generates real UUIDs via `gen_random_uuid()`.
+
+39. **For kill criteria, an evidence link's `direction: 'supports'` means the
+    evidence pushes the criterion toward breach** (supports the kill), mirroring
+    how 'supports' strengthens a buyer hypothesis. One consistent reading: supports
+    = makes the statement more true.
+
+40. **`importAll()` restores the stock hypotheses when a backup predates the
+    decision engine** (no `hypotheses` rows in the dump) — otherwise an old backup
+    would silently blank the hypothesis board. `SCHEMA_VERSION` stays at 1: the
+    change is additive, old backups remain importable.
+
+41. **Demo assessments carry `model: 'demo-seed'`** so nobody mistakes seeded
+    narrative for real Claude output; real assessments record the actual model id.

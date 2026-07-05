@@ -510,3 +510,94 @@ CREATE POLICY "Owner or lead can delete documents"
   ));
 
 CREATE TRIGGER set_updated_at BEFORE UPDATE ON documents FOR EACH ROW EXECUTE FUNCTION update_updated_at();
+
+-- ============================================================
+-- Decision engine (added with the decision-engine re-architecture)
+-- Hypotheses, kill criteria, evidence links, and AI assessments are
+-- first-class records. Nothing may hardcode them — the Worker injects
+-- them into every prompt from these tables.
+-- ============================================================
+
+-- Buyer hypotheses (H1–H3) and kill criteria (K1–K3). One row each.
+CREATE TABLE hypotheses (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  code TEXT NOT NULL UNIQUE,                 -- 'H1'..'H3', 'K1'..'K3'
+  kind TEXT NOT NULL CHECK (kind IN ('buyer_hypothesis', 'kill_criterion')),
+  title TEXT NOT NULL,
+  description TEXT,
+  -- buyer hypotheses: open / strengthening / weakening / dead
+  -- kill criteria:  unknown / holding / breached
+  status TEXT NOT NULL DEFAULT 'open',
+  status_note TEXT,                          -- why the current status, human-editable
+  sort_order INTEGER DEFAULT 0,
+  created_at TIMESTAMPTZ DEFAULT now(),
+  updated_at TIMESTAMPTZ DEFAULT now()
+);
+
+ALTER TABLE hypotheses ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Active members can read hypotheses" ON hypotheses FOR SELECT
+  USING (EXISTS (SELECT 1 FROM team_members tm WHERE tm.user_id = auth.uid() AND tm.status = 'active'));
+CREATE POLICY "Partners and leads can write hypotheses" ON hypotheses FOR ALL
+  USING (EXISTS (SELECT 1 FROM team_members tm WHERE tm.user_id = auth.uid() AND tm.status = 'active' AND tm.role IN ('lead', 'partner')));
+
+CREATE TRIGGER set_updated_at BEFORE UPDATE ON hypotheses FOR EACH ROW EXECUTE FUNCTION update_updated_at();
+
+-- The six the programme ships with (same statements the Worker previously
+-- hardcoded in its system prompt — the DB is now the single source of truth).
+INSERT INTO hypotheses (code, kind, title, description, status, sort_order) VALUES
+  ('H1', 'buyer_hypothesis', 'Family abroad', 'Diaspora children pay for a Nairobi parent''s care.', 'open', 1),
+  ('H2', 'buyer_hypothesis', 'Patient or Nairobi family pays', 'The patient or their Nairobi family pays directly for coordination.', 'open', 2),
+  ('H3', 'buyer_hypothesis', 'Hospital IPD pays', 'Hospital IPD (International Patient Department) pays for qualified leads or software.', 'open', 3),
+  ('K1', 'kill_criterion', 'CAC exceeds revenue', 'CAC per closed case > revenue per case kills the patient-pays model.', 'unknown', 4),
+  ('K2', 'kill_criterion', 'Conversion below 15%', 'Consult-to-travelled conversion < 15% kills the patient-pays model.', 'unknown', 5),
+  ('K3', 'kill_criterion', 'Service cost above $300', 'Service cost per case > USD 300 kills the patient-pays model.', 'unknown', 6);
+
+-- Evidence links: one row = one piece of evidence bearing on one hypothesis.
+CREATE TABLE evidence_links (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  hypothesis_id UUID NOT NULL REFERENCES hypotheses(id) ON DELETE CASCADE,
+  evidence_type TEXT NOT NULL CHECK (evidence_type IN ('interview', 'matrix', 'field_check', 'document', 'economics')),
+  evidence_id TEXT NOT NULL,                 -- linked record's id (interview_id string for interviews)
+  direction TEXT NOT NULL CHECK (direction IN ('supports', 'contradicts', 'neutral')),
+  strength TEXT CHECK (strength IN ('strong', 'moderate', 'weak')),
+  note TEXT,                                 -- one line: why this evidence bears on this hypothesis
+  source TEXT NOT NULL DEFAULT 'human' CHECK (source IN ('human', 'ai_confirmed')),
+  created_by UUID REFERENCES team_members(id),
+  created_at TIMESTAMPTZ DEFAULT now()
+);
+
+ALTER TABLE evidence_links ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Active members can read evidence_links" ON evidence_links FOR SELECT
+  USING (EXISTS (SELECT 1 FROM team_members tm WHERE tm.user_id = auth.uid() AND tm.status = 'active'));
+CREATE POLICY "Partners and leads can insert evidence_links" ON evidence_links FOR INSERT
+  WITH CHECK (EXISTS (SELECT 1 FROM team_members tm WHERE tm.user_id = auth.uid() AND tm.status = 'active' AND tm.role IN ('lead', 'partner')));
+CREATE POLICY "Owner or lead can delete evidence_links" ON evidence_links FOR DELETE
+  USING (EXISTS (
+    SELECT 1 FROM team_members tm
+    WHERE tm.user_id = auth.uid() AND tm.status = 'active'
+    AND (tm.role = 'lead' OR tm.id = evidence_links.created_by)
+  ));
+-- No UPDATE policy — correct a wrong link by deleting and re-creating it.
+
+-- AI assessments: APPEND-ONLY. Never updated, never deleted — the sequence
+-- over time is itself evidence (the confidence trajectory).
+CREATE TABLE ai_assessments (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  created_at TIMESTAMPTZ DEFAULT now(),
+  trigger TEXT NOT NULL CHECK (trigger IN ('manual', 'phase_exit', 'weekly')),
+  phase INTEGER NOT NULL,                    -- CURRENT_PHASE at generation time
+  leaning TEXT NOT NULL CHECK (leaning IN ('GO', 'PIVOT', 'NO-GO', 'INSUFFICIENT')),
+  summary_markdown TEXT,                     -- the narrative brief
+  per_hypothesis JSONB,                      -- [{hypothesis_code, direction, strength, key_evidence:[{type,id,cite,why}], gaps, what_would_change}]
+  breakpoints JSONB,                         -- [{code, status, evidence:[{type,id,cite,why}], note}]
+  data_snapshot JSONB,                       -- counts at generation time
+  model TEXT,                                -- Claude model used
+  created_by UUID REFERENCES team_members(id)
+);
+
+ALTER TABLE ai_assessments ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Active members can read ai_assessments" ON ai_assessments FOR SELECT
+  USING (EXISTS (SELECT 1 FROM team_members tm WHERE tm.user_id = auth.uid() AND tm.status = 'active'));
+CREATE POLICY "Partners and leads can insert ai_assessments" ON ai_assessments FOR INSERT
+  WITH CHECK (EXISTS (SELECT 1 FROM team_members tm WHERE tm.user_id = auth.uid() AND tm.status = 'active' AND tm.role IN ('lead', 'partner')));
+-- No UPDATE or DELETE policies — append-only by design.

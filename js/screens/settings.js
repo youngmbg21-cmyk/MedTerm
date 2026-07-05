@@ -127,7 +127,7 @@ function buildDataManagementCard() {
 async function exportEverything() {
   const tables = ['outreach', 'interviews', 'matrix', 'deliverables', 'scripts',
     'kill_list', 'field_checks', 'economics', 'segment_cards', 'decision_memos',
-    'reports', 'documents'];
+    'reports', 'documents', 'hypotheses', 'evidence_links', 'ai_assessments'];
   const dump = { schema_version: SCHEMA_VERSION, app: 'MedTerminal', exported_at: new Date().toISOString(), tables: {} };
 
   for (const t of tables) {
