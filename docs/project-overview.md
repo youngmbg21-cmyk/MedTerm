@@ -64,6 +64,16 @@ See `docs/features.md` for the full screen-by-screen breakdown. In summary:
 - **Shows saturation** — per-segment progress toward Phase 2 exit criteria
 - **Provides reference material** — interview scripts, outreach templates, operating manual
 - **Powers an AI assistant** — a Claude-backed chat panel that knows the live state of the research and can answer "what should I do today?", run phase exit checks, and surface the strongest signals from the data
+- **Runs the decision engine** — the buyer hypotheses (H1–H3) and kill break-points
+  (K1–K3) are records, every piece of evidence can be linked to them (supports /
+  contradicts / neutral, with strength and a note), and a versioned AI assessment
+  sits between the data and the human verdict. The **Decision Brief** screen shows
+  the current leaning (GO / PIVOT / NO-GO / INSUFFICIENT — never a numeric
+  confidence score), the evidence per hypothesis with citations, what would change
+  each assessment, and the append-only trajectory of past assessments. The decision
+  memo has three seats: both humans pick verdicts independently, the AI leaning is
+  advisory, co-signing requires human agreement, and overriding the AI requires a
+  written rationale. **The AI argues; it never decides.**
 
 ---
 

@@ -50,8 +50,14 @@ between the evidence and the verdict. Task ledger (execute in order):
        "Link to kill criterion" + a proposal when assumptions change. All
        manual paths work in local mode with AI off (openLinkModal in
        js/evidence.js, source 'human'); maybeProposeLinks fails soft.
-8. [ ] Overview additions (leaning panel, phase-exit review button/banner)
-9. [ ] Docs: CLAUDE.md, docs/*, DECISIONS.md, HANDOFF.md
+8. [x] Overview additions: "If we decided today" pulse card (latest leaning +
+       strengthening/weakening counts + Decision Brief link); "Run phase exit
+       review" (AI mode) + honey advisory banner when the current phase has no
+       phase_exit assessment. Overview stays the operations center.
+9. [x] Docs: CLAUDE.md core rule 11 + AI_MODE architecture + file map;
+       docs/features.md decision-engine section; docs/project-overview.md
+       decision-engine bullet; HANDOFF.md "Turning on the AI" (local-first +
+       live AI path, identity-only Supabase note); DECISIONS.md 38–52.
 10. [ ] Final full verification vs Definition of done (375px + 1280px reasoning)
 
 Verification per unit: node --check every changed js file, import audit,

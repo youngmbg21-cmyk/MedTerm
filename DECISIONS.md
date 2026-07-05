@@ -276,3 +276,9 @@ Dated 2026-07-04. Each entry is a decision the brief left open, plus the reasoni
     content** (not a new column) — memo content is already the record's JSONB
     home, and the leaning copy keeps the record legible even if the assessment
     list is later filtered.
+
+52. **docs/features.md was not rewritten wholesale.** Parts of it predate the
+    pipeline rebuild (Airtable-era screen descriptions). The decision-engine
+    section was added at the top with an explicit note that the code and CLAUDE.md
+    are the live truth — a full historical rewrite is outside this build's scope
+    and would have touched screens the brief says not to touch.

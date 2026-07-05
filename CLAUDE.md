@@ -15,15 +15,20 @@ detail. `sql/schema.sql` and `worker.js` define the real data model.
 
 ## Architecture in one paragraph
 
-`index.html` loads vanilla ES modules from `js/`. All configuration (data mode, current
-phase, segments + targets, themes, team display names) lives in `js/config.js`. All data
-access goes through `js/data.js` — one interface (`list/create/update/remove`), two
-adapters: `local` (localStorage, seeded from `js/seed.js`, the default) and `api`
+`index.html` loads vanilla ES modules from `js/`. All configuration (data mode, AI mode,
+current phase, segments + targets, themes, team display names) lives in `js/config.js`.
+All data access goes through `js/data.js` — one interface (`list/create/update/remove`),
+two adapters: `local` (localStorage, seeded from `js/seed.js`, the default) and `api`
 (Cloudflare Worker `worker.js` → Supabase, Bearer JWT from Supabase magic-link auth in
 `js/auth.js`). Records are flat snake_case matching `sql/schema.sql`. `js/app.js` holds
 state, the hash router, the phase-gated nav, and the shared component kit. One screen per
-file in `js/screens/`. The AI assistant (`js/chat.js`) requires the Claude API and is
-calmly disabled in local mode.
+file in `js/screens/`. AI availability is governed by `AI_MODE` in `js/config.js`, not by
+the data mode: `'worker'` enables the assistant, assessments, link proposals, and memo
+drafting in either data mode (with local data, the client sends the worker the workspace
+slices it needs in the request body); `'off'` (default) shows calm disabled states. The
+decision spine — hypotheses, kill criteria, evidence links, versioned AI assessments —
+lives in ordinary tables and flows through `js/evidence.js` helpers; AI-proposed writes
+go through the Confirm/Skip pattern in `js/actions.js`.
 
 ## Core rules — never violate
 
@@ -53,6 +58,14 @@ calmly disabled in local mode.
    `registerRoute`). List screens lead with the exception, not the totals.
 10. **No API keys in the frontend.** The Worker (or Supabase Edge Function) holds all
     secrets in `api` mode.
+11. **Hypotheses, kill criteria, evidence links, and AI assessments are first-class
+    records.** No screen or prompt may hardcode them — the Worker injects the live
+    hypothesis board into every prompt from the `hypotheses` table (or the client's
+    copy in local data mode). Assessments are append-only: never updated, never
+    deleted; the sequence over time is itself evidence. The AI argues; it never
+    decides — every AI-originated write goes through human confirmation, a diverging
+    human verdict requires a written override rationale, and no numeric confidence
+    scores appear anywhere.
 
 ## File map
 
@@ -64,11 +77,13 @@ calmly disabled in local mode.
 | `js/data.js` | Data interface + local/api adapters |
 | `js/seed.js` | Demo seed data (dates relative to today) |
 | `js/app.js` | State, router, phase-gated nav, component kit |
-| `js/auth.js` | Magic-link login (api mode only, lazy-loaded) |
+| `js/auth.js` | Magic-link login (api mode / AI worker mode, lazy-loaded) |
 | `js/chat.js` | Assistant panel |
+| `js/actions.js` | Shared Confirm/Skip pattern for AI-proposed writes |
+| `js/evidence.js` | Hypothesis board, evidence links, assessments, link modal |
 | `js/export.js` | CSV exports |
-| `js/screens/*.js` | One screen per file (incl. `documents.js` — file uploads) |
-| `worker.js` | Cloudflare Worker backend (api mode) |
+| `js/screens/*.js` | One screen per file (incl. `decision-brief.js`, `documents.js`) |
+| `worker.js` | Cloudflare Worker backend (api mode + all AI endpoints) |
 | `sql/schema.sql` | Supabase schema + RLS |
 | `HANDOFF.md` | How to go live |
 | `DECISIONS.md` | Judgment calls made during the rebuild |
