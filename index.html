@@ -96,11 +96,12 @@
 <!-- Boot -->
 <script type="module">
   import { loadAllData, renderCurrentRoute, buildNav, go, openSidebar, closeSidebar } from './js/app.js';
-  import { DATA_MODE } from './js/config.js';
+  import { DATA_MODE, AI_MODE } from './js/config.js';
   import { initChat } from './js/chat.js';
 
   // Screen modules (each registers its routes)
   import './js/screens/overview.js';
+  import './js/screens/decision-brief.js';
   import './js/screens/outreach.js';
   import './js/screens/interviews.js';
   import './js/screens/matrix.js';
@@ -127,7 +128,9 @@
   if (!location.hash) location.hash = 'overview';
   renderCurrentRoute();
 
-  if (DATA_MODE === 'api') {
+  // api data mode needs login for data; worker AI mode needs it for identity
+  // (the worker authenticates every AI call with the same magic-link JWT).
+  if (DATA_MODE === 'api' || AI_MODE === 'worker') {
     const { requireLogin } = await import('./js/auth.js');
     await requireLogin();
   }

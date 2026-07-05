@@ -1,11 +1,12 @@
 /* ============================================================
    ASSISTANT PANEL — needs the Claude API (a secret), so it only
-   runs in 'api' mode. In local mode it shows a calm disabled
-   state instead of erroring.
+   runs when AI_MODE is 'worker' (independent of the data mode).
+   Otherwise it shows a calm disabled state instead of erroring.
    ============================================================ */
-import { STATE, h, renderCurrentRoute } from './app.js';
+import { STATE, h } from './app.js';
 import { CURRENT_PHASE, PHASES, SEGMENTS } from './config.js';
-import { isLocalMode, chatRequest, data } from './data.js';
+import { aiAvailable, chatRequest, aiDataSlices } from './data.js';
+import { addActionConfirmation } from './actions.js';
 
 let currentSessionId = null;
 
@@ -31,14 +32,14 @@ export function initChat() {
   QUICK_PROMPTS.forEach(([label, prompt]) => {
     quick.appendChild(h('button', {
       class: 'quick-action',
-      disabled: isLocalMode ? '' : null,
-      onclick: () => { if (!isLocalMode) { toggleChat(true); sendChat(prompt); } },
+      disabled: aiAvailable ? null : '',
+      onclick: () => { if (aiAvailable) { toggleChat(true); sendChat(prompt); } },
     }, label));
   });
 
-  if (isLocalMode) {
+  if (!aiAvailable) {
     input.disabled = true;
-    input.placeholder = 'Assistant unavailable in demo mode';
+    input.placeholder = 'Assistant not connected';
     document.getElementById('send-chat-btn').disabled = true;
     quick.querySelectorAll('button').forEach(b => { b.style.opacity = '.5'; b.style.cursor = 'default'; });
   }
@@ -51,10 +52,10 @@ export function toggleChat(forceOpen) {
   else panel.classList.toggle('closed');
 
   if (!panel.classList.contains('closed') && document.getElementById('chat-messages').children.length === 0) {
-    if (isLocalMode) {
-      addChatMessage('bot', 'The assistant connects when API keys are added. Everything else in the workspace works without it — see Settings for how to go live.');
+    if (!aiAvailable) {
+      addChatMessage('bot', 'The assistant connects when AI_MODE is set to \'worker\' — it works with local data too. Everything else in the workspace works without it; see Settings for how to go live.');
     } else {
-      addChatMessage('bot', 'Hi. I read your interviews, outreach, and matrix every time you ask. Try a quick action below, or type a question.');
+      addChatMessage('bot', 'Hi. I read your interviews, outreach, matrix, and the hypothesis board every time you ask. Try a quick action below, or type a question.');
     }
   }
 }
@@ -116,6 +117,19 @@ function buildDataContext() {
     .map(d => `- [${d.status}] ${d.deliverable}${d.evidence ? ` — ${d.evidence}` : ''}`)
     .join('\n');
 
+  /* Hypothesis board — statuses live in the DB, never hardcoded. */
+  const hypLines = [...STATE.hypotheses]
+    .sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0))
+    .map(hyp => {
+      const links = STATE.evidence_links.filter(l => l.hypothesis_id === hyp.id);
+      const s = links.filter(l => l.direction === 'supports').length;
+      const c = links.filter(l => l.direction === 'contradicts').length;
+      return `- ${hyp.code} (${hyp.kind === 'kill_criterion' ? 'kill criterion' : 'buyer hypothesis'}) [${hyp.status}]: ${hyp.title} — ${hyp.description} (evidence: ${s} supporting, ${c} contradicting)`;
+    }).join('\n');
+
+  const latestAssessment = [...STATE.ai_assessments]
+    .sort((a, b) => String(b.created_at).localeCompare(String(a.created_at)))[0];
+
   return `Current phase: ${CURRENT_PHASE} — ${phase?.long}
 
 Exit criteria for this phase:
@@ -138,6 +152,10 @@ ${highSevQuotes || '(none yet)'}
 Kill list entries: ${STATE.kill_list.length}
 Field checks: ${STATE.field_checks.length}
 
+Hypothesis board (${STATE.evidence_links.length} evidence links total):
+${hypLines || '(no hypotheses defined)'}
+Latest AI assessment: ${latestAssessment ? `${latestAssessment.leaning} (${String(latestAssessment.created_at).slice(0, 10)}, trigger: ${latestAssessment.trigger})` : 'none yet'}
+
 Field notes coverage: ${STATE.interviews.filter(r => r.notes_markdown).length} of ${STATE.interviews.length} interviews have full field notes.
 Documents on file: ${STATE.documents.length}${STATE.documents.length ? ' — ' + STATE.documents.slice(0, 20).map(d => `${d.filename}${d.interview_id ? ` (${d.interview_id})` : ''}`).join(', ') : ''}
 
@@ -149,7 +167,7 @@ search before answering — never say you lack access to the team's notes.`;
 }
 
 export async function sendChat(userText) {
-  if (isLocalMode) return;
+  if (!aiAvailable) return;
   const input = document.getElementById('chat-input');
   const text = (userText || input.value || '').trim();
   if (!text) return;
@@ -165,6 +183,9 @@ export async function sendChat(userText) {
       dataContext: buildDataContext(),
       sessionId: currentSessionId,
       tools: true,
+      // Local data mode: the worker has no DB to query, so the workspace
+      // rides along and the worker's tools answer from it.
+      localData: aiDataSlices(STATE),
     });
     setTyping(false);
 
@@ -180,47 +201,6 @@ export async function sendChat(userText) {
   }
 }
 
-/* Assistant proposes → user confirms → write goes through data.js */
-function addActionConfirmation(action) {
-  const msgs = document.getElementById('chat-messages');
-  const buttons = h('div', { class: 'flex gap-2' });
-
-  const TABLE_FOR_ACTION = {
-    add_interview: 'interviews',
-    add_matrix_entry: 'matrix',
-    update_deliverable: 'deliverables',
-    flag_quote: 'matrix',
-  };
-
-  buttons.appendChild(h('button', { class: 'btn btn-primary text-xs', onclick: async () => {
-    try {
-      const table = TABLE_FOR_ACTION[action.action_type];
-      if (!table) throw new Error(`Unknown action: ${action.action_type}`);
-      if (action.action_type.startsWith('add')) {
-        await data.create(table, action.payload);
-      } else {
-        const { id, ...patch } = action.payload;
-        await data.update(table, id, patch);
-      }
-      STATE[table] = await data.list(table);
-      renderCurrentRoute();
-      buttons.innerHTML = '';
-      buttons.appendChild(h('span', { class: 'chip chip-sage', text: 'Done' }));
-    } catch (e) {
-      buttons.innerHTML = '';
-      buttons.appendChild(h('span', { class: 'chip chip-rose', text: `Failed: ${e.message}` }));
-    }
-  } }, 'Confirm'));
-
-  buttons.appendChild(h('button', { class: 'btn btn-line text-xs', onclick: () => {
-    buttons.innerHTML = '';
-    buttons.appendChild(h('span', { class: 'chip chip-line', text: 'Skipped' }));
-  } }, 'Skip'));
-
-  msgs.appendChild(h('div', { class: 'chat-msg bot', style: 'max-width:100%;' }, [
-    h('div', { class: 'micro mb-2', style: 'color:var(--clay);', text: 'Proposed action' }),
-    h('div', { class: 'text-sm mb-3', text: action.description || JSON.stringify(action.payload) }),
-    buttons,
-  ]));
-  msgs.scrollTop = msgs.scrollHeight;
-}
+/* Assistant proposes → user confirms → write goes through data.js.
+   The Confirm/Skip block itself lives in js/actions.js so capture screens
+   can reuse the exact same pattern for AI link proposals. */

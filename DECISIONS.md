@@ -201,3 +201,84 @@ Dated 2026-07-04. Each entry is a decision the brief left open, plus the reasoni
     exported** so the executive briefing can reuse the exact same unit-economics
     model instead of re-implementing break-point logic in `reports.js` — one model,
     two consumers.
+
+---
+
+## Decision engine re-architecture (2026-07-05)
+
+38. **Seeded cross-referenced records carry stable, readable ids** (`hyp-h1`,
+    `mx-int002-wtp`, `doc-apollo-prices`) instead of generated UUIDs. `buildDb()`
+    already lets an explicit id win over `makeId()`, so seeded evidence_links and
+    assessment citations always resolve without a lookup pass. Local demo mode
+    only — Supabase generates real UUIDs via `gen_random_uuid()`.
+
+39. **For kill criteria, an evidence link's `direction: 'supports'` means the
+    evidence pushes the criterion toward breach** (supports the kill), mirroring
+    how 'supports' strengthens a buyer hypothesis. One consistent reading: supports
+    = makes the statement more true.
+
+40. **`importAll()` restores the stock hypotheses when a backup predates the
+    decision engine** (no `hypotheses` rows in the dump) — otherwise an old backup
+    would silently blank the hypothesis board. `SCHEMA_VERSION` stays at 1: the
+    change is additive, old backups remain importable.
+
+41. **Demo assessments carry `model: 'demo-seed'`** so nobody mistakes seeded
+    narrative for real Claude output; real assessments record the actual model id.
+
+42. **AI_MODE 'worker' requires the same magic-link sign-in as api mode, even
+    with local data.** The Worker authenticates every call with a Supabase JWT;
+    the alternative (a shared token in js/config.js) would put a secret in the
+    frontend, which core rule 10 forbids. Login here is identity, not data —
+    records stay in the browser. Documented in HANDOFF.md.
+
+43. **`aiDataSlices(state)` lives in data.js and takes state as an argument** —
+    data.js cannot import app.js (circular), and screens already hold STATE.
+    In api data mode it returns undefined and the Worker reads Supabase itself.
+
+44. **AI-proposed evidence links are stamped `source: 'ai_confirmed'` inside
+    `applyAction()`**, not left to the model's payload — the provenance label is
+    enforced at the write path, so a mislabelled proposal can't record itself
+    as human judgment.
+
+45. **Memo section drafting gets its own small POST /api/draft-section endpoint**
+    rather than riding through the chat loop — the chat loop persists sessions
+    and runs tool rounds; a draft is a single deterministic completion whose
+    result must land in an edit modal, never auto-saved.
+
+46. **All worker chat tools now filter in JS over one `fetchRows()` seam** instead
+    of building PostgREST filter strings — the same code path serves Supabase reads
+    and body-provided data (local-first mode), so the two modes cannot drift. At
+    this workspace's scale (hundreds of rows) fetching a table and filtering in
+    JS costs nothing measurable.
+
+47. **The client sends `phase` and `segments` in AI request bodies.** CURRENT_PHASE
+    and segment targets live in js/config.js (client-side by design); the worker
+    has no copy and should not grow one. They are not secrets.
+
+48. **/api/propose-links fails soft** (returns an empty proposal list on any
+    model or validation failure after one retry) — a link proposal is a quiet
+    nicety after a save; it must never turn a successful save into an error
+    banner. /api/assessment fails loud (502 with the validation errors) — an
+    assessment is an explicit, deliberate act.
+
+49. **worker.js exports its pure validators** (`validateAssessment`,
+    `validateProposals`, `extractJson`) as named exports alongside the default
+    Worker handler — Cloudflare ignores them; the offline smoke harness tests
+    the exact code that gates real assessments.
+
+50. **`content.verdict` is now derived, not directly picked** — it is set only
+    when both human seats (verdict_lead / verdict_field) match, and cleared to
+    'Undecided' otherwise. Reports and the Decision Brief divergence panel keep
+    reading the same canonical field they always did; old memos with only a
+    `verdict` simply show both seats as Undecided until re-picked.
+
+51. **Signing snapshots `signed_assessment_id` and `signed_leaning` into the memo
+    content** (not a new column) — memo content is already the record's JSONB
+    home, and the leaning copy keeps the record legible even if the assessment
+    list is later filtered.
+
+52. **docs/features.md was not rewritten wholesale.** Parts of it predate the
+    pipeline rebuild (Airtable-era screen descriptions). The decision-engine
+    section was added at the top with an explicit note that the code and CLAUDE.md
+    are the live truth — a full historical rewrite is outside this build's scope
+    and would have touched screens the brief says not to touch.

@@ -20,8 +20,11 @@ Two things to know:
 - **Settings** (sidebar footer): set the display names for the project lead and field
   coordinator (defaults: Young, Simon). Names update everywhere instantly and are never
   hardcoded. Data management (export, import, resets) also lives here — see below.
-- **The assistant panel is intentionally disabled** in local mode — it needs the Claude
-  API key, which lives server-side. Everything else works without it.
+- **The assistant ships off by default** (`AI_MODE = 'off'` in `js/config.js`) — it
+  needs the Claude API key, which lives server-side. Everything else works without it,
+  including the Decision Brief (it renders the seeded assessments) and all manual
+  evidence linking. See "Turning on the AI" below — the AI no longer requires the
+  live data backend.
 
 ## What was built
 
@@ -56,7 +59,7 @@ About 30–45 minutes:
    `SUPABASE_SERVICE_KEY`, `SUPABASE_ANON_KEY`, `CLAUDE_API_KEY`, `ALLOWED_ORIGIN`
    (`wrangler.toml` is already in the repo).
 3. **Frontend**: in `js/supabase.js` set your Supabase URL + anon key; in `js/config.js`
-   set `WORKER_URL` and `DATA_MODE = 'api'`.
+   set `WORKER_URL`, `DATA_MODE = 'api'`, and `AI_MODE = 'worker'`.
 4. Open the app → magic-link login appears → sign in. Done: shared data, and the
    assistant panel comes alive (it reads live project state and can propose actions you
    confirm).
@@ -64,6 +67,42 @@ About 30–45 minutes:
 Note: local demo data does not migrate automatically. The demo is a sandbox; you start
 the real programme clean (or ask Claude to write a one-off migration from the
 localStorage blob if you've entered real data locally).
+
+## Turning on the AI — with or without the live backend
+
+`AI_MODE` in `js/config.js` decouples the assistant from the data mode:
+
+- `'off'` (default) — no AI anywhere. Calm disabled states; everything else works.
+- `'worker'` — the assistant, Decision Brief assessments ("Regenerate brief"),
+  evidence-link proposals after saves, phase-exit reviews, and decision-memo
+  drafting all come alive — **in either data mode**.
+
+**The intended production setup is local-first data + live AI**: keep
+`DATA_MODE = 'local'` and set `AI_MODE = 'worker'`. Records stay in the browser;
+each AI request carries the relevant workspace slices in the request body; new
+assessments and confirmed links are persisted back through `js/data.js` locally.
+
+Exact steps (~20 minutes if the Worker isn't deployed yet):
+
+1. **Supabase (identity only in this setup)**: create a project, run
+   `sql/schema.sql`, insert the two of you into `team_members` (`status='active'`,
+   roles `lead`/`partner`). The Worker authenticates every AI call with a
+   Supabase magic-link JWT — that's why this is needed even with local data. No
+   research data is stored server-side in this mode.
+2. **Worker**: `wrangler deploy worker.js` with secrets `SUPABASE_URL`,
+   `SUPABASE_SERVICE_KEY`, `SUPABASE_ANON_KEY`, `CLAUDE_API_KEY`, `ALLOWED_ORIGIN`.
+3. **Frontend**: in `js/supabase.js` set the Supabase URL + anon key; in
+   `js/config.js` set `WORKER_URL` and `AI_MODE = 'worker'`.
+4. Open the app → magic-link sign-in appears once → the assistant panel, the
+   Decision Brief's Regenerate button, and the memo's Draft-from-evidence buttons
+   are live against your local data.
+
+Going fully live later (team sync) is unchanged: also set `DATA_MODE = 'api'` —
+the AI endpoints then read Supabase directly instead of the request body.
+
+One caveat of local-first AI: binary documents (images, PDFs without extracted
+text) can't be read by the assistant, since the files live only in the browser's
+IndexedDB. Text, markdown, and CSV uploads ride along fully.
 
 ## The sole-repository upgrade (notes + documents + assistant access)
 

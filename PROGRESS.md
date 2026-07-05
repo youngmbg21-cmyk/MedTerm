@@ -1,5 +1,127 @@
 # PROGRESS.md
 
+## Decision engine re-architecture — COMPLETE ✅ (2026-07-05)
+
+**Closing summary.** The workspace's spine is inverted: hypotheses (H1–H3), kill
+criteria (K1–K3), evidence links, and versioned AI assessments are now first-class
+records (`sql/schema.sql`, seeded in `js/seed.js`, flowing through `js/data.js`).
+A new ungated **Decision Brief** screen renders the latest leaning with its
+narrative brief, a record-driven hypothesis board with cited quotes and
+"what would change this" callouts, the kill-criteria strip, the append-only
+assessment trajectory (seeded INSUFFICIENT → PIVOT so demo mode is alive), and a
+divergence panel. The **Decision memo** verdict row is three seats — lead, field
+coordinator, AI (advisory, read-only); co-sign opens only when both humans agree,
+overriding the AI requires a written rationale, and signing snapshots the
+assessment id. Evidence linking is woven into capture (matrix, interviews, field
+checks, economics): manual linking works fully offline; in AI mode saves surface
+quiet, skippable proposals through the shared Confirm/Skip pattern
+(`js/actions.js`), and confirmed links carry `source: 'ai_confirmed'`. The Worker
+no longer hardcodes any hypothesis: prompts inject the live board, and new
+endpoints POST /api/assessment (JSON-validated, one retry, append-only),
+/api/propose-links (fail-soft), /api/draft-section (never auto-saved) work in
+both data modes — `AI_MODE` in `js/config.js` decouples the AI from DATA_MODE,
+enabling local-first data + live AI.
+
+**Judgment calls** are logged as DECISIONS.md items 38–52 (notable: worker-mode
+AI reuses magic-link identity rather than putting any token in the frontend;
+`content.verdict` became derived from the two human seats; kill-criterion links
+read "supports = pushes toward breach"; propose-links fails soft while
+/assessment fails loud).
+
+**Verified** (no build step; browserless): `node --check` on every js file and
+worker.js; import-path + named-export static audits; convention audit (no
+fetch/localStorage outside data.js, no innerHTML with content, no hardcoded
+names or hypotheses); data-shape audit vs sql/schema.sql; smoke harnesses —
+seed integrity (all 16 links resolve to real records, both assessments carry
+citations + steelman + valid enums, trajectory ordered), worker validators
+(11 fabricated invalid payloads rejected for the right reasons, extractJson
+fence/prose tolerance), app behavior (local-adapter roundtrip on the new
+tables, latest-assessment selector, three-seat co-sign gate truth table).
+Layout verified by responsive-class inspection at 375px/1280px: hypothesis
+board `md:grid-cols-2 xl:grid-cols-3` stacks to one column, verdict seats
+`sm:grid-cols-3` stack, kill rows and trajectory chips flex-wrap, field-check
+table keeps its `.stack` mobile mode.
+
+**Remaining human steps** (the only things a human was ever needed for): deploy
+`worker.js` with the five secrets, run `sql/schema.sql` in Supabase (identity
+rows in `team_members`), set `WORKER_URL` + `AI_MODE = 'worker'` in
+`js/config.js` — full steps in HANDOFF.md "Turning on the AI". Live-AI behaviors
+(Regenerate brief producing a real stored assessment, save-time link proposals)
+are built and validated against the config seam but need those secrets to
+exercise end-to-end — done, pending secrets.
+
+## Decision engine re-architecture — task ledger (started 2026-07-05)
+
+Hypotheses, kill criteria, evidence links, and versioned AI assessments become
+first-class records; a Decision Brief screen and a three-seat Decision memo sit
+between the evidence and the verdict. Task ledger (execute in order):
+
+1. [x] Schema: hypotheses / evidence_links / ai_assessments in sql/schema.sql,
+       data.js KNOWN_TABLES, app.js STATE, settings export list, seed.js
+       (6 hypotheses, 16 demo links, 2 demo assessments INSUFFICIENT→PIVOT).
+       Verified: smoke-seed harness (links resolve, trajectory, steelman).
+2. [x] Config: AI_MODE in js/config.js; chat/reports/settings/data.js AI
+       touchpoints now check aiAvailable, not isLocalMode; boot requires
+       magic-link login when AI_MODE='worker' (identity for the worker);
+       data.js gained assessmentRequest / proposeLinksRequest /
+       draftSectionRequest / aiDataSlices(state).
+3. [x] Worker: hypotheses/kill criteria removed from the system prompt and
+       injected from the DB (or the request body); POST /api/assessment
+       (validate + one retry, append-only insert or return-for-client-persist);
+       POST /api/propose-links (0–2, fail-soft); POST /api/draft-section;
+       chat tools query_hypotheses / query_evidence_links /
+       get_latest_assessment; propose_action gains add_evidence_link +
+       update_hypothesis_status; every tool reads via fetchRows(env,
+       localData, table) so body-provided data works identically.
+       Verified: node --check + smoke-worker harness (validators, extractJson,
+       prompt injection).
+4. [x] Shared confirm/skip helper extracted from js/chat.js into
+       js/actions.js (actionConfirmation/addActionConfirmation/applyAction,
+       TABLE_FOR_ACTION incl. add_evidence_link + update_hypothesis_status)
+5. [x] Decision Brief screen (js/screens/decision-brief.js) + top-level nav
+       entry, ungated: leaning card w/ regenerate (calm AI-off state),
+       hypothesis board (status/direction/strength, link counts, top-2
+       quoteBlocks, gaps, what-would-change callout), kill-criteria strip,
+       trajectory strip (tap → read-only modal), divergence panel.
+       Shared helpers in js/evidence.js (latestAssessment, resolveLink,
+       openLinkModal, renderMarkdown, runAssessment).
+6. [x] Decision memo rebuild: three verdict seats (lead / field via getTeam,
+       AI read-only from latest assessment); content.verdict now derived —
+       only set when both human seats match (reports/divergence keep reading
+       it); required override_rationale when the agreed verdict diverges
+       from the AI leaning; co-sign gate opens only on agreement and
+       snapshots signed_assessment_id + signed_leaning; per-section
+       "Draft from evidence" (AI mode) lands in the edit modal, never
+       auto-saves.
+7. [x] Evidence linking woven into capture: matrix quotes get Link buttons +
+       link chips + a quiet skippable AI proposal card after save; interview
+       detail gets a Hypothesis links block; field checks get per-row Link +
+       an AI proposal when a check resolves; unit economics gets
+       "Link to kill criterion" + a proposal when assumptions change. All
+       manual paths work in local mode with AI off (openLinkModal in
+       js/evidence.js, source 'human'); maybeProposeLinks fails soft.
+8. [x] Overview additions: "If we decided today" pulse card (latest leaning +
+       strengthening/weakening counts + Decision Brief link); "Run phase exit
+       review" (AI mode) + honey advisory banner when the current phase has no
+       phase_exit assessment. Overview stays the operations center.
+9. [x] Docs: CLAUDE.md core rule 11 + AI_MODE architecture + file map;
+       docs/features.md decision-engine section; docs/project-overview.md
+       decision-engine bullet; HANDOFF.md "Turning on the AI" (local-first +
+       live AI path, identity-only Supabase note); DECISIONS.md 38–52.
+10. [x] Final full verification vs Definition of done (see closing summary):
+        demo mode renders the seeded INSUFFICIENT→PIVOT trajectory with cited
+        evidence per hypothesis; the memo shows three verdict seats; a matrix
+        entry links manually to H2 via the Link affordance; the AI paths
+        (regenerate, proposals, drafts) are gated on AI_MODE with validated
+        server-side pipelines — pending secrets to exercise live.
+
+Verification per unit: node --check every changed js file, import audit,
+convention audit (no fetch/localStorage outside data.js, h() not innerHTML,
+no hardcoded names/hypotheses), data-shape audit vs sql/schema.sql, smoke
+harness in scratchpad.
+
+---
+
 Status of the autonomous rebuild, 2026-07-04.
 
 ## Milestone 1 — Usable MVP ✅

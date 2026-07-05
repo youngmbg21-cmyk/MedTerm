@@ -14,13 +14,14 @@ export const STATE = {
   outreach: [], interviews: [], matrix: [], deliverables: [],
   scripts: [], kill_list: [], field_checks: [], economics: [],
   segment_cards: [], decision_memos: [], reports: [], documents: [],
+  hypotheses: [], evidence_links: [], ai_assessments: [],
   chatHistory: [],
   loaded: false,
 };
 
 const TABLES = ['outreach', 'interviews', 'matrix', 'deliverables', 'scripts',
   'kill_list', 'field_checks', 'economics', 'segment_cards', 'decision_memos', 'reports',
-  'documents'];
+  'documents', 'hypotheses', 'evidence_links', 'ai_assessments'];
 
 export async function loadAllData() {
   setSync('Loading…');
@@ -113,6 +114,9 @@ export function renderCurrentRoute() {
    ------------------------------------------------------------ */
 const NAV = [
   { type: 'route', route: 'overview', label: 'Overview' },
+  // Available from Phase 0 onward by design: early on, the honest brief
+  // says INSUFFICIENT — showing that is the point.
+  { type: 'route', route: 'decision-brief', label: 'Decision Brief' },
   {
     type: 'group', id: 'fieldwork', label: 'Fieldwork', phaseLabel: 'phase 1–2',
     unlockAt: 1, activeThrough: 2,

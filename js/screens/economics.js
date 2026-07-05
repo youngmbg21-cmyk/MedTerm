@@ -5,6 +5,7 @@ import {
 } from '../app.js';
 import { interviewerOptions } from '../config.js';
 import { data } from '../data.js';
+import { openLinkModal, existingLinkChips, maybeProposeLinks } from '../evidence.js';
 
 /* ---------- Unit economics — "Does the patient-pays model survive its break-points?" ---------- */
 /* Exported so reports.js can reuse the exact model for the Risk Assessment
@@ -82,14 +83,24 @@ function renderEconomics(page) {
   });
   const saveBtn = h('button', { class: 'btn btn-primary mt-2', onclick: async () => {
     try {
-      if (saved) await data.update('economics', saved.id, { assumptions });
-      else await data.create('economics', { model_name: 'base', assumptions });
+      let record;
+      if (saved) record = await data.update('economics', saved.id, { assumptions });
+      else record = await data.create('economics', { model_name: 'base', assumptions });
       STATE.economics = await data.list('economics');
       saveBtn.textContent = 'Saved';
       setTimeout(() => { saveBtn.textContent = 'Save assumptions'; }, 1500);
+      // Changed inputs may bear on K1–K3 — quiet, skippable proposal (AI mode).
+      maybeProposeLinks('economics', record);
     } catch (e) { alert('Save failed: ' + e.message); }
   } }, 'Save assumptions');
   assumptionsCard.appendChild(saveBtn);
+  if (saved) {
+    assumptionsCard.appendChild(h('button', { class: 'btn btn-line mt-2 ml-2',
+      onclick: () => openLinkModal({ evidence_type: 'economics', evidence_id: saved.id, cite: 'unit economics' }) },
+    'Link to kill criterion'));
+    const econChips = existingLinkChips('economics', saved.id);
+    if (econChips.length) assumptionsCard.appendChild(h('div', { class: 'flex flex-wrap gap-1.5 mt-3' }, econChips));
+  }
 
   grid.appendChild(assumptionsCard);
   grid.appendChild(outputsCard);
@@ -240,8 +251,19 @@ function renderFieldChecks(page) {
           h('td', { 'data-label': 'Status' }, [chip(r.confirmed ? 'Confirmed' : 'Unconfirmed', r.confirmed ? 'sage' : 'honey')]),
           h('td', { 'data-label': 'Confirmed by', text: r.confirmed_by || '—' }),
           h('td', { class: 'num', 'data-label': 'Date', text: fmtDate(r.confirmed_date) }),
-          h('td', { 'data-label': 'Notes', text: r.notes || '—' }),
-          h('td', { 'data-label': '' }, [h('button', { class: 'btn btn-ghost text-xs', onclick: () => openFieldCheckForm(r) }, 'Edit')]),
+          h('td', { 'data-label': 'Notes' }, [
+            h('div', { text: r.notes || '—' }),
+            ...(existingLinkChips('field_check', r.id).length
+              ? [h('div', { class: 'flex flex-wrap gap-1.5 mt-1' }, existingLinkChips('field_check', r.id))]
+              : []),
+          ]),
+          h('td', { 'data-label': '' }, [
+            h('div', { class: 'flex gap-1' }, [
+              h('button', { class: 'btn btn-ghost text-xs', title: 'Link to hypothesis or kill criterion',
+                onclick: () => openLinkModal({ evidence_type: 'field_check', evidence_id: r.id, cite: 'field check' }) }, 'Link'),
+              h('button', { class: 'btn btn-ghost text-xs', onclick: () => openFieldCheckForm(r) }, 'Edit'),
+            ]),
+          ]),
         ]));
       });
     table.appendChild(tbody);
@@ -262,11 +284,16 @@ function openFieldCheckForm(existing) {
     form.confirmed = form.confirmed === 'Yes';
     if (!form.confirmed_date) form.confirmed_date = null;
     try {
-      if (existing) await data.update('field_checks', existing.id, form);
-      else await data.create('field_checks', form);
+      let saved;
+      if (existing) saved = await data.update('field_checks', existing.id, form);
+      else saved = await data.create('field_checks', form);
       STATE.field_checks = await data.list('field_checks');
       closeModal();
       renderCurrentRoute();
+      // A freshly resolved check may bear on K1–K3 — quiet proposal (AI mode).
+      if (saved.confirmed && (!existing || !existing.confirmed)) {
+        maybeProposeLinks('field_check', saved);
+      }
     } catch (e) { alert('Save failed: ' + e.message); }
   });
 }

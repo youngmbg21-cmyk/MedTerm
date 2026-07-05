@@ -4,6 +4,83 @@
 
 This document describes every screen and component in `index.html`. Use it as the definitive reference when adding, changing, or debugging any feature.
 
+> **2026-07 decision-engine update.** The sections below this note predate the
+> pipeline rebuild in places (they mention Airtable and older screen names — the
+> live truth is the code plus `CLAUDE.md`). The decision engine added on top of
+> the capture layer is documented here first because it changes how the app is
+> read: evidence now flows structurally from capture to verdict.
+
+---
+
+## The Decision Engine (2026-07)
+
+### Decision Brief (`#decision-brief`)
+
+Top-level, available from Phase 0 onward — ungated by design. Answers:
+*"If we had to decide today, what would we do — and on what evidence?"*
+Early in the programme the honest answer is INSUFFICIENT; showing that is the point.
+
+**Components:**
+- **Leaning card** — the newest `ai_assessments` record: leaning as a large chip
+  (sage=GO, honey=PIVOT, rose=NO-GO, line=INSUFFICIENT), the narrative brief
+  (`summary_markdown`, which always contains a paragraph titled "The case against
+  this leaning"), timestamp/trigger/model, the data snapshot it was based on, and a
+  **Regenerate brief** button. With `AI_MODE = 'off'` the button shows a calm
+  "connect the assistant" state; everything else still renders from stored records.
+- **Hypothesis board** — one card per buyer hypothesis (H1–H3): live status chip,
+  the latest assessment's direction arrow and evidence-strength label
+  (strong/moderate/thin — never a numeric confidence), supporting-vs-contradicting
+  link counts, the top 2 linked quotes as `quote-block`s, the evidence gaps, and
+  "What would change this" as a callout.
+- **Kill-criteria strip** — K1–K3 as compact rows: holding / breached / unknown,
+  with the cited economics evidence as chips.
+- **Trajectory strip** — every assessment, oldest first, as a row of colored
+  leaning chips. Tapping one opens the historical assessment read-only.
+  Assessments are append-only; the sequence is itself evidence.
+- **Divergence panel** — appears only when the memo's agreed human verdict differs
+  from the latest AI leaning; shows both side by side with the written override
+  rationale (or a honey warning that it's still missing).
+
+### Decision memo — three seats at the table (`#decision-memo`)
+
+The verdict row is three columns: the lead's verdict, the field coordinator's
+verdict (names from `getTeam()`), and the AI's latest leaning (read-only, pulled
+from `ai_assessments`). Each human picks independently; `content.verdict` is set
+only when both match. Co-sign is enabled only on agreement; if the agreed verdict
+diverges from the AI leaning, a required "Why we're overriding the assessment"
+field must be written before signing. Signing snapshots the assessment id and
+leaning into the memo. Each of the seven sections has a **Draft from evidence**
+button (AI mode) — the draft lands in the edit modal pre-filled, never auto-saved.
+
+### Evidence linking (matrix · interviews · field checks · economics)
+
+- Every matrix quote, interview, field check, and the unit-economics model has a
+  small **Link** affordance → modal: hypothesis dropdown, direction
+  (supports/contradicts/neutral; for kill criteria "supports" = pushes toward
+  breach), strength, one-line note. Fully functional in local mode with AI off
+  (`source: 'human'`).
+- In AI mode, saving a matrix entry, resolving a field check, or changing
+  economics inputs surfaces a quiet, skippable proposal card (0–2 proposals,
+  shared Confirm/Skip pattern). Confirmed proposals are written with
+  `source: 'ai_confirmed'`. Never a blocking modal; failures are silent.
+- Existing links render as chips wherever the record appears.
+
+### Overview additions
+
+A slim "If we decided today" pulse card (latest leaning + hypotheses
+strengthening/weakening + link to the Decision Brief) and a **Run phase exit
+review** action next to the exit-criteria panel, with a honey advisory banner
+when the current phase has no `phase_exit` assessment. Advancing `CURRENT_PHASE`
+remains a config change — the gate is advisory, not a hard block.
+
+### The records behind it
+
+| Table | What it is |
+|-------|------------|
+| `hypotheses` | H1–H3 (buyer hypotheses) and K1–K3 (kill criteria) with live status + status note. Single source of truth — the Worker injects these into every AI prompt; nothing hardcodes them. |
+| `evidence_links` | One row per piece of evidence bearing on a hypothesis: type, record id, direction, strength, note, provenance (`human` / `ai_confirmed`). |
+| `ai_assessments` | Append-only, versioned assessments: leaning, narrative brief, per-hypothesis directions with cited evidence, break-point statuses, data snapshot, model. |
+
 ---
 
 ## Navigation & Routing

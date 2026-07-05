@@ -6,6 +6,7 @@ import {
 import { SEGMENT_NAMES, THEMES } from '../config.js';
 import { data } from '../data.js';
 import { exportMatrix } from '../export.js';
+import { openLinkModal, existingLinkChips, maybeProposeLinks } from '../evidence.js';
 
 function renderMatrix(page) {
   const filterState = { theme: 'all', segment: 'all', minSev: 0, wtp: 'all' };
@@ -65,9 +66,18 @@ function renderMatrix(page) {
     }
 
     rows.forEach(r => {
-      card.appendChild(quoteBlock(r, {
-        showEdit: h('button', { class: 'btn btn-ghost text-xs', onclick: () => openMatrixForm(r) }, 'Edit'),
-      }));
+      const block = quoteBlock(r, {
+        showEdit: h('div', { class: 'flex gap-1' }, [
+          h('button', { class: 'btn btn-ghost text-xs', title: 'Link to hypothesis',
+            onclick: () => openLinkModal({ evidence_type: 'matrix', evidence_id: r.id, cite: r.interview_id || 'quote' }) }, 'Link'),
+          h('button', { class: 'btn btn-ghost text-xs', onclick: () => openMatrixForm(r) }, 'Edit'),
+        ]),
+      });
+      const linkChips = existingLinkChips('matrix', r.id);
+      if (linkChips.length) {
+        block.appendChild(h('div', { class: 'flex flex-wrap gap-1.5 mt-2' }, linkChips));
+      }
+      card.appendChild(block);
     });
   }
   renderRows();
@@ -87,11 +97,14 @@ function openMatrixForm(existing) {
   ], async (form) => {
     if (form.severity) form.severity = Number(form.severity);
     try {
-      if (existing) await data.update('matrix', existing.id, form);
-      else await data.create('matrix', form);
+      let saved;
+      if (existing) saved = await data.update('matrix', existing.id, form);
+      else saved = await data.create('matrix', form);
       STATE.matrix = await data.list('matrix');
       closeModal();
       renderCurrentRoute();
+      // Quiet, skippable link proposal after the save — AI mode only.
+      maybeProposeLinks('matrix', saved);
     } catch (e) { alert('Save failed: ' + e.message); }
   });
 }
