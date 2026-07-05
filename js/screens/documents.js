@@ -3,7 +3,7 @@
    Supabase Storage when live) and the assistant can search and read them. */
 import {
   STATE, registerRoute, renderCurrentRoute, h, chip, emptyState,
-  openModal, closeModal, formField, fmtDate,
+  openModal, closeModal, formField, fmtDate, setPageActions,
 } from '../app.js';
 import { SEGMENT_NAMES, getTeam } from '../config.js';
 import { data } from '../data.js';
@@ -31,6 +31,9 @@ function renderDocuments(page) {
     h('span', { text: 'Upload field notes, price lists, photos and scans — PDF, text, CSV or images. De-identify first (initials, not names). Never upload consent forms or identity documents.' }),
   ]));
 
+  /* One primary action, in the app header; the tools row stays quiet */
+  setPageActions(h('button', { class: 'btn btn-primary', onclick: openUploadForm }, '+ Upload document'));
+
   page.appendChild(h('div', { class: 'flex flex-wrap items-center gap-3 mb-4' }, [
     h('input', { class: 'input flex-1 min-w-[180px]', placeholder: 'Search filename, description, contents…',
       oninput: e => { filterState.q = e.target.value; renderList(); } }),
@@ -38,7 +41,6 @@ function renderDocuments(page) {
       h('option', { value: 'all' }, 'All segments'),
       ...SEGMENT_NAMES.map(s => h('option', { value: s }, s)),
     ]),
-    h('button', { class: 'btn btn-primary', onclick: openUploadForm }, '+ Upload document'),
   ]));
 
   const card = h('div', { class: 'card' });

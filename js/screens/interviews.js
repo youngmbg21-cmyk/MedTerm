@@ -4,7 +4,7 @@
 import {
   STATE, registerRoute, renderCurrentRoute, h, chip, emptyState, quoteBlock,
   openModal, closeModal, formField, isUntaggedOverdue, daysSince, fmtDate, go,
-  segmentCoverageRows,
+  segmentCoverageRows, setPageActions,
 } from '../app.js';
 import { SEGMENTS, SEGMENT_NAMES, interviewerOptions } from '../config.js';
 import { data } from '../data.js';
@@ -28,10 +28,12 @@ function renderInterviews(page) {
     ]));
   }
 
+  /* One primary action, in the app header; the tools row stays quiet */
+  setPageActions(h('button', { class: 'btn btn-primary', onclick: () => openInterviewForm() }, '+ Log interview'));
+
   page.appendChild(h('div', { class: 'flex flex-wrap items-center gap-3 mb-4' }, [
     h('div', { class: 'text-sm flex-1 t-soft', text: `${interviews.length} logged · hard rule: tag in matrix the same day` }),
     h('button', { class: 'btn btn-line', onclick: exportInterviews }, '↓ CSV'),
-    h('button', { class: 'btn btn-primary', onclick: () => openInterviewForm() }, '+ Log interview'),
   ]));
 
   if (!interviews.length) {

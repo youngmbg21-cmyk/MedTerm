@@ -4,6 +4,7 @@
 import {
   STATE, registerRoute, renderCurrentRoute, h, chip, emptyState, quoteBlock,
   openModal, closeModal, formField, isUntaggedOverdue, go, rankThemes,
+  setPageActions,
 } from '../app.js';
 import { SEGMENT_NAMES, THEMES } from '../config.js';
 import { data } from '../data.js';
@@ -37,6 +38,9 @@ function renderMatrix(page) {
     ]));
   }
 
+  /* One primary action, in the app header; the tools row stays quiet */
+  setPageActions(h('button', { class: 'btn btn-primary', onclick: () => openMatrixForm() }, '+ Add quote'));
+
   const toolbar = h('div', { class: 'flex flex-wrap items-center gap-3 mb-4' }, [
     h('div', { class: 'seg-toggle' }, [
       h('button', {
@@ -49,7 +53,6 @@ function renderMatrix(page) {
       }, 'Quotes'),
     ]),
     h('button', { class: 'btn btn-line ml-auto', onclick: exportMatrix }, '↓ CSV'),
-    h('button', { class: 'btn btn-primary', onclick: () => openMatrixForm() }, '+ Add quote'),
   ]);
   page.appendChild(toolbar);
 

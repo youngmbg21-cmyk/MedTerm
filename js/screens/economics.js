@@ -1,7 +1,7 @@
 /* Phase 4 — Economics screens. */
 import {
   STATE, registerRoute, renderCurrentRoute, h, chip, emptyState,
-  openModal, closeModal, formField, fmtDate,
+  openModal, closeModal, formField, fmtDate, setPageActions,
 } from '../app.js';
 import { interviewerOptions } from '../config.js';
 import { data } from '../data.js';
@@ -230,9 +230,8 @@ function renderFieldChecks(page) {
     ]));
   }
 
-  page.appendChild(h('div', { class: 'mb-4 flex justify-end' }, [
-    h('button', { class: 'btn btn-primary', onclick: () => openFieldCheckForm() }, '+ Add assumption'),
-  ]));
+  /* One primary action, in the app header */
+  setPageActions(h('button', { class: 'btn btn-primary', onclick: () => openFieldCheckForm() }, '+ Add assumption'));
 
   const card = h('div', { class: 'card' });
   if (!STATE.field_checks.length) {

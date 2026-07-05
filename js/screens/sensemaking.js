@@ -2,7 +2,7 @@
    All read the canonical snake_case shape via STATE / data.js. */
 import {
   STATE, registerRoute, renderCurrentRoute, h, chip, emptyState, quoteBlock,
-  openModal, closeModal, formField, fmtDate, rankThemes,
+  openModal, closeModal, formField, fmtDate, rankThemes, setPageActions,
 } from '../app.js';
 import { data } from '../data.js';
 import { exportKillList } from '../export.js';
@@ -147,10 +147,12 @@ registerRoute('top-pains', 'Top-3 pains', renderTopPains,
 
 /* ---------- Kill list — "Which hypotheses has the evidence killed?" ---------- */
 function renderKillList(page) {
+  /* One primary action, in the app header; the tools row stays quiet */
+  setPageActions(h('button', { class: 'btn btn-primary', onclick: openKillForm }, '+ Kill a hypothesis'));
+
   page.appendChild(h('div', { class: 'flex flex-wrap items-center gap-3 mb-4' }, [
     h('div', { class: 'text-sm flex-1 t-soft', text: 'Append-only. Entries cannot be edited or removed — that is the point.' }),
     h('button', { class: 'btn btn-line', onclick: exportKillList }, '↓ CSV'),
-    h('button', { class: 'btn btn-primary', onclick: openKillForm }, '+ Kill a hypothesis'),
   ]));
 
   const card = h('div', { class: 'card' });
@@ -186,7 +188,7 @@ function openKillForm() {
       closeModal();
       renderCurrentRoute();
     } catch (e) { alert('Save failed: ' + e.message); }
-  }, 'Kill it');
+  }, 'Kill it', { danger: true });
 }
 
 registerRoute('kill-list', 'Kill list', renderKillList,

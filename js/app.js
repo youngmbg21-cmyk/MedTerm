@@ -375,7 +375,7 @@ export function emptyState(title, sub, action) {
 /* ------------------------------------------------------------
    MODAL + FORM HELPERS
    ------------------------------------------------------------ */
-export function openModal(title, fields, onSubmit, submitLabel = 'Save') {
+export function openModal(title, fields, onSubmit, submitLabel = 'Save', { danger } = {}) {
   const root = document.getElementById('modal-root');
   root.innerHTML = '';
 
@@ -388,11 +388,12 @@ export function openModal(title, fields, onSubmit, submitLabel = 'Save') {
     });
     onSubmit(out);
   } });
-  form.appendChild(h('div', { class: 'serif text-xl mb-5', text: title }));
+  /* Destructive confirmations are visually distinct: rose header rule + rose action */
+  form.appendChild(h('div', { class: `modal-title serif${danger ? ' modal-title-danger' : ''}`, text: title }));
   fields.forEach(f => form.appendChild(f.el));
   form.appendChild(h('div', { class: 'flex gap-3 mt-5 justify-end pt-4 border-t b-soft' }, [
     h('button', { type: 'button', class: 'btn btn-line', onclick: closeModal }, 'Cancel'),
-    h('button', { type: 'submit', class: 'btn btn-primary' }, submitLabel),
+    h('button', { type: 'submit', class: `btn ${danger ? 'btn-danger' : 'btn-primary'}` }, submitLabel),
   ]));
 
   root.appendChild(h('div', {
