@@ -1,5 +1,75 @@
 # PROGRESS.md
 
+## Designer's note — design elevation pass (2026-07-05)
+
+**What changed visually.** The app now runs on a documented design system
+(`css/theme.css` header block): one type scale with two weights per family,
+a 4px spacing scale, colour roles with AA-passing tone trios, two elevation
+levels, two radii, one motion rule. The shell was redrawn — Fraunces 22
+page titles over the screen's one-line question, the screen's single
+primary action top-right in the header, content centred at 1120px, a
+tightened sidebar with right-aligned phase badges and a filled active
+state. Secondary text app-wide got darker (the old `--ink-mute` failed
+WCAG AA), 139 inline styles became utility classes, quotes read as
+editorial pull quotes (Fraunces italic, hairline left rule), empty states
+carry a first action, loading is one skeleton pattern, and report printing
+is typeset like a deliverable (title block, running footer). The decision
+memo now leads with "Draft from evidence" — AI-first, human-signed. And
+the phone works: the mobile drawer was functionally broken (trapped under
+its own overlay whenever the Tailwind CDN loaded) and is now a real
+drawer pattern with scroll lock, Escape, and focus management.
+
+**The five decisions that most affect future screens.**
+1. The shell never depends on the Tailwind CDN — shell layout lives in
+   owned classes; utilities are for in-screen layout only (DECISIONS #60/62).
+2. One primary action per screen, mounted in the header via
+   `setPageActions()`; everything else is line/ghost in a quiet tools row.
+3. Colour is roles + tone trios, all AA; charts mirror the palette by hand.
+4. States are components: `emptyState(title, sub, action?)`,
+   `loadingState()`, banners, and calm-disabled via `aria-disabled` (muted
+   but tappable — a tap explains, never a dead click).
+5. Every interactive element: 40px hit target + `:focus-visible` ring.
+
+**Deliberate compromises.** Tailwind utilities remain inside screens
+(removing the CDN wholesale was too risky for one pass); `alert()` error
+handling remains in ~30 catch handlers (banner swaps are logic surgery);
+print footers carry date + document identity but no page numbers (Chrome
+lacks `@page` margin boxes); ~29 inline styles remain, all dynamic values
+or one-off viewer sizing (grep-audited).
+
+### Contrast ratios (computed, WCAG AA threshold 4.5:1 for text)
+| Pair | Ratio |
+|---|---|
+| ink `#1F2A28` on page | 13.13 |
+| ink-soft `#4A5651` on page | 6.80 |
+| ink-mute `#6E6A5E` on card / page | 5.40 / 4.80 |
+| sage text `#3F5A4D` on sage-soft | 6.34 |
+| honey text `#755A1E` on honey-soft | 5.39 |
+| rose text `#9a3f3f` on rose-soft | 5.39 |
+| info text `#3E5C77` on info-soft | 5.81 |
+| plum text `#644A67` on plum-soft | 6.33 |
+| clay text `#96501F` on page / clay-soft | 5.38 / 4.89 |
+| white on sage-deep (btn-primary) | 7.55 |
+
+### Mobile checklist — every route walked at 375px (Playwright, touch)
+All 23 routes render with no page errors and no horizontal page overflow
+(the matrix pivot's internal scroll is the one sanctioned exception) at
+both 375px and 1280px. Capability checks at 375px, all passing:
+- Drawer: opens above overlay (z 45>35), nav tap navigates + closes, Escape
+  closes + returns focus to the hamburger, backdrop closes, body scroll
+  locks while open, works with a late-injected utility stylesheet
+  (the old failure mode, simulated).
+- Forms: interviews add/edit modal opens from the header action; submit
+  button 40px and reachable; Cancel works.
+- Master–detail: list tap swaps the detail pane (INT-012 → INT-006 verified).
+- Matrix grid: horizontally scrollable inside its card with the theme
+  column `position: sticky` pinned left.
+- Decision memo: verdict seat buttons 40px; AI-off draft button shows its
+  inline note on tap; "Write manually" opens the edit modal.
+- Chat panel opens and closes; CSV export fires a real download event.
+
+---
+
 ## Decision engine re-architecture — COMPLETE ✅ (2026-07-05)
 
 **Closing summary.** The workspace's spine is inverted: hypotheses (H1–H3), kill
