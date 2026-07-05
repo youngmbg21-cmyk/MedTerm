@@ -26,7 +26,7 @@ function renderThemeAnalysis(page) {
     ]));
   }
 
-  page.appendChild(h('div', { class: 'text-sm mb-4', style: 'color:var(--ink-soft);', text: `Ranked by frequency × average severity × WTP signal. ${ranked.length} themes from ${STATE.matrix.length} matrix entries.` }));
+  page.appendChild(h('div', { class: 'text-sm mb-4 t-soft', text: `Ranked by frequency × average severity × WTP signal. ${ranked.length} themes from ${STATE.matrix.length} matrix entries.` }));
 
   const table = h('table', { class: 'data' });
   const headRow = h('tr');
@@ -83,14 +83,14 @@ function renderSegmentCards(page) {
     ]));
 
     if (topThemes.length) {
-      card.appendChild(h('div', { class: 'micro mb-2', style: 'color:var(--ink-mute);', text: 'Top themes' }));
+      card.appendChild(h('div', { class: 'micro mb-2 t-mute', text: 'Top themes' }));
       card.appendChild(h('div', { class: 'flex flex-wrap gap-2 mb-4' },
         topThemes.map(([t, n]) => chip(`${t} (${n})`, 'plum'))));
     }
 
     const topQuotes = [...quotes].sort((a, b) => (+b.severity || 0) - (+a.severity || 0)).slice(0, 3);
     if (topQuotes.length) {
-      card.appendChild(h('div', { class: 'micro mb-1', style: 'color:var(--ink-mute);', text: 'Strongest quotes' }));
+      card.appendChild(h('div', { class: 'micro mb-1 t-mute', text: 'Strongest quotes' }));
       topQuotes.forEach(q => card.appendChild(quoteBlock(q)));
     }
 
@@ -148,7 +148,7 @@ registerRoute('top-pains', 'Top-3 pains', renderTopPains,
 /* ---------- Kill list — "Which hypotheses has the evidence killed?" ---------- */
 function renderKillList(page) {
   page.appendChild(h('div', { class: 'flex flex-wrap items-center gap-3 mb-4' }, [
-    h('div', { class: 'text-sm flex-1', style: 'color:var(--ink-soft);', text: 'Append-only. Entries cannot be edited or removed — that is the point.' }),
+    h('div', { class: 'text-sm flex-1 t-soft', text: 'Append-only. Entries cannot be edited or removed — that is the point.' }),
     h('button', { class: 'btn btn-line', onclick: exportKillList }, '↓ CSV'),
     h('button', { class: 'btn btn-primary', onclick: openKillForm }, '+ Kill a hypothesis'),
   ]));
@@ -160,13 +160,13 @@ function renderKillList(page) {
     [...STATE.kill_list]
       .sort((a, b) => String(b.killed_date || '').localeCompare(String(a.killed_date || '')))
       .forEach(r => {
-        card.appendChild(h('div', { class: 'px-6 py-4 border-b', style: 'border-color:var(--line-soft);' }, [
+        card.appendChild(h('div', { class: 'px-6 py-4 border-b b-soft' }, [
           h('div', { class: 'flex items-center gap-2 mb-2' }, [
             chip('Killed', 'rose'),
-            h('span', { class: 'text-xs', style: 'color:var(--ink-mute);', text: fmtDate(r.killed_date) }),
+            h('span', { class: 'text-xs t-mute', text: fmtDate(r.killed_date) }),
           ]),
           h('div', { class: 'serif text-base mb-1', text: r.hypothesis || '' }),
-          h('div', { class: 'text-sm', style: 'color:var(--ink-soft);', text: r.evidence || '' }),
+          h('div', { class: 'text-sm t-soft', text: r.evidence || '' }),
         ]));
       });
   }
@@ -202,13 +202,13 @@ function renderStateOfField(page) {
   const card = h('div', { class: 'card p-6 max-w-3xl' });
 
   if (record?.evidence) {
-    card.appendChild(h('div', { class: 'text-xs mb-3', style: 'color:var(--ink-mute);', text: `Last updated ${fmtDate(record.updated_at || record.created_at)}` }));
+    card.appendChild(h('div', { class: 'text-xs mb-3 t-mute', text: `Last updated ${fmtDate(record.updated_at || record.created_at)}` }));
     card.appendChild(h('div', { class: 'quote-text', style: 'border:none; padding:0;', text: record.evidence }));
     card.appendChild(h('div', { class: 'mt-5' }, [
       h('button', { class: 'btn btn-line', onclick: () => openFieldEditor(record) }, 'Edit'),
     ]));
   } else {
-    card.appendChild(h('div', { class: 'text-sm mb-4', style: 'color:var(--ink-mute);', text: 'No state-of-the-field written yet. One dated paragraph, updated whenever the picture changes.' }));
+    card.appendChild(h('div', { class: 'text-sm mb-4 t-mute', text: 'No state-of-the-field written yet. One dated paragraph, updated whenever the picture changes.' }));
     card.appendChild(h('button', { class: 'btn btn-primary', onclick: () => openFieldEditor(record) }, 'Write the first one'));
   }
   page.appendChild(card);

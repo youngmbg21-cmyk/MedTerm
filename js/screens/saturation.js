@@ -14,15 +14,15 @@ function renderSaturation(page) {
     cards.appendChild(h('div', { class: 'card p-5' }, [
       h('div', { class: 'flex items-baseline justify-between mb-2' }, [
         h('div', { class: 'serif text-base', text: seg.name }),
-        h('div', { class: 'text-xs num', style: 'color:var(--ink-mute);', text: `${done} / ${seg.target}` }),
+        h('div', { class: 'text-xs num t-mute', text: `${done} / ${seg.target}` }),
       ]),
       h('div', { class: 'mb-3' }, [progressBar(pct, color)]),
-      h('div', { class: 'text-xs', style: 'color:var(--ink-mute);', text: status }),
+      h('div', { class: 'text-xs t-mute', text: status }),
     ]));
   });
   page.appendChild(cards);
 
-  const note = h('div', { class: 'card-soft p-5 mt-5 text-sm', style: 'color:var(--ink-soft);' }, [
+  const note = h('div', { class: 'card-soft p-5 mt-5 text-sm t-soft' }, [
     h('strong', { text: 'How to read this: ' }),
     'a segment “saturates” when the last three interviews surface 0–1 new themes each. Counts here are necessary but not sufficient — check the matrix for whether new themes are still emerging.',
   ]);

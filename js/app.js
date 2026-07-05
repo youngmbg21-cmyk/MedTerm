@@ -297,7 +297,7 @@ export function kpiCard(label, value, sub, tone) {
   const num = h('div', { class: 'kpi-num', text: String(value) });
   if (toneColor) num.style.color = toneColor;
   const card = h('div', { class: 'card kpi' }, [num, h('div', { class: 'kpi-label', text: label })]);
-  if (sub) card.appendChild(h('div', { class: 'text-xs mt-2', style: 'color:var(--ink-mute);', text: sub }));
+  if (sub) card.appendChild(h('div', { class: 'text-xs mt-2 t-mute', text: sub }));
   return card;
 }
 
@@ -339,15 +339,17 @@ export function quoteBlock(entry, { showEdit } = {}) {
     head,
     h('div', { class: 'quote-text', text: entry.quote ? `“${entry.quote}”` : '(no quote)' }),
   ]);
-  if (entry.notes) block.appendChild(h('div', { class: 'text-xs mt-2', style: 'color:var(--ink-mute);', text: entry.notes }));
+  if (entry.notes) block.appendChild(h('div', { class: 'text-xs mt-2 t-mute', text: entry.notes }));
   return block;
 }
 
-/* 5 · Empty state — no blank panels, ever */
-export function emptyState(title, sub) {
-  return h('div', { class: 'p-10 text-center' }, [
-    h('div', { class: 'text-sm', style: 'color:var(--ink-mute);', text: title }),
-    sub ? h('div', { class: 'text-xs mt-1', style: 'color:var(--ink-mute);', text: sub }) : null,
+/* 5 · Empty state — title + one-line body + optional single action.
+   Never a bare sentence in a blank panel. */
+export function emptyState(title, sub, action) {
+  return h('div', { class: 'empty-state' }, [
+    h('div', { class: 'empty-title', text: title }),
+    sub ? h('div', { class: 'empty-sub', text: sub }) : null,
+    action ? h('button', { class: 'btn btn-line', onclick: action.onclick }, action.label) : null,
   ].filter(Boolean));
 }
 
@@ -372,7 +374,7 @@ export function openModal(title, fields, onSubmit, submitLabel = 'Save') {
   } });
   form.appendChild(h('div', { class: 'serif text-xl mb-5', text: title }));
   fields.forEach(f => form.appendChild(f.el));
-  form.appendChild(h('div', { class: 'flex gap-3 mt-5 justify-end pt-4 border-t', style: 'border-color:var(--line-soft);' }, [
+  form.appendChild(h('div', { class: 'flex gap-3 mt-5 justify-end pt-4 border-t b-soft' }, [
     h('button', { type: 'button', class: 'btn btn-line', onclick: closeModal }, 'Cancel'),
     h('button', { type: 'submit', class: 'btn btn-primary' }, submitLabel),
   ]));

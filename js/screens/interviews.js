@@ -29,7 +29,7 @@ function renderInterviews(page) {
   }
 
   page.appendChild(h('div', { class: 'flex flex-wrap items-center gap-3 mb-4' }, [
-    h('div', { class: 'text-sm flex-1', style: 'color:var(--ink-soft);', text: `${interviews.length} logged · hard rule: tag in matrix the same day` }),
+    h('div', { class: 'text-sm flex-1 t-soft', text: `${interviews.length} logged · hard rule: tag in matrix the same day` }),
     h('button', { class: 'btn btn-line', onclick: exportInterviews }, '↓ CSV'),
     h('button', { class: 'btn btn-primary', onclick: () => openInterviewForm() }, '+ Log interview'),
   ]));
@@ -48,7 +48,7 @@ function renderInterviews(page) {
   const layout = h('div', { class: 'md-layout' });
   const listCard = h('div', { class: 'card overflow-hidden' });
   const coverageWrap = h('div', { class: 'px-5 pt-5 pb-2' }, [
-    h('div', { class: 'micro mb-2', style: 'color:var(--ink-mute);', text: 'Recruitment vs target' }),
+    h('div', { class: 'micro mb-2 t-mute', text: 'Recruitment vs target' }),
     barChart(segmentCoverageRows(), { width: 320, barHeight: 16, gap: 7 }),
   ]);
   listCard.appendChild(coverageWrap);
@@ -93,7 +93,7 @@ function renderInterviews(page) {
         h('span', { class: 'font-medium text-sm num', text: r.interview_id || '—' }),
         chip(untagged ? 'untagged' : 'tagged', untagged ? (isUntaggedOverdue(r) ? 'rose' : 'honey') : 'sage'),
       ]),
-      h('div', { class: 'text-xs mt-1', style: 'color:var(--ink-mute);', text: `${fmtDate(r.date)} · ${r.format || '—'} · ${r.interviewer || '—'}` }),
+      h('div', { class: 'text-xs mt-1 t-mute', text: `${fmtDate(r.date)} · ${r.format || '—'} · ${r.interviewer || '—'}` }),
     ]);
     item.addEventListener('click', () => { selectedId = r.id; renderList(); renderDetail(); });
     return item;
@@ -110,7 +110,7 @@ function renderInterviews(page) {
         h('span', { class: 'text-sm font-medium truncate', text: group.name }),
       ]),
       h('div', { class: 'flex items-center gap-2 flex-shrink-0' }, [
-        untaggedCount ? h('span', { class: 'flex items-center gap-1 text-xs', style: 'color:var(--rose);' }, [
+        untaggedCount ? h('span', { class: 'flex items-center gap-1 text-xs t-rose' }, [
           h('span', { class: 'group-dot' }), String(untaggedCount),
         ]) : null,
         countChip,
@@ -161,12 +161,12 @@ function renderInterviews(page) {
     if (!r) { detailCard.appendChild(emptyState('Select an interview.')); return; }
 
     const untagged = r.tagged_same_day !== 'Y';
-    const header = h('div', { class: 'px-6 pt-5 pb-4 border-b', style: 'border-color:var(--line-soft);' }, [
+    const header = h('div', { class: 'px-6 pt-5 pb-4 border-b b-soft' }, [
       h('div', { class: 'flex flex-wrap items-center justify-between gap-2' }, [
         h('div', { class: 'serif text-xl', text: `${r.interview_id || '—'} · ${r.segment || '—'}` }),
         h('button', { class: 'btn btn-line text-xs', onclick: () => openInterviewForm(r) }, 'Edit'),
       ]),
-      h('div', { class: 'text-xs mt-1', style: 'color:var(--ink-mute);', text: `${fmtDate(r.date)} · ${r.format || '—'} · by ${r.interviewer || '—'} · initials ${r.initials || '—'} · recorded ${r.recorded || '—'}` }),
+      h('div', { class: 'text-xs mt-1 t-mute', text: `${fmtDate(r.date)} · ${r.format || '—'} · by ${r.interviewer || '—'} · initials ${r.initials || '—'} · recorded ${r.recorded || '—'}` }),
     ]);
     detailCard.appendChild(header);
 
@@ -188,7 +188,7 @@ function renderInterviews(page) {
 
     if (r.brief_topic) {
       detailCard.appendChild(h('div', { class: 'px-6 pt-4' }, [
-        h('div', { class: 'micro mb-1', style: 'color:var(--ink-mute);', text: 'Topic' }),
+        h('div', { class: 'micro mb-1 t-mute', text: 'Topic' }),
         h('div', { class: 'text-sm', text: r.brief_topic }),
       ]));
     }
@@ -196,12 +196,12 @@ function renderInterviews(page) {
     /* Field notes — the full write-up lives in the app, not in external docs */
     detailCard.appendChild(h('div', { class: 'px-6 pt-4' }, [
       h('div', { class: 'flex items-center justify-between mb-1' }, [
-        h('div', { class: 'micro', style: 'color:var(--ink-mute);', text: 'Field notes' }),
+        h('div', { class: 'micro t-mute', text: 'Field notes' }),
         h('button', { class: 'btn btn-ghost text-xs', onclick: () => openNotesEditor(r) }, r.notes_markdown ? 'Edit notes' : 'Write notes'),
       ]),
       r.notes_markdown
         ? h('div', { class: 'text-sm leading-relaxed whitespace-pre-line', text: r.notes_markdown })
-        : h('div', { class: 'text-sm', style: 'color:var(--ink-mute);', text: 'No notes yet. Write the full debrief here — this app is the single repository, and the assistant can only search what lives in it.' }),
+        : h('div', { class: 'text-sm t-mute', text: 'No notes yet. Write the full debrief here — this app is the single repository, and the assistant can only search what lives in it.' }),
     ]));
 
     /* Hypothesis links — how this conversation bears on the decision */
@@ -209,13 +209,13 @@ function renderInterviews(page) {
       const linkChips = existingLinkChips('interview', r.interview_id);
       detailCard.appendChild(h('div', { class: 'px-6 pt-4' }, [
         h('div', { class: 'flex items-center justify-between mb-1' }, [
-          h('div', { class: 'micro', style: 'color:var(--ink-mute);', text: `Hypothesis links (${linkChips.length})` }),
+          h('div', { class: 'micro t-mute', text: `Hypothesis links (${linkChips.length})` }),
           h('button', { class: 'btn btn-ghost text-xs',
             onclick: () => openLinkModal({ evidence_type: 'interview', evidence_id: r.interview_id, cite: r.interview_id }) }, 'Link to hypothesis'),
         ]),
         linkChips.length
           ? h('div', { class: 'flex flex-wrap gap-1.5' }, linkChips)
-          : h('div', { class: 'text-xs', style: 'color:var(--ink-mute);', text: 'Not linked to the hypothesis board yet.' }),
+          : h('div', { class: 'text-xs t-mute', text: 'Not linked to the hypothesis board yet.' }),
       ]));
     }
 
@@ -223,7 +223,7 @@ function renderInterviews(page) {
     const docs = STATE.documents.filter(d => d.interview_id === r.interview_id);
     if (docs.length) {
       detailCard.appendChild(h('div', { class: 'px-6 pt-4' }, [
-        h('div', { class: 'micro mb-1', style: 'color:var(--ink-mute);', text: `Documents (${docs.length})` }),
+        h('div', { class: 'micro mb-1 t-mute', text: `Documents (${docs.length})` }),
         h('div', { class: 'flex flex-wrap gap-2' }, docs.map(d => {
           const c = chip(d.filename, 'info');
           c.style.cursor = 'pointer';
@@ -237,13 +237,13 @@ function renderInterviews(page) {
     /* Linked theme-matrix quotes */
     const quotes = STATE.matrix.filter(q => q.interview_id === r.interview_id);
     const qHead = h('div', { class: 'px-6 pt-5 pb-2 flex items-center justify-between' }, [
-      h('div', { class: 'micro', style: 'color:var(--ink-mute);', text: `Tagged quotes (${quotes.length})` }),
+      h('div', { class: 'micro t-mute', text: `Tagged quotes (${quotes.length})` }),
       h('button', { class: 'btn btn-ghost text-xs', onclick: () => go('matrix') }, 'Open matrix →'),
     ]);
     detailCard.appendChild(qHead);
     if (!quotes.length) {
       detailCard.appendChild(h('div', { class: 'px-6 pb-6' }, [
-        h('div', { class: 'text-sm', style: 'color:var(--ink-mute);', text: 'No quotes tagged from this interview yet.' }),
+        h('div', { class: 'text-sm t-mute', text: 'No quotes tagged from this interview yet.' }),
       ]));
     } else {
       const list = h('div', { class: 'pb-2' });

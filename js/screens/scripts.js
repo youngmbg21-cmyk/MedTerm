@@ -30,7 +30,7 @@ function renderScripts(page) {
   if (!activeScript || !grouped[activeScript]) activeScript = names[0];
   let showHistory = false;
 
-  const tabs = h('div', { class: 'flex flex-wrap gap-2 mb-5 border-b pb-3', style: 'border-color:var(--line-soft);' });
+  const tabs = h('div', { class: 'flex flex-wrap gap-2 mb-5 border-b pb-3 b-soft' });
   const content = h('div', { class: 'card max-w-3xl' });
 
   function renderTab() {
@@ -47,10 +47,10 @@ function renderScripts(page) {
     const latest = versions[0];
     const sections = Array.isArray(latest.content) ? latest.content : [];
 
-    content.appendChild(h('div', { class: 'px-6 pt-5 pb-4 flex flex-wrap items-center justify-between gap-2 border-b', style: 'border-color:var(--line-soft);' }, [
+    content.appendChild(h('div', { class: 'px-6 pt-5 pb-4 flex flex-wrap items-center justify-between gap-2 border-b b-soft' }, [
       h('div', {}, [
         h('div', { class: 'serif text-xl', text: activeScript }),
-        h('div', { class: 'text-xs mt-1', style: 'color:var(--ink-mute);', text: `Version ${latest.version}` }),
+        h('div', { class: 'text-xs mt-1 t-mute', text: `Version ${latest.version}` }),
       ]),
       h('div', { class: 'flex gap-2' }, [
         h('button', { class: 'btn btn-line text-xs', onclick: () => { showHistory = !showHistory; renderTab(); } },
@@ -63,12 +63,12 @@ function renderScripts(page) {
       const hist = h('div', { class: 'px-6 py-4' });
       versions.forEach(v => {
         const isLatest = v === latest;
-        hist.appendChild(h('div', { class: 'flex items-center justify-between py-3 border-b text-sm', style: 'border-color:var(--line-soft);' }, [
+        hist.appendChild(h('div', { class: 'flex items-center justify-between py-3 border-b text-sm b-soft' }, [
           h('div', {}, [
             h('span', { class: 'font-medium', text: `Version ${v.version}` }),
             isLatest ? h('span', { class: 'chip chip-sage ml-2', text: 'Current' }) : null,
-            v.revert_note ? h('div', { class: 'text-xs', style: 'color:var(--ink-mute);', text: v.revert_note }) : null,
-            h('div', { class: 'text-xs', style: 'color:var(--ink-mute);', text: v.created_at ? `Saved ${fmtDate(v.created_at)}` : '' }),
+            v.revert_note ? h('div', { class: 'text-xs t-mute', text: v.revert_note }) : null,
+            h('div', { class: 'text-xs t-mute', text: v.created_at ? `Saved ${fmtDate(v.created_at)}` : '' }),
           ].filter(Boolean)),
           !isLatest ? h('button', { class: 'btn btn-ghost text-xs', onclick: () => revertToVersion(activeScript, v, latest) }, 'Revert to this') : null,
         ].filter(Boolean)));
@@ -78,7 +78,7 @@ function renderScripts(page) {
       const body = h('div', { class: 'px-6 py-5' });
       sections.forEach(s => {
         body.appendChild(h('div', { class: 'mb-4' }, [
-          h('div', { class: 'micro mb-1', style: 'color:var(--clay);', text: s.title || '' }),
+          h('div', { class: 'micro mb-1 t-clay', text: s.title || '' }),
           h('div', { class: 'text-sm leading-relaxed', text: s.body || '' }),
         ]));
       });
@@ -122,12 +122,12 @@ function openScriptEditor(scriptName, latest) {
     } catch (err) { alert('Save failed: ' + err.message); }
   } }, [
     h('div', { class: 'serif text-xl mb-2', text: `Edit: ${scriptName}` }),
-    h('div', { class: 'text-xs mb-4', style: 'color:var(--ink-mute);', text: 'Saving creates a new version. The previous version is preserved.' }),
+    h('div', { class: 'text-xs mb-4 t-mute', text: 'Saving creates a new version. The previous version is preserved.' }),
     sectionsWrap,
     h('div', { class: 'mt-1 mb-4' }, [
       h('button', { type: 'button', class: 'btn btn-line text-xs', onclick: () => addSectionRow({ title: '', body: '' }) }, '+ Add section'),
     ]),
-    h('div', { class: 'flex gap-3 mt-5 justify-end pt-4 border-t', style: 'border-color:var(--line-soft);' }, [
+    h('div', { class: 'flex gap-3 mt-5 justify-end pt-4 border-t b-soft' }, [
       h('button', { type: 'button', class: 'btn btn-line', onclick: closeModal }, 'Cancel'),
       h('button', { type: 'submit', class: 'btn btn-primary' }, 'Save new version'),
     ]),
