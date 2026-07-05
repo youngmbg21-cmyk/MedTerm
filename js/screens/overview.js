@@ -5,7 +5,8 @@ import {
   isUntaggedOverdue, isStalled, daysSince, fmtDate, go, loadAllData,
 } from '../app.js';
 import { CURRENT_PHASE, PHASES, SEGMENTS } from '../config.js';
-import { data } from '../data.js';
+import { data, aiAvailable } from '../data.js';
+import { latestAssessment, LEANING_TONE, buyerHypotheses, runAssessment } from '../evidence.js';
 
 function renderOverview(page) {
   if (!STATE.loaded) {
@@ -36,13 +37,27 @@ function renderOverview(page) {
   const booked = STATE.outreach.filter(r => ['Booked', 'Done'].includes(r.status)).length;
   const themeCount = new Set(STATE.matrix.map(r => r.theme_tag).filter(Boolean)).size;
 
-  page.appendChild(h('div', { class: 'grid grid-cols-2 md:grid-cols-4 gap-4 mb-6' }, [
+  page.appendChild(h('div', { class: 'grid grid-cols-2 md:grid-cols-4 gap-4 mb-4' }, [
     kpiCard('Interviews logged', totalInterviews, `target ~30 by Phase 2 close`),
     kpiCard('Same-day tagged', `${taggedPct}%`, taggedPct === 100 ? 'Hard rule holding' : 'Hard rule: must be 100%',
       taggedPct === 100 ? 'sage' : taggedPct >= 80 ? 'honey' : 'rose'),
     kpiCard('Outreach contacted', contacted, `${booked} booked or done`),
     kpiCard('Themes surfaced', themeCount, themeCount >= 8 ? 'Rich pool' : 'Build the matrix'),
   ]));
+
+  /* ---- Decision pulse — judgment lives on the Decision Brief; this is a pointer ---- */
+  const latest = latestAssessment();
+  const strengthening = buyerHypotheses().filter(x => x.status === 'strengthening').length;
+  const weakening = buyerHypotheses().filter(x => x.status === 'weakening').length;
+  const pulse = h('div', { class: 'card p-4 mb-6 flex flex-wrap items-center gap-3' }, [
+    h('span', { class: 'micro', style: 'color:var(--ink-mute);', text: 'If we decided today' }),
+    latest
+      ? chip(latest.leaning, LEANING_TONE[latest.leaning] || 'line')
+      : chip('No assessment yet', 'line'),
+    h('span', { class: 'text-xs num', style: 'color:var(--ink-mute);', text: `${strengthening} strengthening · ${weakening} weakening` }),
+    h('button', { class: 'btn btn-ghost text-xs ml-auto', onclick: () => go('decision-brief') }, 'Open Decision Brief →'),
+  ]);
+  page.appendChild(pulse);
 
   /* ---- Three panels ---- */
   const grid = h('div', { class: 'grid lg:grid-cols-3 gap-4' });
@@ -73,6 +88,34 @@ function renderOverview(page) {
   }
   critPanel.appendChild(critList);
   critPanel.appendChild(h('div', { class: 'px-5 pb-3 text-xs', style: 'color:var(--ink-mute);', text: 'Tap a criterion to advance its status.' }));
+
+  /* Phase-exit review — an advisory gate, not a hard block. Advancing
+     CURRENT_PHASE stays a config change by design. */
+  const hasExitReview = STATE.ai_assessments.some(a => a.trigger === 'phase_exit' && a.phase === CURRENT_PHASE);
+  if (!hasExitReview) {
+    critPanel.appendChild(h('div', { class: 'px-5 pb-3' }, [
+      h('div', { class: 'banner banner-honey' }, [
+        h('span', { text: 'This phase has not had an exit review.' }),
+      ]),
+    ]));
+  }
+  if (aiAvailable) {
+    const exitBtn = h('button', { class: 'btn btn-line text-xs', onclick: async () => {
+      exitBtn.disabled = true;
+      exitBtn.textContent = 'Reviewing…';
+      try {
+        await runAssessment('phase_exit');
+        go('decision-brief');
+      } catch (e) {
+        exitBtn.disabled = false;
+        exitBtn.textContent = 'Run phase exit review';
+        alert('Exit review failed: ' + e.message);
+      }
+    } }, 'Run phase exit review');
+    critPanel.appendChild(h('div', { class: 'px-5 pb-4' }, [exitBtn]));
+  } else if (!hasExitReview) {
+    critPanel.appendChild(h('div', { class: 'px-5 pb-4 text-xs', style: 'color:var(--ink-mute);', text: 'Connect the assistant to run the exit review before advancing the phase.' }));
+  }
   grid.appendChild(critPanel);
 
   /* Panel 2 — saturation by segment */
