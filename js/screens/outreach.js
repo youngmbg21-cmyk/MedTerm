@@ -1,7 +1,7 @@
 /* Outreach — one question: "Who have we approached, and where do they stand?" */
 import {
   STATE, registerRoute, renderCurrentRoute, h, chip, statusTone, emptyState,
-  openModal, closeModal, formField, isStalled, fmtDate,
+  openModal, closeModal, formField, isStalled, fmtDate, setPageActions,
 } from '../app.js';
 import { SEGMENT_NAMES, OUTREACH_STATUSES, CHANNELS, ownerOptions, STALL_DAYS } from '../config.js';
 import { data } from '../data.js';
@@ -18,6 +18,9 @@ function renderOutreach(page) {
     ]));
   }
 
+  /* One primary action, in the app header; the tools row stays quiet */
+  setPageActions(h('button', { class: 'btn btn-primary', onclick: () => openOutreachForm() }, '+ Add contact'));
+
   const headerBar = h('div', { class: 'flex flex-wrap items-center gap-3 mb-4' }, [
     h('input', { class: 'input flex-1 min-w-[180px]', placeholder: 'Search name, org, country…',
       oninput: e => { filterState.q = e.target.value; renderTable(); } }),
@@ -26,7 +29,6 @@ function renderOutreach(page) {
       ...OUTREACH_STATUSES.map(s => h('option', { value: s }, s)),
     ]),
     h('button', { class: 'btn btn-line', onclick: exportOutreach }, '↓ CSV'),
-    h('button', { class: 'btn btn-primary', onclick: () => openOutreachForm() }, '+ Add contact'),
   ]);
   page.appendChild(headerBar);
 
@@ -51,7 +53,8 @@ function renderOutreach(page) {
     if (!rows.length) {
       tableWrap.appendChild(emptyState(
         STATE.outreach.length === 0 ? 'No outreach yet.' : 'No matches with current filters.',
-        STATE.outreach.length === 0 ? 'Add your first contact — templates are ready under Reference.' : null));
+        STATE.outreach.length === 0 ? 'Add your first contact — templates are ready under Reference.' : null,
+        STATE.outreach.length === 0 ? { label: '+ Add the first contact', onclick: () => openOutreachForm() } : null));
       return;
     }
 

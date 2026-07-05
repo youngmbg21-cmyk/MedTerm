@@ -235,7 +235,7 @@ function buildChartNode(chart) {
     wrap.appendChild(riskMatrixSvg(chart.items, chart.opts));
     const legend = h('div', { class: 'mt-3 flex flex-col gap-1.5' });
     chart.items.forEach(it => {
-      legend.appendChild(h('div', { class: 'flex items-start gap-2 text-xs', style: 'color:var(--ink-soft);' }, [
+      legend.appendChild(h('div', { class: 'flex items-start gap-2 text-xs t-soft' }, [
         h('span', { class: 'chip chip-line', style: 'min-width:22px; justify-content:center; flex-shrink:0;', text: String(it.n) }),
         h('span', { text: `${it.label} — likelihood ${it.likelihood.toLowerCase()}, impact ${it.impact.toLowerCase()}` }),
       ]));
@@ -270,22 +270,22 @@ function renderReports(page) {
   REPORT_TYPES.forEach(rt => {
     grid.appendChild(h('div', { class: 'card p-5 flex flex-col' }, [
       h('div', { class: 'serif text-base mb-1', text: rt.name }),
-      h('div', { class: 'text-xs mb-4 flex-1', style: 'color:var(--ink-soft);', text: rt.description }),
+      h('div', { class: 'text-xs mb-4 flex-1 t-soft', text: rt.description }),
       h('button', { class: 'btn btn-primary w-full justify-center', onclick: () => generateAndSave(rt.type) }, 'Generate'),
     ]));
   });
   page.appendChild(grid);
 
-  page.appendChild(h('div', { class: 'micro mb-3', style: 'color:var(--ink-mute);', text: 'Generated reports' }));
+  page.appendChild(h('div', { class: 'micro mb-3 t-mute', text: 'Generated reports' }));
   const pastCard = h('div', { class: 'card' });
   if (!STATE.reports.length) {
     pastCard.appendChild(emptyState('No reports generated yet.'));
   } else {
     [...STATE.reports].reverse().forEach(r => {
-      pastCard.appendChild(h('div', { class: 'px-6 py-4 border-b flex flex-wrap items-center justify-between gap-2', style: 'border-color:var(--line-soft);' }, [
+      pastCard.appendChild(h('div', { class: 'px-6 py-4 border-b flex flex-wrap items-center justify-between gap-2 b-soft' }, [
         h('div', {}, [
           h('div', { class: 'font-medium text-sm', text: r.title || r.report_type }),
-          h('div', { class: 'text-xs', style: 'color:var(--ink-mute);', text: `${r.report_type} · ${fmtDate(r.created_at)}` }),
+          h('div', { class: 'text-xs t-mute', text: `${r.report_type} · ${fmtDate(r.created_at)}` }),
         ]),
         h('div', { class: 'flex gap-2' }, [
           h('button', { class: 'btn btn-line text-xs', onclick: () => viewReport(r) }, 'View'),
@@ -312,7 +312,7 @@ function viewReport(report) {
   root.innerHTML = '';
 
   const view = h('div', { class: 'report-print-view' });
-  view.appendChild(h('div', { class: 'mb-8 pb-4 border-b', style: 'border-color:var(--line);' }, [
+  view.appendChild(h('div', { class: 'mb-8 pb-4 border-b b-line' }, [
     h('div', { class: 'flex items-center gap-2 mb-4' }, [
       h('div', { class: 'w-7 h-7 rounded-lg flex items-center justify-center', style: 'background:var(--sage-deep);' }, [
         h('span', { class: 'serif text-white text-base', text: 'M' }),
@@ -320,11 +320,11 @@ function viewReport(report) {
       h('span', { class: 'micro', text: 'MedTerminal' }),
     ]),
     h('div', { class: 'serif text-2xl mb-2', text: report.title || report.report_type }),
-    h('div', { class: 'text-xs', style: 'color:var(--ink-mute);', text: `Generated ${fmtDate(report.created_at)}` }),
+    h('div', { class: 'text-xs t-mute', text: `Generated ${fmtDate(report.created_at)}` }),
   ]));
 
   (content.sections || []).forEach(s => {
-    view.appendChild(h('div', { class: 'micro mb-2 mt-6', style: 'color:var(--clay);', text: s.title || '' }));
+    view.appendChild(h('div', { class: 'micro mb-2 mt-6 t-clay', text: s.title || '' }));
     if (s.body) view.appendChild(h('div', { class: 'text-sm leading-relaxed whitespace-pre-line', text: s.body }));
     if (s.chart) view.appendChild(buildChartNode(s.chart));
   });
@@ -347,7 +347,7 @@ function escapeHtml(str) {
 function printReport(report) {
   const content = report.content || {};
   const bodyHtml = (content.sections || []).map(s => {
-    const heading = `<h2 style="font-family:Fraunces,Georgia,serif; color:#B8693E; margin-top:24px; text-transform:uppercase; letter-spacing:0.1em; font-size:10.5px;">${escapeHtml(s.title || '')}</h2>`;
+    const heading = `<h2>${escapeHtml(s.title || '')}</h2>`;
     const body = s.body ? `<div style="white-space:pre-line; line-height:1.6;">${escapeHtml(s.body)}</div>` : '';
     const chart = s.chart ? chartToHtml(s.chart) : '';
     return heading + body + chart;
@@ -359,18 +359,32 @@ function printReport(report) {
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600&family=Inter:wght@400;500&display=swap" rel="stylesheet">
 <style>
   body { font-family: Inter, sans-serif; color: #1F2A28; max-width: 720px; margin: 40px auto; padding: 0 20px; font-size: 14px; line-height: 1.6; }
-  h1 { font-family: Fraunces, Georgia, serif; font-size: 24px; margin-bottom: 4px; }
-  .meta { font-size: 11px; color: #8A8478; margin-bottom: 32px; }
+  h1 { font-family: Fraunces, Georgia, serif; font-size: 26px; line-height: 1.25; margin-bottom: 4px; }
+  h2 { font-family: Fraunces, Georgia, serif; color: #96501F; margin-top: 24px; text-transform: uppercase; letter-spacing: 0.1em; font-size: 10.5px; }
+  .meta { font-size: 11px; color: #6E6A5E; margin-bottom: 8px; }
+  .title-block { padding-bottom: 20px; margin-bottom: 28px; border-bottom: 2px solid #1F2A28; }
   .logo { display: flex; align-items: center; gap: 8px; margin-bottom: 16px; }
   .logo-mark { width: 24px; height: 24px; background: #3F5A4D; border-radius: 6px; display: flex; align-items: center; justify-content: center; color: white; font-family: Fraunces, Georgia, serif; font-size: 14px; }
   svg { max-width: 100%; height: auto; }
-  @media print { body { margin: 0; } }
+  .print-foot { display: none; }
+  @media print {
+    body { margin: 0; padding-bottom: 36px; }
+    .print-foot {
+      display: flex; justify-content: space-between; position: fixed; bottom: 0; left: 0; right: 0;
+      font-size: 9.5px; color: #6E6A5E; border-top: 1px solid #E5DDD0;
+      padding: 6px 4px 0; background: #fff;
+      font-variant-numeric: tabular-nums;
+    }
+  }
 </style></head>
 <body>
-  <div class="logo"><div class="logo-mark">M</div><span style="text-transform:uppercase; letter-spacing:0.14em; font-size:10.5px; font-weight:500;">MedTerminal</span></div>
-  <h1>${escapeHtml(report.title || 'Report')}</h1>
-  <div class="meta">Generated ${escapeHtml(fmtDate(report.created_at))}</div>
+  <div class="title-block">
+    <div class="logo"><div class="logo-mark">M</div><span style="text-transform:uppercase; letter-spacing:0.14em; font-size:10.5px; font-weight:500;">MedTerminal</span></div>
+    <h1>${escapeHtml(report.title || 'Report')}</h1>
+    <div class="meta">Generated ${escapeHtml(fmtDate(report.created_at))} · Confidential — internal research working document</div>
+  </div>
   ${bodyHtml}
+  <div class="print-foot"><span>MedTerminal · ${escapeHtml(report.title || 'Report')}</span><span>Generated ${escapeHtml(fmtDate(report.created_at))}</span></div>
 </body></html>`);
   w.document.close();
   setTimeout(() => w.print(), 500);

@@ -4,6 +4,7 @@
 import {
   STATE, registerRoute, renderCurrentRoute, h, chip, emptyState, quoteBlock,
   openModal, closeModal, formField, isUntaggedOverdue, go, rankThemes,
+  setPageActions,
 } from '../app.js';
 import { SEGMENT_NAMES, THEMES } from '../config.js';
 import { data } from '../data.js';
@@ -37,6 +38,9 @@ function renderMatrix(page) {
     ]));
   }
 
+  /* One primary action, in the app header; the tools row stays quiet */
+  setPageActions(h('button', { class: 'btn btn-primary', onclick: () => openMatrixForm() }, '+ Add quote'));
+
   const toolbar = h('div', { class: 'flex flex-wrap items-center gap-3 mb-4' }, [
     h('div', { class: 'seg-toggle' }, [
       h('button', {
@@ -49,7 +53,6 @@ function renderMatrix(page) {
       }, 'Quotes'),
     ]),
     h('button', { class: 'btn btn-line ml-auto', onclick: exportMatrix }, '↓ CSV'),
-    h('button', { class: 'btn btn-primary', onclick: () => openMatrixForm() }, '+ Add quote'),
   ]);
   page.appendChild(toolbar);
 
@@ -57,7 +60,8 @@ function renderMatrix(page) {
   page.appendChild(card);
 
   if (!rows.length) {
-    card.appendChild(emptyState('No quotes tagged yet.', 'Add the first one after your next interview.'));
+    card.appendChild(emptyState('No quotes tagged yet.', 'Add the first one after your next interview.',
+      { label: '+ Add the first quote', onclick: () => openMatrixForm() }));
     return;
   }
 
@@ -94,14 +98,14 @@ function renderGrid(card) {
 
     const headerCell = h('td', { class: 'grid-row-header' }, [
       h('div', { class: 'text-sm font-medium', text: theme }),
-      rowCount ? h('div', { class: 'text-xs mt-0.5', style: 'color:var(--ink-mute);', text: `${rowCount} · avg sev ${avgSev.toFixed(1)} · WTP-Y ${wtpRate}%` }) : null,
+      rowCount ? h('div', { class: 'text-xs mt-0.5 t-mute', text: `${rowCount} · avg sev ${avgSev.toFixed(1)} · WTP-Y ${wtpRate}%` }) : null,
     ].filter(Boolean));
 
     const tr = h('tr', { class: 'h-row' }, [headerCell]);
     rowCells.forEach((quotes, i) => {
       colTotals[i] += quotes.length;
       if (!quotes.length) {
-        tr.appendChild(h('td', { class: 'text-center num', style: 'color:var(--ink-mute);', text: '·' }));
+        tr.appendChild(h('td', { class: 'text-center num t-mute', text: '·' }));
         return;
       }
       const cellAvgSev = quotes.reduce((sum, r) => sum + (+r.severity || 0), 0) / quotes.length;
@@ -225,7 +229,7 @@ function renderQuotesView(card) {
           h('span', { class: 'group-chevron', text: collapsed ? '›' : '⌄' }),
           honey ? h('span', { class: 'text-sm font-medium', text: tag }) : chip(tag, 'plum'),
         ]),
-        h('div', { class: 'text-xs flex-shrink-0', style: 'color:var(--ink-mute);', text: `${count} · avg sev ${avgSev.toFixed(1)} · WTP-Y ${wtpRate}%` }),
+        h('div', { class: 'text-xs flex-shrink-0 t-mute', text: `${count} · avg sev ${avgSev.toFixed(1)} · WTP-Y ${wtpRate}%` }),
       ]);
       header.addEventListener('click', () => { collapseOverrides[key] = !collapsed; renderBody(); });
 

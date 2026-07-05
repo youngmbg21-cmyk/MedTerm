@@ -17,10 +17,10 @@ export const PALETTE = {
   sage: '#5C7A6B', sageDeep: '#3F5A4D', sageSoft: '#E6EDE7',
   clay: '#B8693E',
   rose: '#C95F5F', roseSoft: '#F6E3E3',
-  honey: '#D4A24C', honeyDeep: '#8a6a23', honeySoft: '#F5E9CF',
+  honey: '#D4A24C', honeyDeep: '#755A1E', honeySoft: '#F5E9CF',
   info: '#5B7B9A', infoSoft: '#E4EBF1',
   plum: '#7B5E7E', plumSoft: '#EEE6EF',
-  ink: '#1F2A28', inkMute: '#8A8478', line: '#E5DDD0', lineSoft: '#EFE9DD',
+  ink: '#1F2A28', inkMute: '#6E6A5E', line: '#E5DDD0', lineSoft: '#EFE9DD',
   paper: '#FFFFFF',
 };
 

@@ -1,7 +1,7 @@
 /* Phase 4 — Economics screens. */
 import {
   STATE, registerRoute, renderCurrentRoute, h, chip, emptyState,
-  openModal, closeModal, formField, fmtDate,
+  openModal, closeModal, formField, fmtDate, setPageActions,
 } from '../app.js';
 import { interviewerOptions } from '../config.js';
 import { data } from '../data.js';
@@ -64,7 +64,7 @@ function renderEconomics(page) {
   const breakCard = h('div', { class: 'card p-6 mb-5' });
   const sensCard = h('div', { class: 'card p-6' });
 
-  assumptionsCard.appendChild(h('div', { class: 'micro mb-4', style: 'color:var(--ink-mute);', text: 'Assumptions' }));
+  assumptionsCard.appendChild(h('div', { class: 'micro mb-4 t-mute', text: 'Assumptions' }));
   const fields = [
     { key: 'procedure_cost_usd', label: 'Procedure cost (USD)', step: 500 },
     { key: 'take_rate_pct', label: 'Take rate (%)', step: 1 },
@@ -112,7 +112,7 @@ function renderEconomics(page) {
     const d = derive(assumptions);
 
     outputsCard.innerHTML = '';
-    outputsCard.appendChild(h('div', { class: 'micro mb-4', style: 'color:var(--ink-mute);', text: 'Derived outputs' }));
+    outputsCard.appendChild(h('div', { class: 'micro mb-4 t-mute', text: 'Derived outputs' }));
     [
       ['Revenue per case', d.revenuePerCase],
       ['CAC per closed case', d.cacPerCase],
@@ -124,27 +124,27 @@ function renderEconomics(page) {
       ['Monthly net (after fixed)', d.monthlyNet],
     ].forEach(([label, val, isCount]) => {
       const text = isCount ? `${val}` : `$${val.toFixed(0)}`;
-      outputsCard.appendChild(h('div', { class: 'flex justify-between py-2 text-sm border-b', style: 'border-color:var(--line-soft);' }, [
+      outputsCard.appendChild(h('div', { class: 'flex justify-between py-2 text-sm border-b b-soft' }, [
         h('span', { text: label }),
         h('span', { class: 'num font-medium', text, style: val < 0 ? 'color:var(--rose);' : '' }),
       ]));
     });
 
     breakCard.innerHTML = '';
-    breakCard.appendChild(h('div', { class: 'micro mb-4', style: 'color:var(--ink-mute);', text: 'Break-point checks — any red kills the patient-pays model' }));
+    breakCard.appendChild(h('div', { class: 'micro mb-4 t-mute', text: 'Break-point checks — any red kills the patient-pays model' }));
     BREAKPOINTS.forEach(bp => {
       const broken = bp.broken(assumptions, d);
       breakCard.appendChild(h('div', { class: 'flex items-center gap-3 py-2' }, [
         chip(broken ? '✗ BROKEN' : '✓ PASS', broken ? 'rose' : 'sage'),
         h('div', {}, [
           h('div', { class: 'text-sm font-medium', text: bp.label }),
-          h('div', { class: 'text-xs', style: 'color:var(--ink-mute);', text: bp.detail(assumptions, d) }),
+          h('div', { class: 'text-xs t-mute', text: bp.detail(assumptions, d) }),
         ]),
       ]));
     });
 
     sensCard.innerHTML = '';
-    sensCard.appendChild(h('div', { class: 'micro mb-3', style: 'color:var(--ink-mute);', text: 'Sensitivity: net margin per case — take rate × conversion' }));
+    sensCard.appendChild(h('div', { class: 'micro mb-3 t-mute', text: 'Sensitivity: net margin per case — take rate × conversion' }));
     const takeRates = [5, 6, 7, 8, 10, 12];
     const conversions = [10, 15, 20, 25, 30];
     const table = h('table', { class: 'data' });
@@ -210,7 +210,7 @@ function renderAltModels(page) {
     card.appendChild(h('div', { class: 'serif text-lg mb-1', text: m.name }));
     card.appendChild(h('div', { class: 'mb-2' }, [chip(m.who_pays, 'info')]));
     [['How it works', m.how], ['Revenue', m.revenue], ['Pros', m.pros], ['Cons', m.cons]].forEach(([label, val]) => {
-      card.appendChild(h('div', { class: 'micro mt-3 mb-1', style: 'color:var(--ink-mute);', text: label }));
+      card.appendChild(h('div', { class: 'micro mt-3 mb-1 t-mute', text: label }));
       card.appendChild(h('div', { class: 'text-sm', text: val }));
     });
     grid.appendChild(card);
@@ -230,9 +230,8 @@ function renderFieldChecks(page) {
     ]));
   }
 
-  page.appendChild(h('div', { class: 'mb-4 flex justify-end' }, [
-    h('button', { class: 'btn btn-primary', onclick: () => openFieldCheckForm() }, '+ Add assumption'),
-  ]));
+  /* One primary action, in the app header */
+  setPageActions(h('button', { class: 'btn btn-primary', onclick: () => openFieldCheckForm() }, '+ Add assumption'));
 
   const card = h('div', { class: 'card' });
   if (!STATE.field_checks.length) {

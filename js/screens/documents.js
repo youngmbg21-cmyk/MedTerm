@@ -3,7 +3,7 @@
    Supabase Storage when live) and the assistant can search and read them. */
 import {
   STATE, registerRoute, renderCurrentRoute, h, chip, emptyState,
-  openModal, closeModal, formField, fmtDate,
+  openModal, closeModal, formField, fmtDate, setPageActions,
 } from '../app.js';
 import { SEGMENT_NAMES, getTeam } from '../config.js';
 import { data } from '../data.js';
@@ -31,6 +31,9 @@ function renderDocuments(page) {
     h('span', { text: 'Upload field notes, price lists, photos and scans — PDF, text, CSV or images. De-identify first (initials, not names). Never upload consent forms or identity documents.' }),
   ]));
 
+  /* One primary action, in the app header; the tools row stays quiet */
+  setPageActions(h('button', { class: 'btn btn-primary', onclick: openUploadForm }, '+ Upload document'));
+
   page.appendChild(h('div', { class: 'flex flex-wrap items-center gap-3 mb-4' }, [
     h('input', { class: 'input flex-1 min-w-[180px]', placeholder: 'Search filename, description, contents…',
       oninput: e => { filterState.q = e.target.value; renderList(); } }),
@@ -38,7 +41,6 @@ function renderDocuments(page) {
       h('option', { value: 'all' }, 'All segments'),
       ...SEGMENT_NAMES.map(s => h('option', { value: s }, s)),
     ]),
-    h('button', { class: 'btn btn-primary', onclick: openUploadForm }, '+ Upload document'),
   ]));
 
   const card = h('div', { class: 'card' });
@@ -68,12 +70,12 @@ function renderDocuments(page) {
     rows.forEach(d => {
       const meta = [d.segment, d.interview_id, fmtBytes(d.size_bytes), fmtDate(d.created_at), d.uploaded_by]
         .filter(Boolean).join(' · ');
-      card.appendChild(h('div', { class: 'px-6 py-4 border-b', style: 'border-color:var(--line-soft);' }, [
+      card.appendChild(h('div', { class: 'px-6 py-4 border-b b-soft' }, [
         h('div', { class: 'flex flex-wrap items-start justify-between gap-2' }, [
           h('div', { class: 'min-w-0' }, [
             h('div', { class: 'font-medium text-sm', text: d.filename }),
-            h('div', { class: 'text-xs mt-0.5', style: 'color:var(--ink-mute);', text: meta }),
-            d.description ? h('div', { class: 'text-sm mt-1.5', style: 'color:var(--ink-soft);', text: d.description }) : null,
+            h('div', { class: 'text-xs mt-0.5 t-mute', text: meta }),
+            d.description ? h('div', { class: 'text-sm mt-1.5 t-soft', text: d.description }) : null,
           ].filter(Boolean)),
           h('div', { class: 'flex gap-2 shrink-0' }, [
             h('button', { class: 'btn btn-line text-xs', onclick: () => viewDocument(d) }, 'View'),
@@ -128,10 +130,10 @@ function openUploadForm() {
     } catch (err) { show('Upload failed: ' + err.message); }
   } }, [
     h('div', { class: 'serif text-xl mb-2', text: 'Upload document' }),
-    h('div', { class: 'text-xs mb-4', style: 'color:var(--ink-mute);', text: 'PDF, text, markdown, CSV or image, up to 10 MB. Text files become fully searchable; PDFs are read by the assistant when the backend is live.' }),
+    h('div', { class: 'text-xs mb-4 t-mute', text: 'PDF, text, markdown, CSV or image, up to 10 MB. Text files become fully searchable; PDFs are read by the assistant when the backend is live.' }),
     h('div', { class: 'mb-3' }, [h('label', { class: 'label', text: 'File' }), fileInput]),
     segField.el, intField.el, descField.el, msg,
-    h('div', { class: 'flex gap-3 mt-5 justify-end pt-4 border-t', style: 'border-color:var(--line-soft);' }, [
+    h('div', { class: 'flex gap-3 mt-5 justify-end pt-4 border-t b-soft' }, [
       h('button', { type: 'button', class: 'btn btn-line', onclick: closeModal }, 'Cancel'),
       h('button', { type: 'submit', class: 'btn btn-primary' }, 'Upload'),
     ]),
@@ -161,9 +163,9 @@ async function viewDocument(d) {
         img.src = URL.createObjectURL(blob);
         body.appendChild(img);
       }
-    } catch { body.appendChild(h('div', { class: 'text-sm', style: 'color:var(--ink-mute);', text: 'Preview unavailable — use Download.' })); }
+    } catch { body.appendChild(h('div', { class: 'text-sm t-mute', text: 'Preview unavailable — use Download.' })); }
   } else {
-    body.appendChild(h('div', { class: 'text-sm', style: 'color:var(--ink-mute);', text: 'No inline preview for this file type — use Download to open it.' }));
+    body.appendChild(h('div', { class: 'text-sm t-mute', text: 'No inline preview for this file type — use Download to open it.' }));
   }
 
   root.appendChild(h('div', { class: 'modal-bg fade-in', onclick: (e) => { if (e.target.classList.contains('modal-bg')) root.innerHTML = ''; } }, [
@@ -172,7 +174,7 @@ async function viewDocument(d) {
         h('div', { class: 'serif text-xl', text: d.filename }),
         h('button', { class: 'btn btn-ghost text-xs', onclick: () => { root.innerHTML = ''; } }, 'Close'),
       ]),
-      h('div', { class: 'text-xs mb-4', style: 'color:var(--ink-mute);', text: [d.segment, d.interview_id, fmtDate(d.created_at)].filter(Boolean).join(' · ') }),
+      h('div', { class: 'text-xs mb-4 t-mute', text: [d.segment, d.interview_id, fmtDate(d.created_at)].filter(Boolean).join(' · ') }),
       body,
     ]),
   ]));

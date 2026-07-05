@@ -7,7 +7,8 @@
 <script src="https://cdn.tailwindcss.com"></script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,300;9..144,400;9..144,500;9..144,600&family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
+<!-- Exactly two weights per family (design system): Fraunces 400/600 + italic, Inter 400/500 -->
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,600;1,9..144,400&family=Inter:wght@400;500&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="css/theme.css">
 </head>
 <body>
@@ -15,54 +16,52 @@
 <!-- Mobile overlay -->
 <div id="mobile-overlay" class="mobile-overlay"></div>
 
-<!-- Sidebar nav -->
-<aside id="sidebar" class="sidebar-nav fixed top-0 left-0 bottom-0 w-[240px] border-r flex flex-col z-30" style="border-color:var(--line); background:var(--bg);">
-  <div class="px-5 pt-6 pb-5 border-b" style="border-color:var(--line-soft);">
-    <div class="flex items-center gap-2">
-      <div class="w-7 h-7 rounded-lg flex items-center justify-center" style="background:var(--sage-deep);">
-        <span class="serif text-white text-base">M</span>
-      </div>
-      <div>
-        <div class="serif text-base leading-none" style="color:var(--ink);">MedTerminal</div>
-        <div class="micro mt-1" style="color:var(--clay);">Research Workspace</div>
-      </div>
+<!-- Sidebar nav — positioning lives entirely in theme.css so the shell
+     never depends on the Tailwind CDN (see DECISIONS.md: mobile nav fix) -->
+<aside id="sidebar" class="sidebar-nav" aria-label="Main navigation">
+  <div class="wordmark">
+    <div class="wordmark-badge"><span class="serif">M</span></div>
+    <div>
+      <div class="wordmark-name serif">MedTerminal</div>
+      <div class="wordmark-sub micro">Research Workspace</div>
     </div>
   </div>
 
-  <nav id="nav-root" class="flex-1 px-3 py-4 overflow-y-auto"></nav>
+  <nav id="nav-root" class="nav-scroll"></nav>
 
-  <div class="px-4 py-4 border-t" style="border-color:var(--line-soft);">
-    <button class="btn btn-line w-full justify-center" id="open-chat-btn">
+  <div class="sidebar-foot">
+    <button class="btn btn-line" id="open-chat-btn">
       <span>💬</span><span>Assistant</span>
     </button>
-    <div class="flex items-center justify-between mt-3">
-      <a class="text-xs cursor-pointer" id="settings-link" style="color:var(--ink-mute);">Settings</a>
-      <span class="micro" id="version-tag" style="color:var(--ink-mute);">v0.3</span>
+    <div class="sidebar-foot-row">
+      <a class="nav-foot-link" id="settings-link" href="#settings">Settings</a>
+      <span class="micro t-mute" id="version-tag">v0.3</span>
     </div>
   </div>
 </aside>
 
 <!-- Main area -->
-<main class="main-area" style="padding-left:240px; min-height:100vh;">
-  <header class="sticky top-0 z-20" style="background:rgba(245,241,234,0.92); backdrop-filter:saturate(150%) blur(8px); border-bottom:1px solid var(--line-soft);">
-    <div class="px-8 py-4 flex items-center justify-between">
-      <div class="flex items-center gap-3">
+<main class="main-area">
+  <header class="app-header">
+    <div class="app-header-inner">
+      <div class="header-left">
         <button class="hamburger" id="hamburger-btn" aria-label="Menu">
           <svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5"><line x1="3" y1="5" x2="17" y2="5"/><line x1="3" y1="10" x2="17" y2="10"/><line x1="3" y1="15" x2="17" y2="15"/></svg>
         </button>
-        <div>
-          <h1 id="page-title" class="serif text-xl">Overview</h1>
-          <div id="page-question" class="text-xs mt-0.5" style="color:var(--ink-mute);"></div>
+        <div class="header-title-block">
+          <h1 id="page-title" class="serif">Overview</h1>
+          <div id="page-question" class="page-question"></div>
         </div>
       </div>
-      <div class="flex items-center gap-3">
+      <div class="header-right">
+        <div id="page-actions" class="header-actions"></div>
         <span id="sync-status" class="chip chip-line">Loading…</span>
-        <button class="btn btn-ghost" id="refresh-btn">↻ Refresh</button>
+        <button class="btn btn-ghost" id="refresh-btn" title="Reload data">↻</button>
       </div>
     </div>
   </header>
 
-  <div id="page" class="px-8 py-8 max-w-[1200px]"></div>
+  <div id="page" class="page-content"></div>
 </main>
 
 <!-- Assistant side panel -->

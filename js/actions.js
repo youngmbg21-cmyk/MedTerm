@@ -65,8 +65,8 @@ export function actionConfirmation(action, { onDone, rerender = true } = {}) {
     onDone?.('skipped');
   } }, 'Skip'));
 
-  return h('div', { class: 'chat-msg bot', style: 'max-width:100%;' }, [
-    h('div', { class: 'micro mb-2', style: 'color:var(--clay);', text: 'Proposed action' }),
+  return h('div', { class: 'chat-msg bot action-card' }, [
+    h('div', { class: 'micro mb-2 t-clay', text: 'Proposed action' }),
     h('div', { class: 'text-sm mb-3', text: action.description || JSON.stringify(action.payload) }),
     buttons,
   ]);

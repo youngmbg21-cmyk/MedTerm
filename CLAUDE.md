@@ -67,6 +67,38 @@ go through the Confirm/Skip pattern in `js/actions.js`.
     human verdict requires a written override rationale, and no numeric confidence
     scores appear anywhere.
 
+## Design system — how the app must look
+
+All visual decisions live in `css/theme.css` as documented design tokens; screens
+consume tokens and component classes, never restyle ad hoc. The full contract is the
+comment block at the top of `css/theme.css`; the load-bearing rules:
+
+- **Type scale** (two weights per family — Inter 400/500, Fraunces 400/600 + italic):
+  display 28/34 · page title 22/28 · card title 17/24 · body 14/22 · secondary 13/20 ·
+  micro-label 11/16 uppercase. Numerals always tabular (`.num`, automatic in `table.data`).
+- **Spacing**: 4px base scale (4/8/12/16/24/32/48). Card padding is one value app-wide
+  (`--card-pad`: 24px desktop / 16px mobile, applied via `.card-pad`).
+- **Color roles, never raw hex at point of use**: `--ink/-soft/-mute`, `--line/-soft`,
+  `--surface-page/-card/-inset`, and tone trios (bg/border/text) for sage, honey, rose,
+  info, plum, clay. Every tone's text color clears WCAG AA (≥4.5:1) on its own tint —
+  keep it that way; `js/charts.js` PALETTE mirrors these by hand. Use the utilities
+  `.t-mute .t-soft .t-sage .t-honey .t-rose .t-info .t-clay .t-plum .b-line .b-soft`
+  instead of inline `style=` — inline styles are for dynamic values only.
+- **Elevation**: two levels only — flat cards (hairline border, no shadow) and floating
+  layers (modal/drawer/chat, `--shadow-float`). **Radii**: `--r-ctl` 10px controls,
+  `--r-card` 14px cards (chips/pills are round by identity).
+- **Motion**: 150ms ease-out on hover/focus/press and modal/menu enter only;
+  `prefers-reduced-motion` honored globally.
+- **One primary action per screen**, placed in the app header via `setPageActions()`;
+  everything else is `.btn-line`/`.btn-ghost` in a quiet tools row. Buttons/inputs have
+  40px hit targets and `:focus-visible` rings.
+- **States are designed**: `emptyState(title, sub, action?)`, `loadingState()` skeleton,
+  banners for errors, and the calm-disabled pattern for AI-off (visible + muted +
+  a tap explains — `aria-disabled`, never hidden, never a dead click).
+- **The shell never depends on the Tailwind CDN.** Sidebar/drawer/header layout and
+  stacking live in owned classes in theme.css — utility classes are for in-screen
+  layout only. The mobile drawer must stay above the overlay (z 45 > 35).
+
 ## File map
 
 | Path | Purpose |

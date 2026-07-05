@@ -2,7 +2,7 @@
    One question: "Where does the project stand right now, and what needs me?" */
 import {
   STATE, registerRoute, h, kpiCard, chip, statusTone, progressBar, emptyState,
-  isUntaggedOverdue, isStalled, daysSince, fmtDate, go, loadAllData,
+  loadingState, isUntaggedOverdue, isStalled, daysSince, fmtDate, go, loadAllData,
 } from '../app.js';
 import { CURRENT_PHASE, PHASES, SEGMENTS } from '../config.js';
 import { data, aiAvailable } from '../data.js';
@@ -10,7 +10,7 @@ import { latestAssessment, LEANING_TONE, buyerHypotheses, runAssessment } from '
 
 function renderOverview(page) {
   if (!STATE.loaded) {
-    page.appendChild(h('div', { class: 'card' }, [emptyState('Loading project data…')]));
+    page.appendChild(h('div', { class: 'card' }, [loadingState()]));
     return;
   }
 
@@ -50,11 +50,11 @@ function renderOverview(page) {
   const strengthening = buyerHypotheses().filter(x => x.status === 'strengthening').length;
   const weakening = buyerHypotheses().filter(x => x.status === 'weakening').length;
   const pulse = h('div', { class: 'card p-4 mb-6 flex flex-wrap items-center gap-3' }, [
-    h('span', { class: 'micro', style: 'color:var(--ink-mute);', text: 'If we decided today' }),
+    h('span', { class: 'micro t-mute', text: 'If we decided today' }),
     latest
       ? chip(latest.leaning, LEANING_TONE[latest.leaning] || 'line')
       : chip('No assessment yet', 'line'),
-    h('span', { class: 'text-xs num', style: 'color:var(--ink-mute);', text: `${strengthening} strengthening · ${weakening} weakening` }),
+    h('span', { class: 'text-xs num t-mute', text: `${strengthening} strengthening · ${weakening} weakening` }),
     h('button', { class: 'btn btn-ghost text-xs ml-auto', onclick: () => go('decision-brief') }, 'Open Decision Brief →'),
   ]);
   page.appendChild(pulse);
@@ -66,8 +66,8 @@ function renderOverview(page) {
   const phase = PHASES.find(p => p.n === CURRENT_PHASE);
   const criteria = STATE.deliverables.filter(d => d.phase === CURRENT_PHASE);
   const critPanel = h('div', { class: 'card' });
-  critPanel.appendChild(h('div', { class: 'px-5 pt-4 pb-3 border-b', style: 'border-color:var(--line-soft);' }, [
-    h('div', { class: 'micro', style: 'color:var(--ink-mute);', text: `Phase ${CURRENT_PHASE} exit criteria` }),
+  critPanel.appendChild(h('div', { class: 'px-5 pt-4 pb-3 border-b b-soft' }, [
+    h('div', { class: 'micro t-mute', text: `Phase ${CURRENT_PHASE} exit criteria` }),
     h('div', { class: 'serif text-base mt-0.5', text: phase?.long || '' }),
   ]));
   const critList = h('div', { class: 'px-5 py-2' });
@@ -75,7 +75,7 @@ function renderOverview(page) {
     critList.appendChild(emptyState('No deliverables defined for this phase.'));
   } else {
     criteria.forEach(d => {
-      const row = h('div', { class: 'py-2.5 border-b flex items-start justify-between gap-3', style: 'border-color:var(--line-soft);' }, [
+      const row = h('div', { class: 'py-2.5 border-b flex items-start justify-between gap-3 b-soft' }, [
         h('div', { class: 'text-sm', text: d.deliverable, style: d.status === 'Complete' ? 'color:var(--ink-mute); text-decoration:line-through;' : '' }),
         chip(d.status, statusTone(d.status)),
       ]);
@@ -87,7 +87,7 @@ function renderOverview(page) {
     critList.lastChild.style.borderBottom = 'none';
   }
   critPanel.appendChild(critList);
-  critPanel.appendChild(h('div', { class: 'px-5 pb-3 text-xs', style: 'color:var(--ink-mute);', text: 'Tap a criterion to advance its status.' }));
+  critPanel.appendChild(h('div', { class: 'px-5 pb-3 text-xs t-mute', text: 'Tap a criterion to advance its status.' }));
 
   /* Phase-exit review — an advisory gate, not a hard block. Advancing
      CURRENT_PHASE stays a config change by design. */
@@ -114,14 +114,14 @@ function renderOverview(page) {
     } }, 'Run phase exit review');
     critPanel.appendChild(h('div', { class: 'px-5 pb-4' }, [exitBtn]));
   } else if (!hasExitReview) {
-    critPanel.appendChild(h('div', { class: 'px-5 pb-4 text-xs', style: 'color:var(--ink-mute);', text: 'Connect the assistant to run the exit review before advancing the phase.' }));
+    critPanel.appendChild(h('div', { class: 'px-5 pb-4 text-xs t-mute', text: 'Connect the assistant to run the exit review before advancing the phase.' }));
   }
   grid.appendChild(critPanel);
 
   /* Panel 2 — saturation by segment */
   const satPanel = h('div', { class: 'card' });
-  satPanel.appendChild(h('div', { class: 'px-5 pt-4 pb-3 border-b', style: 'border-color:var(--line-soft);' }, [
-    h('div', { class: 'micro', style: 'color:var(--ink-mute);', text: 'Saturation by segment' }),
+  satPanel.appendChild(h('div', { class: 'px-5 pt-4 pb-3 border-b b-soft' }, [
+    h('div', { class: 'micro t-mute', text: 'Saturation by segment' }),
     h('div', { class: 'serif text-base mt-0.5', text: 'Interview coverage' }),
   ]));
   const satList = h('div', { class: 'px-5 py-3' });
@@ -132,7 +132,7 @@ function renderOverview(page) {
     satList.appendChild(h('div', { class: 'mb-3' }, [
       h('div', { class: 'flex justify-between text-xs mb-1' }, [
         h('span', { text: seg.name }),
-        h('span', { class: 'num', style: 'color:var(--ink-mute);', text: `${done} / ${seg.target}` }),
+        h('span', { class: 'num t-mute', text: `${done} / ${seg.target}` }),
       ]),
       progressBar(pct, color),
     ]));
@@ -144,8 +144,8 @@ function renderOverview(page) {
 
   /* Panel 3 — needs attention (the exceptions, led by the hard rule) */
   const attnPanel = h('div', { class: 'card' });
-  attnPanel.appendChild(h('div', { class: 'px-5 pt-4 pb-3 border-b', style: 'border-color:var(--line-soft);' }, [
-    h('div', { class: 'micro', style: 'color:var(--ink-mute);', text: 'Needs attention' }),
+  attnPanel.appendChild(h('div', { class: 'px-5 pt-4 pb-3 border-b b-soft' }, [
+    h('div', { class: 'micro t-mute', text: 'Needs attention' }),
     h('div', { class: 'serif text-base mt-0.5', text: 'Problems first' }),
   ]));
   const attnList = h('div', { class: 'px-5 py-3 flex flex-col gap-2' });

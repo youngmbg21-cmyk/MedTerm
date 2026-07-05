@@ -11,6 +11,10 @@ import { latestAssessment, LEANING_TONE } from '../evidence.js';
 const VERDICTS = ['Undecided', 'GO', 'PIVOT', 'NO-GO'];
 const VERDICT_TONE = { GO: 'sage', PIVOT: 'honey', 'NO-GO': 'rose', Undecided: 'line' };
 
+/* One shared string each — not seven copies (Part B §3). */
+const MEMO_AI_HELPER = 'The assistant drafts this from the evidence ledger; you edit and save. Or write it manually.';
+const MEMO_AI_OFF_NOTE = 'Connect the assistant to draft this section from your tagged quotes, hypothesis links, and economics. See HANDOFF.md → go-live.';
+
 const MEMO_SECTIONS = [
   { key: 'wedge_tested', label: 'Wedge tested', placeholder: 'Which wedge was tested and why it was chosen.' },
   { key: 'what_we_learned', label: 'What we learned', placeholder: 'Key findings from the research — themes, patterns, surprises.' },
@@ -60,7 +64,7 @@ function renderDecisionMemo(page) {
   function humanSeat(name, roleLabel, key) {
     const current = content[key] || 'Undecided';
     const seat = h('div', {}, [
-      h('div', { class: 'micro mb-1', style: 'color:var(--ink-mute);', text: `${name} · ${roleLabel}` }),
+      h('div', { class: 'micro mb-1 t-mute', text: `${name} · ${roleLabel}` }),
     ]);
     const row = h('div', { class: 'flex flex-wrap gap-1.5' });
     VERDICTS.forEach(v => {
@@ -76,16 +80,16 @@ function renderDecisionMemo(page) {
 
   /* Verdict first — three seats at the table */
   const verdictCard = h('div', { class: 'card p-6 mb-4 max-w-3xl' });
-  verdictCard.appendChild(h('div', { class: 'micro mb-3', style: 'color:var(--ink-mute);', text: 'Verdict — three seats at the table. Humans decide; the AI argues.' }));
+  verdictCard.appendChild(h('div', { class: 'micro mb-3 t-mute', text: 'Verdict — three seats at the table. Humans decide; the AI argues.' }));
 
   const aiSeat = h('div', {}, [
-    h('div', { class: 'micro mb-1', style: 'color:var(--ink-mute);', text: 'AI assessment · advisory' }),
+    h('div', { class: 'micro mb-1 t-mute', text: 'AI assessment · advisory' }),
     latest
       ? h('div', { class: 'flex flex-wrap items-center gap-2' }, [
         chip(latest.leaning, LEANING_TONE[latest.leaning] || 'line'),
-        h('span', { class: 'text-xs', style: 'color:var(--ink-mute);', text: fmtDate(latest.created_at) }),
+        h('span', { class: 'text-xs t-mute', text: fmtDate(latest.created_at) }),
       ])
-      : h('div', { class: 'text-xs', style: 'color:var(--ink-mute);', text: 'No assessment yet.' }),
+      : h('div', { class: 'text-xs t-mute', text: 'No assessment yet.' }),
     h('button', { class: 'btn btn-ghost text-xs mt-1', style: 'padding-left:0;', onclick: () => go('decision-brief') }, 'Open Decision Brief →'),
   ]);
 
@@ -113,38 +117,63 @@ function renderDecisionMemo(page) {
       try { await saveMemo({ content: { ...content, override_rationale: ta.value.trim() } }); }
       catch (e) { alert('Save failed: ' + e.message); }
     } }, 'Save rationale');
-    verdictCard.appendChild(h('div', { class: 'mt-4 pt-4 border-t', style: 'border-color:var(--line-soft);' }, [
-      h('div', { class: 'micro mb-1', style: 'color:var(--honey-deep);', text: `Why we're overriding the assessment (AI leans ${latest.leaning}) — required` }),
+    verdictCard.appendChild(h('div', { class: 'mt-4 pt-4 border-t b-soft' }, [
+      h('div', { class: 'micro mb-1 t-honey', text: `Why we're overriding the assessment (AI leans ${latest.leaning}) — required` }),
       ta, saveBtn,
     ]));
   }
   page.appendChild(verdictCard);
 
-  /* Seven sections */
+  /* Seven sections — AI-first: the intended flow is AI drafts → human edits
+     → human signs, and the visual hierarchy says so. The draft path renders
+     first in every state; with AI off it is visibly muted, never hidden. */
   const card = h('div', { class: 'card max-w-3xl' });
   MEMO_SECTIONS.forEach(s => {
-    const section = h('div', { class: 'px-6 py-5 border-b', style: 'border-color:var(--line-soft);' });
-    section.appendChild(h('div', { class: 'micro mb-2', style: 'color:var(--clay);', text: s.label }));
-    const buttons = h('div', { class: 'mt-2 flex flex-wrap gap-2' });
-    if (content[s.key]) {
+    const section = h('div', { class: 'px-6 py-5 border-b b-soft' });
+    section.appendChild(h('div', { class: 'micro mb-2 t-clay', text: s.label }));
+    const filled = !!content[s.key];
+
+    if (filled) {
       section.appendChild(h('div', { class: 'text-sm leading-relaxed whitespace-pre-line', text: content[s.key] }));
-      buttons.appendChild(h('button', { class: 'btn btn-ghost text-xs', onclick: () => editMemoSection(s, content) }, 'Edit'));
     } else {
-      section.appendChild(h('div', { class: 'text-sm', style: 'color:var(--ink-mute);', text: s.placeholder }));
-      buttons.appendChild(h('button', { class: 'btn btn-line text-xs', onclick: () => editMemoSection(s, content) }, 'Write this section'));
+      section.appendChild(h('div', { class: 'text-sm t-mute', text: s.placeholder }));
+      section.appendChild(h('div', { class: 'text-xs mt-1 t-mute', text: MEMO_AI_HELPER }));
     }
+
+    const buttons = h('div', { class: 'mt-3 flex flex-wrap items-center gap-2' });
     if (aiAvailable) {
-      const draftBtn = h('button', { class: 'btn btn-ghost text-xs', onclick: () => draftMemoSection(s, content, draftBtn) }, 'Draft from evidence');
+      /* Empty: Draft is the primary path. Filled: a redraft still lands in
+         the edit modal for human review — never an auto-save. */
+      const draftBtn = h('button', {
+        class: `btn ${filled ? 'btn-ghost' : 'btn-primary'} text-xs`,
+        onclick: () => draftMemoSection(s, content, draftBtn),
+      }, filled ? 'Redraft from evidence' : 'Draft from evidence');
       buttons.appendChild(draftBtn);
+      buttons.appendChild(h('button', { class: 'btn btn-ghost text-xs', onclick: () => editMemoSection(s, content) },
+        filled ? 'Edit' : 'Write manually'));
+      section.appendChild(buttons);
+    } else {
+      /* Calm-disabled: the draft path stays visible; a tap explains how to
+         enable it instead of doing nothing. Writing manually always works. */
+      const note = h('div', { class: 'text-xs mt-2 t-mute', text: MEMO_AI_OFF_NOTE });
+      note.style.display = 'none';
+      const draftBtn = h('button', {
+        class: 'btn btn-line text-xs', 'aria-disabled': 'true',
+        onclick: () => { note.style.display = note.style.display === 'none' ? '' : 'none'; },
+      }, filled ? 'Redraft from evidence' : 'Draft from evidence');
+      buttons.appendChild(draftBtn);
+      buttons.appendChild(h('button', { class: `btn ${filled ? 'btn-ghost' : 'btn-line'} text-xs`, onclick: () => editMemoSection(s, content) },
+        filled ? 'Edit' : 'Write manually'));
+      section.appendChild(buttons);
+      section.appendChild(note);
     }
-    section.appendChild(buttons);
     card.appendChild(section);
   });
 
   /* Co-sign block — opens only when both human seats match. Signing
      snapshots the assessment the AI held at decision time. */
   const sig = h('div', { class: 'px-6 py-5' });
-  sig.appendChild(h('div', { class: 'micro mb-3', style: 'color:var(--ink-mute);', text: 'Co-signatures' }));
+  sig.appendChild(h('div', { class: 'micro mb-3 t-mute', text: 'Co-signatures' }));
   if (memo?.co_signed_at) {
     sig.appendChild(h('div', { class: 'flex flex-wrap items-center gap-2' }, [
       chip(`Co-signed by ${team.lead} & ${team.field} · ${fmtDate(memo.co_signed_at)}`, 'sage'),
@@ -154,7 +183,7 @@ function renderDecisionMemo(page) {
     ].filter(Boolean)));
   } else {
     const ready = agreed !== 'Undecided';
-    sig.appendChild(h('div', { class: 'text-sm mb-3', style: 'color:var(--ink-soft);', text: ready
+    sig.appendChild(h('div', { class: 'text-sm mb-3 t-soft', text: ready
       ? `Both seats agree on ${agreed}. Signing finalises the memo and records what the AI said at decision time.`
       : `Not yet co-signed. ${team.lead} and ${team.field} must each pick the same verdict above to enable signing.` }));
     const signBtn = h('button', { class: `btn ${ready ? 'btn-primary' : 'btn-line'}`, onclick: async () => {
@@ -248,11 +277,11 @@ function renderMVPScope(page) {
 
   SCOPE_FIELDS.forEach(f => {
     const section = h('div', { class: 'mb-5' });
-    section.appendChild(h('div', { class: 'micro mb-1', style: 'color:var(--clay);', text: f.label }));
+    section.appendChild(h('div', { class: 'micro mb-1 t-clay', text: f.label }));
     if (scope[f.key]) {
       section.appendChild(h('div', { class: 'text-sm', text: scope[f.key] }));
     } else {
-      section.appendChild(h('div', { class: 'text-sm', style: 'color:var(--ink-mute);', text: f.placeholder }));
+      section.appendChild(h('div', { class: 'text-sm t-mute', text: f.placeholder }));
     }
     card.appendChild(section);
   });
@@ -301,11 +330,11 @@ function renderConfirmatoryTests(page) {
 
     const card = h('div', { class: 'card p-6 mb-4 max-w-3xl' });
     card.appendChild(h('div', { class: 'serif text-lg mb-2', text: test.name }));
-    card.appendChild(h('div', { class: 'text-sm mb-4', style: 'color:var(--ink-soft);', text: test.description }));
-    card.appendChild(h('div', { class: 'micro mb-2', style: 'color:var(--ink-mute);', text: 'Metrics' }));
+    card.appendChild(h('div', { class: 'text-sm mb-4 t-soft', text: test.description }));
+    card.appendChild(h('div', { class: 'micro mb-2 t-mute', text: 'Metrics' }));
 
     test.metrics.forEach(m => {
-      card.appendChild(h('div', { class: 'flex items-center justify-between py-2 border-b text-sm', style: 'border-color:var(--line-soft);' }, [
+      card.appendChild(h('div', { class: 'flex items-center justify-between py-2 border-b text-sm b-soft' }, [
         h('span', { text: m }),
         h('span', { class: 'num', text: values[m] || '—' }),
       ]));

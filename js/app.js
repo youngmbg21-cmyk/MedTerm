@@ -124,6 +124,15 @@ export function go(route) {
   location.hash = route;
 }
 
+/* The screen's single primary action lives top-right in the app header.
+   Screens set it via setPageActions(); it clears on every route render. */
+export function setPageActions(...nodes) {
+  const slot = document.getElementById('page-actions');
+  if (!slot) return;
+  slot.innerHTML = '';
+  nodes.filter(Boolean).forEach(n => slot.appendChild(n));
+}
+
 export function renderCurrentRoute() {
   let route = (location.hash || '#overview').slice(1);
   if (route === 'dashboard') route = 'overview'; // legacy hash
@@ -132,6 +141,7 @@ export function renderCurrentRoute() {
   document.getElementById('page-title').textContent = r.title;
   const q = document.getElementById('page-question');
   if (q) q.textContent = r.question || '';
+  setPageActions(); // screens re-add their primary action during render
   document.querySelectorAll('[data-route]').forEach(el => {
     el.classList.toggle('active', el.dataset.route === route);
   });
@@ -190,7 +200,7 @@ export function buildNav() {
       return;
     }
     if (item.type === 'route') {
-      nav.appendChild(h('a', { class: 'nav-item', 'data-route': item.route }, [
+      nav.appendChild(h('a', { class: 'nav-item', 'data-route': item.route, href: `#${item.route}` }, [
         h('span', { class: 'dot' }), item.label,
       ]));
       return;
@@ -202,13 +212,19 @@ export function buildNav() {
 
     const group = h('div', { class: `nav-group${locked ? ' locked' : ''}` });
     const chevron = h('span', { class: 'nav-chevron', text: '›' });
+    /* Label left; phase badge + chevron (or lock) as a right-aligned column */
     const header = h('button', { class: 'nav-group-header', type: 'button' }, [
-      h('span', { class: 'micro', text: locked ? item.label : item.label + (item.phaseLabel ? ` · ${item.phaseLabel}` : '') }),
-      locked ? h('span', { class: 'nav-lock', title: `Unlocks at phase ${item.unlockAt}`, text: `🔒 phase ${item.unlockAt}` }) : chevron,
+      h('span', { class: 'micro', text: item.label }),
+      h('span', { class: 'nav-group-right' }, [
+        locked
+          ? h('span', { class: 'nav-lock', title: `Unlocks at phase ${item.unlockAt}`, text: `🔒 phase ${item.unlockAt}` })
+          : (item.phaseLabel ? h('span', { class: 'nav-phase-badge', text: item.phaseLabel }) : null),
+        locked ? null : chevron,
+      ].filter(Boolean)),
     ]);
     const list = h('div', { class: 'nav-group-list' });
     item.routes.forEach(([route, label]) => {
-      list.appendChild(h('a', { class: 'nav-item', 'data-route': route }, [
+      list.appendChild(h('a', { class: 'nav-item', 'data-route': route, href: `#${route}` }, [
         h('span', { class: 'dot' }), label,
       ]));
     });
@@ -234,14 +250,35 @@ export function buildNav() {
   });
 }
 
+/* Mobile drawer behaviours: body scroll locks while open, Escape closes,
+   focus moves into the drawer and returns to the opener on close. On
+   desktop the sidebar is persistent and none of this applies (closeSidebar
+   is a no-op when the drawer was never opened). */
+let drawerReturnFocus = null;
+
 export function openSidebar() {
-  document.getElementById('sidebar').classList.add('open');
+  const sb = document.getElementById('sidebar');
+  sb.classList.add('open');
   document.getElementById('mobile-overlay').classList.add('open');
+  document.body.style.overflow = 'hidden';
+  drawerReturnFocus = document.activeElement;
+  const first = sb.querySelector('a, button');
+  if (first) first.focus();
 }
+
 export function closeSidebar() {
-  document.getElementById('sidebar').classList.remove('open');
+  const sb = document.getElementById('sidebar');
+  if (!sb.classList.contains('open')) return;
+  sb.classList.remove('open');
   document.getElementById('mobile-overlay').classList.remove('open');
+  document.body.style.overflow = '';
+  if (drawerReturnFocus && typeof drawerReturnFocus.focus === 'function') drawerReturnFocus.focus();
+  drawerReturnFocus = null;
 }
+
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape') closeSidebar();
+});
 
 /* ------------------------------------------------------------
    DOM HELPERS — h() builds elements; all text goes through
@@ -276,7 +313,7 @@ export function kpiCard(label, value, sub, tone) {
   const num = h('div', { class: 'kpi-num', text: String(value) });
   if (toneColor) num.style.color = toneColor;
   const card = h('div', { class: 'card kpi' }, [num, h('div', { class: 'kpi-label', text: label })]);
-  if (sub) card.appendChild(h('div', { class: 'text-xs mt-2', style: 'color:var(--ink-mute);', text: sub }));
+  if (sub) card.appendChild(h('div', { class: 'text-xs mt-2 t-mute', text: sub }));
   return card;
 }
 
@@ -318,15 +355,28 @@ export function quoteBlock(entry, { showEdit } = {}) {
     head,
     h('div', { class: 'quote-text', text: entry.quote ? `“${entry.quote}”` : '(no quote)' }),
   ]);
-  if (entry.notes) block.appendChild(h('div', { class: 'text-xs mt-2', style: 'color:var(--ink-mute);', text: entry.notes }));
+  if (entry.notes) block.appendChild(h('div', { class: 'text-xs mt-2 t-mute', text: entry.notes }));
   return block;
 }
 
-/* 5 · Empty state — no blank panels, ever */
-export function emptyState(title, sub) {
-  return h('div', { class: 'p-10 text-center' }, [
-    h('div', { class: 'text-sm', style: 'color:var(--ink-mute);', text: title }),
-    sub ? h('div', { class: 'text-xs mt-1', style: 'color:var(--ink-mute);', text: sub }) : null,
+/* 5a · Loading state — the one loading pattern app-wide */
+export function loadingState(lines = 3) {
+  const box = h('div', { class: 'loading-state' });
+  for (let i = 0; i < lines; i++) {
+    const l = h('div', { class: 'skeleton-line' });
+    l.style.width = `${85 - i * 18}%`; // dynamic value — sanctioned inline style
+    box.appendChild(l);
+  }
+  return box;
+}
+
+/* 5 · Empty state — title + one-line body + optional single action.
+   Never a bare sentence in a blank panel. */
+export function emptyState(title, sub, action) {
+  return h('div', { class: 'empty-state' }, [
+    h('div', { class: 'empty-title', text: title }),
+    sub ? h('div', { class: 'empty-sub', text: sub }) : null,
+    action ? h('button', { class: 'btn btn-line', onclick: action.onclick }, action.label) : null,
   ].filter(Boolean));
 }
 
@@ -336,7 +386,7 @@ export function emptyState(title, sub) {
 /* ------------------------------------------------------------
    MODAL + FORM HELPERS
    ------------------------------------------------------------ */
-export function openModal(title, fields, onSubmit, submitLabel = 'Save') {
+export function openModal(title, fields, onSubmit, submitLabel = 'Save', { danger } = {}) {
   const root = document.getElementById('modal-root');
   root.innerHTML = '';
 
@@ -349,11 +399,12 @@ export function openModal(title, fields, onSubmit, submitLabel = 'Save') {
     });
     onSubmit(out);
   } });
-  form.appendChild(h('div', { class: 'serif text-xl mb-5', text: title }));
+  /* Destructive confirmations are visually distinct: rose header rule + rose action */
+  form.appendChild(h('div', { class: `modal-title serif${danger ? ' modal-title-danger' : ''}`, text: title }));
   fields.forEach(f => form.appendChild(f.el));
-  form.appendChild(h('div', { class: 'flex gap-3 mt-5 justify-end pt-4 border-t', style: 'border-color:var(--line-soft);' }, [
+  form.appendChild(h('div', { class: 'flex gap-3 mt-5 justify-end pt-4 border-t b-soft' }, [
     h('button', { type: 'button', class: 'btn btn-line', onclick: closeModal }, 'Cancel'),
-    h('button', { type: 'submit', class: 'btn btn-primary' }, submitLabel),
+    h('button', { type: 'submit', class: `btn ${danger ? 'btn-danger' : 'btn-primary'}` }, submitLabel),
   ]));
 
   root.appendChild(h('div', {

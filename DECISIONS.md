@@ -355,3 +355,71 @@ Dated 2026-07-04. Each entry is a decision the brief left open, plus the reasoni
     filter are independent, both AND'd together** — tapping a Grid cell sets
     a dismissible `{theme, segment}` filter, and the three dropdowns still
     narrow further from there.
+
+## Design elevation + AI-first memo — 2026-07-05
+
+60. **The mobile nav bug was a stacking-order race with the Tailwind CDN.**
+    The sidebar carried utility classes (`z-30` among them) while the mobile
+    overlay sat at `z-index: 35`; whenever the runtime CDN stylesheet landed
+    after `theme.css`, the open drawer rendered *beneath* the tap-catching
+    overlay and every tap closed the menu. Fix: shell-critical positioning
+    (sidebar, drawer, header, overlay) moved into owned classes in
+    `theme.css`, never utilities — the shell now renders identically with or
+    without the CDN. This is a standing rule (see CLAUDE.md, Design system).
+
+61. **`--ink-mute` was darkened from `#8A8478` (3.3:1 — fails WCAG AA) to
+    `#6E6A5E` (4.8:1 on page, 5.4:1 on card).** It is the app's most-used
+    secondary text colour, so this is the single most visible change of the
+    pass. Honey, info and clay text tones were also darkened to AA
+    (`#755A1E`, `#3E5C77`, `#96501F`); every tone trio's ratios are logged
+    in PROGRESS.md. `js/charts.js` PALETTE was updated by hand to match.
+
+62. **Tailwind utilities stay for in-screen layout.** Removing the CDN
+    entirely would mean rewriting hundreds of flex/grid/padding utilities in
+    one session with no test coverage of visual layout — high risk, no
+    user-visible gain. The line drawn instead: the SHELL never depends on
+    Tailwind (it must work when the CDN fails); screens may keep using
+    utilities for layout; all colour/typography/component styling flows
+    through tokens. Logged as the pass's biggest deliberate compromise.
+
+63. **The one-primary-action rule is implemented as a header slot**
+    (`setPageActions()`, cleared on every route render) rather than a
+    `registerRoute` schema change — smaller diff, and screens that genuinely
+    have no single primary action (Reports' four generators, Settings,
+    reference pages) simply leave the slot empty. The Decision Brief's
+    "Regenerate brief" stays inside the leaning card next to its
+    explanation: it is a contextual act on that card's content, and moving
+    it away from the "appends, never rewrites" caption would trade clarity
+    for consistency.
+
+64. **`aria-disabled` (not `disabled`) is the calm-disabled pattern.** Real
+    `disabled` buttons swallow clicks, so a disabled "Draft from evidence"
+    could never explain itself. `aria-disabled="true"` gets the muted look
+    but stays tappable; the tap toggles one inline note saying how to
+    connect the assistant. Used in the memo (Part B); the chat quick-actions
+    keep real `disabled` because the panel greeting already explains the
+    AI-off state.
+
+65. **The sync chip hides under 640px.** On a phone the header's width
+    belongs to the screen's primary action; sync state is informational and
+    remains visible on desktop and in Settings. Removing it beat wrapping
+    the header (which pushes a taller sticky header over content) and beat
+    shrinking primary-action labels.
+
+66. **Print page numbers were dropped from the report footer.** A running
+    footer with report name and date is fixed-position CSS and prints on
+    every page; true page numbers need `@page` margin boxes, which Chrome
+    does not support — a JS pagination shim is not worth the dependency-free
+    budget. The brief's "running footer with page/date" ships as date +
+    document identity.
+
+67. **`alert()` error handling stays.** Swapping every alert for an inline
+    banner requires each call site to know where in its (sometimes modal,
+    sometimes list) DOM to mount the banner — that is logic surgery in ~30
+    catch handlers, explicitly out of scope for a presentation pass. Logged
+    as the known gap; new code should prefer banners.
+
+68. **Playwright's actionability check refuses to click `aria-disabled`
+    buttons** — the Part B verification dispatches a DOM `click()` instead.
+    Real browsers deliver user taps to `aria-disabled` elements normally;
+    this is a test-harness semantic, not an app defect.

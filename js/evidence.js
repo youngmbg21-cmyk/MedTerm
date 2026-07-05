@@ -173,7 +173,7 @@ export async function maybeProposeLinks(entryType, entry) {
 
     let remaining = proposals.length;
     const wrap = h('div', { class: 'card p-4 mb-4 fade-in', style: 'border-color:var(--info);' });
-    wrap.appendChild(h('div', { class: 'micro mb-2', style: 'color:var(--info);', text: 'The assistant suggests linking what you just saved — confirm or skip' }));
+    wrap.appendChild(h('div', { class: 'micro mb-2 t-info', text: 'The assistant suggests linking what you just saved — confirm or skip' }));
     proposals.forEach(p => {
       wrap.appendChild(actionConfirmation({
         action_type: 'add_evidence_link',

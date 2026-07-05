@@ -13,7 +13,7 @@ import {
 } from '../evidence.js';
 
 function muteText(text, cls = 'text-xs') {
-  return h('div', { class: cls, style: 'color:var(--ink-mute);', text });
+  return h('div', { class: `${cls} t-mute`, text });
 }
 
 /* ---------- 1 · Leaning card ---------- */
@@ -45,22 +45,22 @@ function regenControl() {
 function leaningCard(latest) {
   const card = h('div', { class: 'card p-6 mb-5' });
   if (!latest) {
-    card.appendChild(h('div', { class: 'micro mb-2', style: 'color:var(--ink-mute);', text: 'Current leaning' }));
-    card.appendChild(h('span', { class: 'chip chip-line', style: 'font-size:14px; padding:8px 16px;', text: 'INSUFFICIENT' }));
-    card.appendChild(h('div', { class: 'text-sm mt-3', style: 'color:var(--ink-soft);', text: 'No assessment has been generated yet. Early in the programme, the honest answer is INSUFFICIENT — showing that plainly is the point of this screen.' }));
+    card.appendChild(h('div', { class: 'micro mb-2 t-mute', text: 'Current leaning' }));
+    card.appendChild(h('span', { class: 'chip chip-line chip-lg', text: 'INSUFFICIENT' }));
+    card.appendChild(h('div', { class: 'text-sm mt-3 t-soft', text: 'No assessment has been generated yet. Early in the programme, the honest answer is INSUFFICIENT — showing that plainly is the point of this screen.' }));
     card.appendChild(regenControl());
     return card;
   }
   card.appendChild(h('div', { class: 'flex flex-wrap items-start justify-between gap-3 mb-3' }, [
     h('div', {}, [
-      h('div', { class: 'micro mb-2', style: 'color:var(--ink-mute);', text: 'Current leaning — advisory, not a verdict' }),
-      h('span', { class: `chip chip-${LEANING_TONE[latest.leaning] || 'line'}`, style: 'font-size:15px; padding:8px 18px;', text: latest.leaning }),
+      h('div', { class: 'micro mb-2 t-mute', text: 'Current leaning — advisory, not a verdict' }),
+      h('span', { class: `chip chip-${LEANING_TONE[latest.leaning] || 'line'} chip-lg`, text: latest.leaning }),
     ]),
     muteText(`${fmtDate(latest.created_at)} · trigger: ${latest.trigger} · phase ${latest.phase} · ${latest.model || ''}`),
   ]));
   card.appendChild(renderMarkdown(latest.summary_markdown));
   const snap = latest.data_snapshot || {};
-  card.appendChild(h('div', { class: 'mt-4 pt-3 border-t text-xs', style: 'border-color:var(--line-soft); color:var(--ink-mute);',
+  card.appendChild(h('div', { class: 'mt-4 pt-3 border-t text-xs num b-soft t-mute',
     text: `Based on ${snap.interviews ?? '?'} interviews · ${snap.matrix_entries ?? '?'} matrix entries · ${snap.evidence_links ?? '?'} evidence links · ${snap.field_checks ?? '?'} field checks` }));
   card.appendChild(regenControl());
   return card;
@@ -78,7 +78,7 @@ function hypothesisCard(hyp, latest) {
     h('div', { class: 'serif text-lg', text: `${hyp.code} · ${hyp.title}` }),
     chip(hyp.status, HYP_STATUS_TONE[hyp.status] || 'line'),
   ]));
-  card.appendChild(h('div', { class: 'text-xs mb-3', style: 'color:var(--ink-soft);', text: hyp.description || '' }));
+  card.appendChild(h('div', { class: 'text-xs mb-3 t-soft', text: hyp.description || '' }));
 
   const assessRow = h('div', { class: 'flex flex-wrap items-center gap-2 mb-3' });
   if (assessed) {
@@ -88,7 +88,7 @@ function hypothesisCard(hyp, latest) {
   } else {
     assessRow.appendChild(chip('not yet assessed', 'line'));
   }
-  assessRow.appendChild(h('span', { class: 'text-xs num', style: 'color:var(--ink-mute);', text: `${sup} supporting · ${con} contradicting` }));
+  assessRow.appendChild(h('span', { class: 'text-xs num t-mute', text: `${sup} supporting · ${con} contradicting` }));
   card.appendChild(assessRow);
 
   const quotes = topQuotesFor(hyp.id, 2);
@@ -97,12 +97,12 @@ function hypothesisCard(hyp, latest) {
     quotes.forEach(q => qWrap.appendChild(quoteBlock(q)));
     card.appendChild(qWrap);
   } else {
-    card.appendChild(h('div', { class: 'text-xs mb-3', style: 'color:var(--ink-mute);', text: 'No linked quotes yet — link matrix evidence to this hypothesis.' }));
+    card.appendChild(h('div', { class: 'text-xs mb-3 t-mute', text: 'No linked quotes yet — link matrix evidence to this hypothesis.' }));
   }
 
   if (assessed?.gaps) {
     card.appendChild(h('div', { class: 'mb-3' }, [
-      h('div', { class: 'micro mb-1', style: 'color:var(--ink-mute);', text: 'Gaps' }),
+      h('div', { class: 'micro mb-1 t-mute', text: 'Gaps' }),
       h('div', { class: 'text-sm', text: assessed.gaps }),
     ]));
   }
@@ -119,10 +119,10 @@ function hypothesisCard(hyp, latest) {
 /* ---------- Kill-criteria strip ---------- */
 function killStrip(latest) {
   const card = h('div', { class: 'card p-5 mb-5' });
-  card.appendChild(h('div', { class: 'micro mb-3', style: 'color:var(--ink-mute);', text: 'Kill criteria — any breach kills the patient-pays model' }));
+  card.appendChild(h('div', { class: 'micro mb-3 t-mute', text: 'Kill criteria — any breach kills the patient-pays model' }));
   killCriteria().forEach(k => {
     const bp = (latest?.breakpoints || []).find(b => b.code === k.code);
-    const row = h('div', { class: 'flex flex-wrap items-center gap-2 py-2 border-b', style: 'border-color:var(--line-soft);' }, [
+    const row = h('div', { class: 'flex flex-wrap items-center gap-2 py-2 border-b b-soft' }, [
       chip(k.status, HYP_STATUS_TONE[k.status] || 'line'),
       h('span', { class: 'text-sm font-medium', text: `${k.code} · ${k.title}` }),
       h('span', { class: 'text-xs flex-1', style: 'color:var(--ink-mute); min-width:180px;', text: bp?.note || k.status_note || k.description }),
@@ -146,14 +146,14 @@ function viewAssessmentModal(a) {
     muteText(`Read-only — assessments are never edited. Trigger: ${a.trigger} · phase ${a.phase} · ${a.model || ''}`),
     h('div', { class: 'mt-4' }, [renderMarkdown(a.summary_markdown)]),
     h('div', { class: 'mt-4 flex flex-col gap-2' }, (a.per_hypothesis || []).map(p =>
-      h('div', { class: 'text-sm py-2 border-t', style: 'border-color:var(--line-soft);' }, [
+      h('div', { class: 'text-sm py-2 border-t b-soft' }, [
         h('div', { class: 'flex items-center gap-2 mb-1' }, [
           h('span', { class: 'font-medium', text: p.hypothesis_code }),
           chip(`${DIRECTION_ARROW[p.direction] || '→'} ${p.direction} · ${p.strength}`, p.direction === 'strengthening' ? 'sage' : p.direction === 'weakening' ? 'honey' : 'line'),
         ]),
-        h('div', { class: 'text-xs', style: 'color:var(--ink-soft);', text: `Would change it: ${p.what_would_change || '—'}` }),
+        h('div', { class: 'text-xs t-soft', text: `Would change it: ${p.what_would_change || '—'}` }),
       ]))),
-    h('div', { class: 'flex justify-end mt-5 pt-4 border-t', style: 'border-color:var(--line-soft);' }, [
+    h('div', { class: 'flex justify-end mt-5 pt-4 border-t b-soft' }, [
       h('button', { class: 'btn btn-line', onclick: () => { root.innerHTML = ''; } }, 'Close'),
     ]),
   ]);
@@ -166,7 +166,7 @@ function viewAssessmentModal(a) {
 function trajectoryStrip() {
   const all = assessmentsOldestFirst();
   const card = h('div', { class: 'card p-5 mb-5' });
-  card.appendChild(h('div', { class: 'micro mb-3', style: 'color:var(--ink-mute);', text: 'Trajectory — every assessment, oldest first. The sequence is itself evidence.' }));
+  card.appendChild(h('div', { class: 'micro mb-3 t-mute', text: 'Trajectory — every assessment, oldest first. The sequence is itself evidence.' }));
   if (!all.length) {
     card.appendChild(muteText('No assessments yet. The first one starts the trajectory.', 'text-sm'));
     return card;
@@ -179,7 +179,7 @@ function trajectoryStrip() {
     c.title = `Trigger: ${a.trigger} · phase ${a.phase} — tap to read`;
     c.addEventListener('click', () => viewAssessmentModal(a));
     strip.appendChild(c);
-    if (i < all.length - 1) strip.appendChild(h('span', { class: 'text-xs', style: 'color:var(--ink-mute);', text: '→' }));
+    if (i < all.length - 1) strip.appendChild(h('span', { class: 'text-xs t-mute', text: '→' }));
   });
   card.appendChild(strip);
   return card;
@@ -192,21 +192,21 @@ function divergencePanel(latest) {
   if (!latest || !verdict || verdict === 'Undecided' || verdict === latest.leaning) return null;
 
   const card = h('div', { class: 'card p-5 mb-5', style: 'border-color:var(--honey);' });
-  card.appendChild(h('div', { class: 'micro mb-3', style: 'color:var(--honey-deep);', text: 'Divergence — the team and the assessment disagree' }));
+  card.appendChild(h('div', { class: 'micro mb-3 t-honey', text: 'Divergence — the team and the assessment disagree' }));
   card.appendChild(h('div', { class: 'grid sm:grid-cols-2 gap-4 mb-3' }, [
     h('div', {}, [
-      h('div', { class: 'micro mb-1', style: 'color:var(--ink-mute);', text: 'Team verdict (memo)' }),
+      h('div', { class: 'micro mb-1 t-mute', text: 'Team verdict (memo)' }),
       chip(verdict, LEANING_TONE[verdict] || 'line'),
     ]),
     h('div', {}, [
-      h('div', { class: 'micro mb-1', style: 'color:var(--ink-mute);', text: 'AI leaning (advisory)' }),
+      h('div', { class: 'micro mb-1 t-mute', text: 'AI leaning (advisory)' }),
       chip(latest.leaning, LEANING_TONE[latest.leaning] || 'line'),
     ]),
   ]));
   const rationale = memo?.content?.override_rationale;
   if (rationale) {
     card.appendChild(h('div', {}, [
-      h('div', { class: 'micro mb-1', style: 'color:var(--ink-mute);', text: 'Why we\'re overriding the assessment' }),
+      h('div', { class: 'micro mb-1 t-mute', text: 'Why we\'re overriding the assessment' }),
       h('div', { class: 'text-sm whitespace-pre-line', text: rationale }),
     ]));
   } else {
@@ -226,10 +226,10 @@ function renderDecisionBrief(page) {
   const div = divergencePanel(latest);
   if (div) page.appendChild(div);
 
-  page.appendChild(h('div', { class: 'micro mb-3', style: 'color:var(--ink-mute);', text: 'Buyer hypotheses — who pays?' }));
+  page.appendChild(h('div', { class: 'micro mb-3 t-mute', text: 'Buyer hypotheses — who pays?' }));
   const board = h('div', { class: 'grid md:grid-cols-2 xl:grid-cols-3 gap-4 mb-5' });
   buyerHypotheses().forEach(hyp => board.appendChild(hypothesisCard(hyp, latest)));
-  if (!board.children.length) board.appendChild(h('div', { class: 'card p-5 text-sm', style: 'color:var(--ink-mute);', text: 'No hypotheses defined.' }));
+  if (!board.children.length) board.appendChild(h('div', { class: 'card p-5 text-sm t-mute', text: 'No hypotheses defined.' }));
   page.appendChild(board);
 
   page.appendChild(killStrip(latest));

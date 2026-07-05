@@ -43,7 +43,7 @@ export async function requireLogin() {
       }
     } }, [
       h('div', { class: 'serif text-2xl mb-1', text: 'MedTerminal' }),
-      h('div', { class: 'text-sm mb-6', style: 'color:var(--ink-mute);', text: 'Sign in with your team email to continue.' }),
+      h('div', { class: 'text-sm mb-6 t-mute', text: 'Sign in with your team email to continue.' }),
       h('label', { class: 'label', text: 'Email' }),
       email,
       msg,
