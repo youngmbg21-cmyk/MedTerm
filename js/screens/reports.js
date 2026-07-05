@@ -5,22 +5,63 @@ import {
   STATE, registerRoute, renderCurrentRoute, h, emptyState, fmtDate, daysSince,
   isUntaggedOverdue, isStalled,
 } from '../app.js';
-import { CURRENT_PHASE, PHASES, SEGMENTS } from '../config.js';
+import { CURRENT_PHASE, PHASES, SEGMENTS, getTeam } from '../config.js';
 import { data, isLocalMode } from '../data.js';
+import { barChart, percentMeter, riskMatrixSvg, serializeSvg } from '../charts.js';
+import { DEFAULT_ASSUMPTIONS, BREAKPOINTS, derive } from './economics.js';
 
 const REPORT_TYPES = [
   { type: 'weekly_status', name: 'Weekly status report', description: 'Single page. This week\'s interviews, outreach progress, top themes, blockers.' },
   { type: 'phase_exit', name: 'Phase exit assessment', description: 'Exit criteria with evidence, what was learned, what remains uncertain.' },
   { type: 'investor_briefing', name: 'Investor briefing', description: 'Executive summary, wedge, what we learned, economic picture, current direction.' },
+  { type: 'executive_briefing', name: 'Executive briefing', description: 'Board-ready: verdict-first summary, methodology, core findings, strategic implications, risk matrix, next steps.' },
 ];
 
-/* ---------- Template generators (work in both modes) ---------- */
+/* ---------- Shared helpers ---------- */
 function topThemes(n = 5) {
   const counts = {};
   STATE.matrix.forEach(r => { if (r.theme_tag) counts[r.theme_tag] = (counts[r.theme_tag] || 0) + 1; });
   return Object.entries(counts).sort((a, b) => b[1] - a[1]).slice(0, n);
 }
 
+function rankThemesFull(n) {
+  const themeData = {};
+  STATE.matrix.forEach(r => {
+    if (!r.theme_tag) return;
+    if (!themeData[r.theme_tag]) themeData[r.theme_tag] = { count: 0, totalSev: 0, wtpY: 0, quotes: [] };
+    const d = themeData[r.theme_tag];
+    d.count++; d.totalSev += +r.severity || 0; if (r.wtp === 'Y') d.wtpY++;
+    d.quotes.push(r);
+  });
+  const ranked = Object.entries(themeData).map(([tag, d]) => ({
+    tag, count: d.count, avgSev: d.count ? d.totalSev / d.count : 0,
+    wtpRate: d.count ? Math.round((d.wtpY / d.count) * 100) : 0,
+    score: d.count * (d.totalSev / (d.count || 1)) * (1 + d.wtpY / (d.count || 1)),
+    quotes: d.quotes,
+  })).sort((a, b) => b.score - a.score);
+  return n ? ranked.slice(0, n) : ranked;
+}
+
+function taggedPct() {
+  const total = STATE.interviews.length;
+  if (!total) return 100;
+  return (STATE.interviews.filter(r => r.tagged_same_day === 'Y').length / total) * 100;
+}
+
+function segmentCoverageRows() {
+  return SEGMENTS.map(s => ({ label: s.name, value: STATE.interviews.filter(r => r.segment === s.name).length, target: s.target }));
+}
+
+function isEconomicsCritical(text) {
+  return /cost|pay|price|fee|money|insur|cac|conversion|margin/i.test(text || '');
+}
+
+function wordLimit(str, n) {
+  const words = str.trim().split(/\s+/);
+  return words.length <= n ? str.trim() : words.slice(0, n).join(' ') + '…';
+}
+
+/* ---------- Template generators (work in both modes) ---------- */
 function generateWeeklyStatus() {
   const recent = STATE.interviews.filter(r => (daysSince(r.date) ?? 99) <= 7);
   const overdue = STATE.interviews.filter(isUntaggedOverdue);
@@ -31,7 +72,11 @@ function generateWeeklyStatus() {
   return {
     title: `Weekly status — ${new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })}`,
     sections: [
-      { title: 'Where we are', body: `Phase ${CURRENT_PHASE} — ${phase?.long}. ${STATE.interviews.length} interviews logged in total, ${STATE.matrix.length} quotes tagged in the matrix, ${STATE.outreach.length} contacts in the outreach pipeline.` },
+      {
+        title: 'Where we are',
+        body: `Phase ${CURRENT_PHASE} — ${phase?.long}. ${STATE.interviews.length} interviews logged in total, ${STATE.matrix.length} quotes tagged in the matrix, ${STATE.outreach.length} contacts in the outreach pipeline.`,
+        chart: { type: 'meter', pct: taggedPct(), label: 'Same-day tagging rate (hard rule: must be 100%)' },
+      },
       { title: 'This week\'s interviews', body: recent.length ? recent.map(r => `${r.interview_id} · ${r.segment} · ${fmtDate(r.date)} — ${r.brief_topic || 'no topic recorded'}`).join('\n') : 'No interviews in the last 7 days.' },
       { title: 'Top themes so far', body: topThemes().map(([t, n], i) => `${i + 1}. ${t} (${n} mentions)`).join('\n') || 'No themes tagged yet.' },
       { title: 'Blockers', body: [
@@ -57,10 +102,11 @@ function generatePhaseExit() {
     sections: [
       { title: 'Recommendation', body: verdict },
       { title: 'Exit criteria', body: criteria.map(d => `[${d.status}] ${d.deliverable}${d.evidence ? ` — ${d.evidence}` : ''}`).join('\n') || 'No criteria defined.' },
-      { title: 'Coverage', body: SEGMENTS.map(s => {
-        const n = STATE.interviews.filter(r => r.segment === s.name).length;
-        return `${s.name}: ${n}/${s.target} interviews`;
-      }).join('\n') },
+      {
+        title: 'Coverage',
+        body: SEGMENTS.map(s => `${s.name}: ${STATE.interviews.filter(r => r.segment === s.name).length}/${s.target} interviews`).join('\n'),
+        chart: { type: 'bar', rows: segmentCoverageRows() },
+      },
       { title: 'What remains uncertain', body: STATE.field_checks.filter(r => !r.confirmed).map(r => `- ${r.assumption}`).join('\n') || 'No open field checks.' },
     ],
   };
@@ -71,14 +117,110 @@ function generateInvestorBriefing() {
   const phase = PHASES.find(p => p.n === CURRENT_PHASE);
   const wtpQuotes = STATE.matrix.filter(r => r.wtp === 'Y' && +r.severity >= 4);
 
+  const wtpBySegment = {};
+  wtpQuotes.forEach(r => { wtpBySegment[r.segment] = (wtpBySegment[r.segment] || 0) + 1; });
+  const wtpRows = Object.entries(wtpBySegment).sort((a, b) => b[1] - a[1]).map(([label, value]) => ({ label, value }));
+
   return {
     title: `MedTerminal — research briefing, ${new Date().toLocaleDateString('en-GB', { month: 'long', year: 'numeric' })}`,
     sections: [
       { title: 'Executive summary', body: `We are running a six-phase discovery programme to decide whether a patient-side medical-travel service for the Kenya→India corridor is worth building. We are in Phase ${CURRENT_PHASE} (${phase?.long}) with ${STATE.interviews.length} interviews completed across ${new Set(STATE.interviews.map(r => r.segment)).size} segments.` },
       { title: 'The wedge being tested', body: 'Patient-side coordination for Kenyan families seeking treatment in India: discovery, trustworthy quotes, document handling, and money movement — the work currently done informally by brokers with opaque commissions.' },
-      { title: 'Strongest willingness-to-pay evidence', body: wtpQuotes.slice(0, 5).map(r => `"${r.quote}" — ${r.segment}, ${r.interview_id}`).join('\n\n') || 'Evidence still accumulating.' },
+      {
+        title: 'Strongest willingness-to-pay evidence',
+        body: wtpQuotes.slice(0, 5).map(r => `"${r.quote}" — ${r.segment}, ${r.interview_id}`).join('\n\n') || 'Evidence still accumulating.',
+        chart: wtpRows.length ? { type: 'bar', rows: wtpRows, opts: { max: Math.max(...wtpRows.map(r => r.value)) } } : null,
+      },
       { title: 'What we have ruled out', body: killed.map(k => `- ${k.hypothesis} (killed ${fmtDate(k.killed_date)})`).join('\n') || 'Nothing killed yet.' },
       { title: 'Honest caveats', body: 'Sample sizes are small and skewed to accessible contacts. Willingness-to-pay statements are unvalidated by actual payment. Economics are modelled, not observed.' },
+    ],
+  };
+}
+
+function generateExecutiveBriefing() {
+  const phase = PHASES.find(p => p.n === CURRENT_PHASE);
+  const team = getTeam();
+  const total = STATE.interviews.length;
+  const taggedPercent = taggedPct();
+  const ranked = rankThemesFull(6);
+  const topTheme = ranked[0];
+
+  const memo = STATE.decision_memos[0];
+  const verdict = memo?.content?.verdict;
+  const verdictLine = (verdict && verdict !== 'Undecided')
+    ? `Verdict: ${verdict}.`
+    : `Direction: continuing Phase ${CURRENT_PHASE} discovery — no formal verdict yet.`;
+
+  const assumptions = { ...DEFAULT_ASSUMPTIONS, ...(STATE.economics.find(m => m.model_name === 'base')?.assumptions || {}) };
+  const derived = derive(assumptions);
+  const brokenCount = BREAKPOINTS.filter(bp => bp.broken(assumptions, derived)).length;
+
+  const summaryRaw = `${verdictLine} The programme has completed ${total} interview${total === 1 ? '' : 's'} across ${new Set(STATE.interviews.map(r => r.segment)).size} of ${SEGMENTS.length} target segments, testing patient-side coordination for the Kenya→India medical-travel corridor. ${topTheme ? `The strongest signal so far is "${topTheme.tag}" (${topTheme.count} mentions, ${topTheme.wtpRate}% willingness-to-pay rate).` : 'Theme evidence is still accumulating.'} The unit-economics model currently ${brokenCount === 0 ? 'clears all three break-point checks' : `fails ${brokenCount} of 3 break-point checks`} under current assumptions. Same-day interview tagging stands at ${Math.round(taggedPercent)}%. Sample sizes remain small; findings should be read as directional, not conclusive, until Phase 2 saturation.`;
+  const summary = wordLimit(summaryRaw, 150);
+
+  const dates = STATE.interviews.map(r => r.date).filter(Boolean).sort();
+  const period = dates.length ? `${fmtDate(dates[0])} – ${fmtDate(dates[dates.length - 1])}` : 'No interviews logged yet.';
+
+  const findingsBody = ranked.length
+    ? ranked.map((t, i) => {
+        const bestQuote = [...t.quotes].sort((a, b) => (+b.severity || 0) - (+a.severity || 0))[0];
+        const thin = t.count < 3 ? ' (thin evidence — fewer than 3 supporting quotes)' : '';
+        return `${i + 1}. ${t.tag}${thin}\n   ${t.count} mentions · avg severity ${t.avgSev.toFixed(1)} · ${t.wtpRate}% WTP\n   "${(bestQuote?.quote || '').slice(0, 220)}" — ${bestQuote?.interview_id || '?'}`;
+      }).join('\n\n')
+    : 'No matrix entries yet — core findings will populate once quotes are tagged.';
+
+  const implications = [];
+  const ipdWtp = STATE.matrix.filter(r => r.segment === 'Hospital IPD' && r.wtp === 'Y');
+  if (ipdWtp.length >= 2) implications.push(`Willingness to pay on the Hospital IPD side is now corroborated by ${ipdWtp.length} independent interviews (${[...new Set(ipdWtp.map(r => r.interview_id))].join(', ')}) — worth pricing a pilot offer.`);
+  if (STATE.kill_list.length) implications.push(`${STATE.kill_list.length} hypothesis(es) eliminated by direct evidence, narrowing scope: ${STATE.kill_list.map(k => `"${k.hypothesis}"`).join('; ')}.`);
+  const discoveryThemes = STATE.matrix.filter(r => (r.theme_tag || '').startsWith('Discovery'));
+  const socialDiscovery = discoveryThemes.filter(r => r.theme_tag === 'Discovery — WhatsApp/personal').length;
+  if (discoveryThemes.length >= 3 && socialDiscovery / discoveryThemes.length >= 0.6) implications.push('Discovery is consistently social (WhatsApp, personal referral), not searched — channel strategy should follow trust networks, not SEO or paid acquisition.');
+  const unconfirmedCritical = STATE.field_checks.filter(r => !r.confirmed && isEconomicsCritical(r.assumption));
+  if (unconfirmedCritical.length) implications.push(`${unconfirmedCritical.length} unverified assumption(s) sit directly under the economics model and should be field-checked before further spend.`);
+  if (!implications.length) implications.push('Evidence base is still too thin to state a strategic implication with confidence — prioritise reaching the Phase 2 interview targets before drawing conclusions.');
+
+  let riskN = 1;
+  const riskItems = [];
+  BREAKPOINTS.forEach(bp => {
+    const broken = bp.broken(assumptions, derived);
+    riskItems.push({ n: riskN++, label: bp.label, likelihood: broken ? 'High' : 'Low', impact: 'High' });
+  });
+  const unconfirmed = STATE.field_checks.filter(r => !r.confirmed);
+  unconfirmed.slice(0, 4).forEach(r => {
+    riskItems.push({ n: riskN++, label: r.assumption, likelihood: 'High', impact: isEconomicsCritical(r.assumption) ? 'High' : 'Low' });
+  });
+  const moreChecks = unconfirmed.length - 4;
+
+  const today = new Date();
+  const inDays = (n) => { const d = new Date(today); d.setDate(d.getDate() + n); return d.toISOString().slice(0, 10); };
+  const nextSteps = [];
+  const overdue = STATE.interviews.filter(isUntaggedOverdue);
+  if (overdue.length) nextSteps.push(`Tag ${overdue.map(r => r.interview_id).join(', ')} in the matrix — Owner: ${team.field}. Target: ${fmtDate(inDays(1))}.`);
+  const stalled = STATE.outreach.filter(isStalled);
+  if (stalled.length) nextSteps.push(`Follow up or close ${stalled.length} stalled outreach contact(s) — Owner: ${team.field}. Target: ${fmtDate(inDays(7))}.`);
+  if (unconfirmedCritical.length) nextSteps.push(`Field-verify: ${unconfirmedCritical[0].assumption} — Owner: ${team.lead}. Target: ${fmtDate(inDays(14))}.`);
+  const behindTarget = SEGMENTS.filter(s => STATE.interviews.filter(r => r.segment === s.name).length < s.target).sort((a, b) => a.target - b.target)[0];
+  if (behindTarget) nextSteps.push(`Recruit toward the ${behindTarget.name} target (${STATE.interviews.filter(r => r.segment === behindTarget.name).length}/${behindTarget.target}) — Owner: ${team.field}. Target: ${fmtDate(inDays(14))}.`);
+  if (!nextSteps.length) nextSteps.push(`No open gaps detected — proceed to the next phase-exit review. Owner: ${team.lead}. Target: ${fmtDate(inDays(7))}.`);
+
+  return {
+    title: `Executive briefing — Phase ${CURRENT_PHASE}, ${new Date().toLocaleDateString('en-GB', { month: 'long', year: 'numeric' })}`,
+    sections: [
+      { title: 'Executive summary', body: summary },
+      {
+        title: 'Field research methodology',
+        body: `Period covered: ${period}.\nSame-day tagging rate: ${Math.round(taggedPercent)}% (hard rule requires 100%).\nInterviews by segment vs target:\n${SEGMENTS.map(s => `  ${s.name}: ${STATE.interviews.filter(r => r.segment === s.name).length}/${s.target}`).join('\n')}`,
+        chart: { type: 'bar', rows: segmentCoverageRows() },
+      },
+      { title: 'Core analytical findings', body: findingsBody },
+      { title: 'Strategic implications for project teams', body: implications.map(s => `- ${s}`).join('\n') },
+      {
+        title: 'Investment thesis & risk assessment',
+        body: `Current investment picture with confidence levels — not a settled thesis at ${total} interview${total === 1 ? '' : 's'}. Risk matrix below plots break-point and assumption risk by likelihood × impact; see the numbered legend.`,
+        chart: riskItems.length ? { type: 'riskMatrix', items: riskItems } : null,
+      },
+      { title: 'Next steps', body: nextSteps.map(s => `- ${s}`).join('\n') + (moreChecks > 0 ? `\n\n+${moreChecks} more unverified assumption(s) — see Field checks.` : '') },
     ],
   };
 }
@@ -87,7 +229,40 @@ const GENERATORS = {
   weekly_status: generateWeeklyStatus,
   phase_exit: generatePhaseExit,
   investor_briefing: generateInvestorBriefing,
+  executive_briefing: generateExecutiveBriefing,
 };
+
+/* ---------- Chart rendering — shared between the on-screen view and print ---------- */
+function buildChartNode(chart) {
+  const wrap = h('div', { class: 'my-3' });
+  if (chart.type === 'bar') wrap.appendChild(barChart(chart.rows, chart.opts));
+  else if (chart.type === 'meter') wrap.appendChild(percentMeter(chart.pct, { label: chart.label, ...chart.opts }));
+  else if (chart.type === 'riskMatrix') {
+    wrap.appendChild(riskMatrixSvg(chart.items, chart.opts));
+    const legend = h('div', { class: 'mt-3 flex flex-col gap-1.5' });
+    chart.items.forEach(it => {
+      legend.appendChild(h('div', { class: 'flex items-start gap-2 text-xs', style: 'color:var(--ink-soft);' }, [
+        h('span', { class: 'chip chip-line', style: 'min-width:22px; justify-content:center; flex-shrink:0;', text: String(it.n) }),
+        h('span', { text: `${it.label} — likelihood ${it.likelihood.toLowerCase()}, impact ${it.impact.toLowerCase()}` }),
+      ]));
+    });
+    wrap.appendChild(legend);
+  }
+  return wrap;
+}
+
+function chartToHtml(chart) {
+  if (chart.type === 'bar') return `<div style="margin:14px 0;">${serializeSvg(barChart(chart.rows, chart.opts))}</div>`;
+  if (chart.type === 'meter') return `<div style="margin:14px 0;">${serializeSvg(percentMeter(chart.pct, { label: chart.label, ...chart.opts }))}</div>`;
+  if (chart.type === 'riskMatrix') {
+    const svgHtml = serializeSvg(riskMatrixSvg(chart.items, chart.opts));
+    const legendHtml = chart.items.map(it =>
+      `<div style="font-size:11px; color:#4A5651; margin:4px 0;"><strong>${escapeHtml(String(it.n))}.</strong> ${escapeHtml(it.label)} — likelihood ${escapeHtml(it.likelihood.toLowerCase())}, impact ${escapeHtml(it.impact.toLowerCase())}</div>`
+    ).join('');
+    return `<div style="margin:14px 0;">${svgHtml}</div><div>${legendHtml}</div>`;
+  }
+  return '';
+}
 
 /* ---------- Screen ---------- */
 function renderReports(page) {
@@ -97,7 +272,7 @@ function renderReports(page) {
     ]));
   }
 
-  const grid = h('div', { class: 'grid md:grid-cols-3 gap-4 mb-6' });
+  const grid = h('div', { class: 'grid md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6' });
   REPORT_TYPES.forEach(rt => {
     grid.appendChild(h('div', { class: 'card p-5 flex flex-col' }, [
       h('div', { class: 'serif text-base mb-1', text: rt.name }),
@@ -156,7 +331,8 @@ function viewReport(report) {
 
   (content.sections || []).forEach(s => {
     view.appendChild(h('div', { class: 'micro mb-2 mt-6', style: 'color:var(--clay);', text: s.title || '' }));
-    view.appendChild(h('div', { class: 'text-sm leading-relaxed whitespace-pre-line', text: s.body || '' }));
+    if (s.body) view.appendChild(h('div', { class: 'text-sm leading-relaxed whitespace-pre-line', text: s.body }));
+    if (s.chart) view.appendChild(buildChartNode(s.chart));
   });
 
   root.appendChild(h('div', { class: 'modal-bg fade-in', onclick: (e) => { if (e.target.classList.contains('modal-bg')) root.innerHTML = ''; } }, [
@@ -176,20 +352,24 @@ function escapeHtml(str) {
 
 function printReport(report) {
   const content = report.content || {};
-  const bodyHtml = (content.sections || []).map(s =>
-    `<h2 style="font-family:Fraunces,Georgia,serif; color:#B8693E; margin-top:24px; text-transform:uppercase; letter-spacing:0.1em; font-size:10.5px;">${escapeHtml(s.title)}</h2>
-     <div style="white-space:pre-line; line-height:1.6;">${escapeHtml(s.body)}</div>`).join('');
+  const bodyHtml = (content.sections || []).map(s => {
+    const heading = `<h2 style="font-family:Fraunces,Georgia,serif; color:#B8693E; margin-top:24px; text-transform:uppercase; letter-spacing:0.1em; font-size:10.5px;">${escapeHtml(s.title || '')}</h2>`;
+    const body = s.body ? `<div style="white-space:pre-line; line-height:1.6;">${escapeHtml(s.body)}</div>` : '';
+    const chart = s.chart ? chartToHtml(s.chart) : '';
+    return heading + body + chart;
+  }).join('');
 
   const w = window.open('', '_blank');
   w.document.write(`<!DOCTYPE html>
 <html><head><title>${escapeHtml(report.title || 'Report')}</title>
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600&family=Inter:wght@400;500&display=swap" rel="stylesheet">
 <style>
-  body { font-family: Inter, sans-serif; color: #1F2A28; max-width: 700px; margin: 40px auto; padding: 0 20px; font-size: 14px; line-height: 1.6; }
+  body { font-family: Inter, sans-serif; color: #1F2A28; max-width: 720px; margin: 40px auto; padding: 0 20px; font-size: 14px; line-height: 1.6; }
   h1 { font-family: Fraunces, Georgia, serif; font-size: 24px; margin-bottom: 4px; }
   .meta { font-size: 11px; color: #8A8478; margin-bottom: 32px; }
   .logo { display: flex; align-items: center; gap: 8px; margin-bottom: 16px; }
   .logo-mark { width: 24px; height: 24px; background: #3F5A4D; border-radius: 6px; display: flex; align-items: center; justify-content: center; color: white; font-family: Fraunces, Georgia, serif; font-size: 14px; }
+  svg { max-width: 100%; height: auto; }
   @media print { body { margin: 0; } }
 </style></head>
 <body>

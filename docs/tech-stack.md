@@ -113,3 +113,32 @@ documented, wired path is the Worker.
    if your browser blocks module imports from `file://`).
 2. Test at 375px and 1280px. Zero console errors is the bar.
 3. Local mode needs no backend. For api-mode work, run the Worker via `wrangler dev`.
+
+
+## Charts (`js/charts.js`)
+
+Dependency-free inline SVG — no charting library, per the no-external-libraries
+rule. `barChart`, `percentMeter`, and `riskMatrixSvg` are built with
+`document.createElementNS` and return real SVG elements; `serializeSvg` turns one
+into a markup string for embedding in the print window (a separate document with
+no access to the app's `:root` CSS variables — colours in `charts.js` are
+therefore resolved hex constants kept in sync with `theme.css` by hand, not
+`var()`). Used by `js/screens/reports.js` for the segment-coverage bars, the
+same-day tagging meter, the willingness-to-pay bars, and the executive
+briefing's 2×2 likelihood × impact risk matrix.
+
+## Data portability & resets
+
+`js/data.js`'s local adapter also exposes, alongside `list/create/update/remove`:
+
+- `startFresh()` — wipes every research table but restores the stock scripts
+  (v1) and a deliverables checklist reset to "Not started", built from
+  `buildFreshFieldworkSeed()` in `js/seed.js`.
+- `importAll(dump)` — replaces all local data from a previously exported
+  backup. Only tables in the known list are trusted; binary documents carrying
+  `file_base64` are decoded back into IndexedDB and stripped from the record
+  before it's written to localStorage.
+
+Both throw explanatory errors in the api adapter — they are local-mode only.
+Exports are stamped with `SCHEMA_VERSION` (`js/config.js`); Settings' import
+flow rejects a mismatch outright rather than attempting a lossy migration.

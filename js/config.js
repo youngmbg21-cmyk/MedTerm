@@ -10,6 +10,10 @@ export const DATA_MODE = 'local';
 /* Only used in 'api' mode. */
 export const WORKER_URL = 'https://YOUR-WORKER.workers.dev';
 
+/* Bumped whenever the exported-backup shape changes incompatibly. Import
+   checks this before touching any data — see js/data.js importAll(). */
+export const SCHEMA_VERSION = 1;
+
 /* ------------------------------------------------------------
    Phases — the app's spine. CURRENT_PHASE drives nav gating.
    ------------------------------------------------------------ */

@@ -1,21 +1,35 @@
 /* ============================================================
    DATA ACCESS — the only module that talks to storage.
-   Screens must never call fetch or localStorage directly.
+   Screens must never call fetch, localStorage, or IndexedDB directly.
 
    Interface:
-     data.list(table)            -> array of records
-     data.create(table, record)  -> created record
+     data.list(table)              -> array of records
+     data.create(table, record)    -> created record
      data.update(table, id, patch) -> updated record
-     data.remove(table, id)      -> { deleted: true }
-     data.reset()                -> local mode only: re-seed demo data
+     data.remove(table, id)        -> { deleted: true }
+     data.putFile(id, blob)        -> void
+     data.getFile(id, record)      -> Blob | null
+     data.storageInfo()            -> usage estimate for the Settings meter
+     data.reset()                  -> local mode only: re-seed demo data
+     data.startFresh()             -> local mode only: wipe research data,
+                                       keep the stock scripts + a blank
+                                       deliverables checklist
+     data.importAll(dump)          -> local mode only: replace all local
+                                       data with a previously exported backup
 
    Records are flat snake_case objects matching sql/schema.sql.
    ============================================================ */
 import { DATA_MODE, WORKER_URL } from './config.js';
-import { buildSeed } from './seed.js';
+import { buildSeed, buildFreshFieldworkSeed } from './seed.js';
 
 const LS_KEY = 'medterm_data_v1';
 const IDB_NAME = 'medterm_files_v1';
+
+/* Every table the app knows about — importAll() only trusts these keys,
+   so a malformed or hand-edited backup file can't inject arbitrary state. */
+const KNOWN_TABLES = ['outreach', 'interviews', 'matrix', 'deliverables', 'scripts',
+  'kill_list', 'field_checks', 'economics', 'segment_cards', 'decision_memos',
+  'reports', 'documents'];
 
 /* ------------------------------------------------------------
    IndexedDB blob store — local-mode home for uploaded files.
@@ -77,8 +91,8 @@ function makeId() {
     'id-' + Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
 }
 
-function seedDb() {
-  const seed = buildSeed();
+function buildDb(seedFn) {
+  const seed = seedFn();
   const db = {};
   const base = Date.now();
   let i = 0;
@@ -91,6 +105,27 @@ function seedDb() {
     }));
   }
   return db;
+}
+
+const seedDb = () => buildDb(buildSeed);
+const freshFieldworkDb = () => buildDb(buildFreshFieldworkSeed);
+
+/* Exported for Settings' export-everything, which embeds binary document
+   blobs as base64 so a single JSON file is a complete, restorable backup. */
+export function blobToBase64(blob) {
+  return new Promise((resolve, reject) => {
+    const r = new FileReader();
+    r.onload = () => resolve(String(r.result).split(',')[1]);
+    r.onerror = () => reject(r.error);
+    r.readAsDataURL(blob);
+  });
+}
+
+function base64ToBlob(base64, mimeType) {
+  const binary = atob(base64);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+  return new Blob([bytes], { type: mimeType || 'application/octet-stream' });
 }
 
 let localDb = null;
@@ -155,6 +190,46 @@ const localAdapter = {
     localDb = seedDb();
     persistLocal();
     await idbClear().catch(() => {});
+  },
+
+  /* Wipes every research input but keeps the stock scripts and a blank
+     deliverables checklist — see buildFreshFieldworkSeed() in seed.js. */
+  async startFresh() {
+    localDb = freshFieldworkDb();
+    persistLocal();
+    await idbClear().catch(() => {});
+  },
+
+  /**
+   * Replace ALL local data with a previously exported backup. Only known
+   * tables are trusted (see KNOWN_TABLES); anything else in the file is
+   * ignored. Binary files embedded as `file_base64` are decoded back into
+   * IndexedDB and stripped from the record before it's written to
+   * localStorage, so the main data blob doesn't balloon with duplicate
+   * base64 text. The caller (Settings) is responsible for validating
+   * schema_version and getting typed confirmation before calling this —
+   * this method assumes the decision to import has already been made.
+   */
+  async importAll(dump) {
+    await idbClear().catch(() => {});
+    const db = {};
+    for (const table of KNOWN_TABLES) {
+      const rows = Array.isArray(dump.tables?.[table]) ? dump.tables[table] : [];
+      db[table] = [];
+      for (const row of rows) {
+        const clean = { ...row };
+        if (table === 'documents' && clean.file_base64) {
+          const blob = base64ToBlob(clean.file_base64, clean.file_mime || clean.mime_type);
+          await idbPut(clean.id || makeId(), blob).catch(() => {});
+          delete clean.file_base64;
+          delete clean.file_mime;
+        }
+        if (!clean.id) clean.id = makeId();
+        db[table].push(clean);
+      }
+    }
+    localDb = db;
+    persistLocal();
   },
 
   /* File blobs live in IndexedDB, keyed by the document record's id. */
@@ -229,6 +304,12 @@ const apiAdapter = {
   async reset() {
     throw new Error('Reset is only available in local demo mode.');
   },
+  async startFresh() {
+    throw new Error('Starting fresh is only available in local demo mode. On the live backend, clearing team data is a deliberate operation performed directly in Supabase — it must not be one click in the app, since it would affect the whole team.');
+  },
+  async importAll() {
+    throw new Error('Import is only available in local demo mode. On the live backend, data is already shared and backed up by Supabase — importing a file here could silently overwrite live team data.');
+  },
 
   /* Files go to Supabase Storage through the Worker (base64 JSON keeps the
      Worker simple; fine for field documents up to ~10 MB). */
@@ -252,15 +333,6 @@ const apiAdapter = {
     return { recordsBytes: null, recordsLimit: null, filesBytes: null, quota: null };
   },
 };
-
-function blobToBase64(blob) {
-  return new Promise((resolve, reject) => {
-    const r = new FileReader();
-    r.onload = () => resolve(String(r.result).split(',')[1]);
-    r.onerror = () => reject(r.error);
-    r.readAsDataURL(blob);
-  });
-}
 
 export const data = DATA_MODE === 'api' ? apiAdapter : localAdapter;
 export const isLocalMode = DATA_MODE !== 'api';

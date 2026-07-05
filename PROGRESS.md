@@ -69,3 +69,44 @@ README, CLAUDE.md, docs/tech-stack.md rewritten to match the code. HANDOFF.md wr
 - Verified: smoke suite (22 routes × 2 viewports, zero console errors) and a new
   11-assertion interaction suite (upload → search-by-content → reload persistence →
   download roundtrip → notes edit → export contents) all pass.
+
+## Data portability, safer resets, executive reporting ✅ (2026-07-05)
+- `js/charts.js`: dependency-free inline SVG bar chart, percent meter, and 2×2
+  risk matrix — no charting library, matches the app's palette, renders
+  identically on-screen and in the standalone print window.
+- Export (Settings → Data management): stamped with `schema_version`; binary
+  documents (images/PDFs) now embedded as base64 so a single JSON file is a
+  complete, restorable backup. Text-based documents still rely on
+  `text_content` (no duplication).
+- Import: validates `app` field + `schema_version` (hard reject on mismatch,
+  specific error shown), previews record counts per table, requires typing
+  IMPORT, auto-downloads a safety export first, then replaces all local data
+  via new `data.importAll()`. Local-mode only.
+- Two explicit resets: "Reset to demo data" (existing seed, now behind a
+  typed RESET confirmation + safety export) and new "Start fresh for real
+  fieldwork" (wipes every research table, restores stock scripts at v1, and
+  resets the deliverables checklist to "Not started" — segments/themes/
+  templates/manual need no reset since they live in code, not storage).
+  Both local-mode only; `js/data.js`'s api adapter throws explanatory errors
+  and the Settings UI shows a "disabled in live mode" note instead of the
+  buttons when `DATA_MODE = 'api'`.
+- `js/seed.js` refactored: `buildDeliverables()`/`buildScripts()` extracted
+  so the demo seed and the new `buildFreshFieldworkSeed()` share one
+  definition of the stock framework and can't drift apart.
+- Fourth report type, "Executive briefing": verdict-first executive summary
+  (hard-capped at 150 words), methodology with segment-coverage chart and
+  same-day tagging rate, core findings citing interview IDs and flagging
+  thin evidence (<3 quotes), data-driven strategic implications, a 2×2
+  risk-assessment matrix (unit-economics break-points + unconfirmed
+  assumptions) with a numbered legend, and next steps with real team-config
+  owners and concrete target dates. `economics.js`'s model exported and
+  reused rather than re-implemented.
+- Existing reports gained one supplementary chart each: weekly status
+  (tagging-rate meter), phase exit (segment coverage bars), investor
+  briefing (WTP-by-segment bars, shown only when non-empty).
+- Verified: full 4-suite regression (smoke, interact, interact2, interact3)
+  all pass — including a real export → upload binary doc → Start Fresh →
+  reject-bad-import ×2 → import-good-backup → verify-restored-incl-binary
+  → reset-to-demo roundtrip, plus a dedicated api-mode check (flipped
+  DATA_MODE, confirmed Import/Start Fresh/Demo Reset are hidden with an
+  explanatory note while Export stays available, reverted after).

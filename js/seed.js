@@ -11,6 +11,82 @@ function daysAgo(n) {
   return d.toISOString().slice(0, 10);
 }
 
+/* The stock deliverables checklist for all six phases. Reused, with every
+   status reset to 'Not started', by buildFreshFieldworkSeed() below — this
+   is the literal list of "stock research protocols" the app ships with. */
+function buildDeliverables() {
+  return [
+    { phase: 0, deliverable: "Lead's pre-work completed", status: 'Complete', evidence: 'Market notes + corridor sizing shared in workspace.' },
+    { phase: 0, deliverable: 'Workspace live, both have written content', status: 'Complete', evidence: 'Both roles active in the workspace.' },
+    { phase: 0, deliverable: 'Interview scripts v1 drafted', status: 'Complete', evidence: 'Three scripts drafted — see Scripts.' },
+    { phase: 0, deliverable: 'Wedge brief signed and dated', status: 'Complete', evidence: 'Signed: patient-side coordination for Kenya→India corridor.' },
+    { phase: 0, deliverable: 'Lead can explain the project unaided', status: 'Complete', evidence: 'Dry-run recorded on the Friday call.' },
+    { phase: 0, deliverable: 'Lead has flagged ≥2 plan changes', status: 'Complete', evidence: 'Dropped Turkey corridor; added insurance-broker segment.' },
+    { phase: 1, deliverable: 'Target list of 40+ contacts across all segments', status: 'In progress', evidence: '20 contacts listed so far.' },
+    { phase: 1, deliverable: 'First outreach wave sent (≥15 contacts)', status: 'In progress', evidence: '13 contacted to date.' },
+    { phase: 1, deliverable: '≥8 exploratory interviews completed', status: 'In progress', evidence: '12 logged — criterion nearly met, review quality.' },
+    { phase: 1, deliverable: 'All interviews tagged same-day (hard rule holding)', status: 'Blocked', evidence: 'INT-011 and INT-012 are untagged. Fix before Friday.' },
+    { phase: 1, deliverable: 'Outreach templates tested and refined once', status: 'Complete', evidence: 'v2 templates live — see Templates.' },
+    { phase: 2, deliverable: '~30 depth interviews across segments', status: 'Not started', evidence: '' },
+    { phase: 2, deliverable: 'Saturation reached in ≥4 segments', status: 'Not started', evidence: '' },
+    { phase: 2, deliverable: 'Theme matrix ≥80 tagged entries', status: 'Not started', evidence: '' },
+    { phase: 3, deliverable: 'Theme ranking completed and reviewed', status: 'Not started', evidence: '' },
+    { phase: 3, deliverable: 'Segment cards for all interviewed segments', status: 'Not started', evidence: '' },
+    { phase: 3, deliverable: 'Top-3 pains agreed, each with 3+ supporting quotes', status: 'Not started', evidence: '' },
+    { phase: 3, deliverable: 'Kill list reviewed — dead hypotheses recorded', status: 'Not started', evidence: '' },
+    { phase: 3, deliverable: 'State of the field written and dated', status: 'Not started', evidence: '' },
+    { phase: 4, deliverable: 'Unit economics model with agreed assumptions', status: 'Not started', evidence: '' },
+    { phase: 4, deliverable: 'Break-point analysis: all three checks evaluated', status: 'Not started', evidence: '' },
+    { phase: 4, deliverable: 'Alternate models compared side-by-side', status: 'Not started', evidence: '' },
+    { phase: 4, deliverable: 'Fragile assumptions field-checked', status: 'Not started', evidence: '' },
+    { phase: 5, deliverable: 'Decision memo drafted (all seven sections)', status: 'Not started', evidence: '' },
+    { phase: 5, deliverable: 'Memo co-signed by both team members', status: 'Not started', evidence: '' },
+    { phase: 5, deliverable: 'If GO: MVP scope defined ("one of each")', status: 'Not started', evidence: '' },
+    { phase: 5, deliverable: 'Confirmatory tests specified with metrics', status: 'Not started', evidence: '' },
+  ];
+}
+
+/* The three stock interview scripts, version 1, as the app ships. */
+function buildScripts() {
+  return [
+    {
+      script_name: 'Patient / caregiver', version: 1, content: [
+        { title: 'Open (3 min)', body: 'Thank the person. Promise: no quotes with their name without permission. Ask permission to record.' },
+        { title: 'Warm-up (5 min)', body: '"Walk me through the last time you or your family considered or went through this." Anchor in a real, recent story.' },
+        { title: 'Core: discovery', body: 'How did you first start looking for hospitals abroad? — Probe if they mention WhatsApp or a person.' },
+        { title: 'Core: trust', body: 'What made you trust one hospital more than another? — Probe if they say "a friend went there".' },
+        { title: 'Core: friction', body: 'What was the most frustrating moment in the whole process? — Wait through silence.' },
+        { title: 'Core: money', body: 'If you had to do it again, what would you pay someone to handle for you? — Anchor on the number they give.' },
+        { title: 'Core: severity', body: 'Was there a moment you nearly gave up? — That moment is the wedge.' },
+        { title: 'Close (3 min)', body: '"Is there anything I should have asked but didn\'t?" · Ask for two specific introductions · Confirm follow-up permission.' },
+      ],
+    },
+    {
+      script_name: 'Hospital IPD', version: 1, content: [
+        { title: 'Open (2 min)', body: 'Brief professional intro. Not selling, not asking for referrals. Permission to record.' },
+        { title: 'Warm-up (3 min)', body: '"Tell me how your IPD is structured — who handles East African inquiries?"' },
+        { title: 'Core: qualified leads', body: 'What makes a lead from East Africa qualified vs unqualified? — Which document is missing most often?' },
+        { title: 'Core: documents', body: 'What information do you need before the medical team will review a case? — Would they pay for cases pre-formatted to that standard?' },
+        { title: 'Core: response time', body: 'From first inquiry, how fast do you usually reply, and what slows you down?' },
+        { title: 'Core: commissions', body: 'What do you currently pay agents per converted patient? — Does it vary by specialty?' },
+        { title: 'Core: SaaS interest', body: 'Would you pay for software that pre-qualifies and packages African cases for you? — What would have to be true?' },
+        { title: 'Close (5 min)', body: '"Anything I should have asked?" · "Who else at the hospital?" · Follow-up permission.' },
+      ],
+    },
+    {
+      script_name: 'Agent / facilitator', version: 1, content: [
+        { title: 'Open (3 min)', body: 'Friendly but specific. Upfront: building patient-side. Their candour matters.' },
+        { title: 'Warm-up (5 min)', body: '"Walk me through your last patient — first call to follow-up at home."' },
+        { title: 'Core: workflow', body: 'Where do you add the most value? — Emotional vs transactional answer = different MVPs.' },
+        { title: 'Core: pain', body: 'What\'s painfully manual? — Quote-chasing or document re-formatting = leverage.' },
+        { title: 'Core: money', body: 'How do you get paid, and by whom? — Both sides? Ask which resists more.' },
+        { title: 'Core: adoption', body: 'What would a tool have to do for you to use it daily? — Which feature, removed, kills adoption?' },
+        { title: 'Close (3 min)', body: 'Anything missed · Two introductions · Follow-up.' },
+      ],
+    },
+  ];
+}
+
 export function buildSeed() {
   const team = getTeam();
   const LEAD = team.lead, FIELD = team.field;
@@ -74,73 +150,8 @@ export function buildSeed() {
     { interview_id: 'INT-010', quote: 'Sending $12,000 through three different transfer services cost me almost $600 in fees and a week of anxiety.', theme_tag: 'Friction — money transfer', segment: 'Diaspora family', severity: 4, wtp: 'Y', notes: '' },
   ];
 
-  const deliverables = [
-    { phase: 0, deliverable: "Lead's pre-work completed", status: 'Complete', evidence: 'Market notes + corridor sizing shared in workspace.' },
-    { phase: 0, deliverable: 'Workspace live, both have written content', status: 'Complete', evidence: 'Both roles active in the workspace.' },
-    { phase: 0, deliverable: 'Interview scripts v1 drafted', status: 'Complete', evidence: 'Three scripts drafted — see Scripts.' },
-    { phase: 0, deliverable: 'Wedge brief signed and dated', status: 'Complete', evidence: 'Signed: patient-side coordination for Kenya→India corridor.' },
-    { phase: 0, deliverable: 'Lead can explain the project unaided', status: 'Complete', evidence: 'Dry-run recorded on the Friday call.' },
-    { phase: 0, deliverable: 'Lead has flagged ≥2 plan changes', status: 'Complete', evidence: 'Dropped Turkey corridor; added insurance-broker segment.' },
-    { phase: 1, deliverable: 'Target list of 40+ contacts across all segments', status: 'In progress', evidence: '20 contacts listed so far.' },
-    { phase: 1, deliverable: 'First outreach wave sent (≥15 contacts)', status: 'In progress', evidence: '13 contacted to date.' },
-    { phase: 1, deliverable: '≥8 exploratory interviews completed', status: 'In progress', evidence: '12 logged — criterion nearly met, review quality.' },
-    { phase: 1, deliverable: 'All interviews tagged same-day (hard rule holding)', status: 'Blocked', evidence: 'INT-011 and INT-012 are untagged. Fix before Friday.' },
-    { phase: 1, deliverable: 'Outreach templates tested and refined once', status: 'Complete', evidence: 'v2 templates live — see Templates.' },
-    { phase: 2, deliverable: '~30 depth interviews across segments', status: 'Not started', evidence: '' },
-    { phase: 2, deliverable: 'Saturation reached in ≥4 segments', status: 'Not started', evidence: '' },
-    { phase: 2, deliverable: 'Theme matrix ≥80 tagged entries', status: 'Not started', evidence: '' },
-    { phase: 3, deliverable: 'Theme ranking completed and reviewed', status: 'Not started', evidence: '' },
-    { phase: 3, deliverable: 'Segment cards for all interviewed segments', status: 'Not started', evidence: '' },
-    { phase: 3, deliverable: 'Top-3 pains agreed, each with 3+ supporting quotes', status: 'Not started', evidence: '' },
-    { phase: 3, deliverable: 'Kill list reviewed — dead hypotheses recorded', status: 'Not started', evidence: '' },
-    { phase: 3, deliverable: 'State of the field written and dated', status: 'Not started', evidence: '' },
-    { phase: 4, deliverable: 'Unit economics model with agreed assumptions', status: 'Not started', evidence: '' },
-    { phase: 4, deliverable: 'Break-point analysis: all three checks evaluated', status: 'Not started', evidence: '' },
-    { phase: 4, deliverable: 'Alternate models compared side-by-side', status: 'Not started', evidence: '' },
-    { phase: 4, deliverable: 'Fragile assumptions field-checked', status: 'Not started', evidence: '' },
-    { phase: 5, deliverable: 'Decision memo drafted (all seven sections)', status: 'Not started', evidence: '' },
-    { phase: 5, deliverable: 'Memo co-signed by both team members', status: 'Not started', evidence: '' },
-    { phase: 5, deliverable: 'If GO: MVP scope defined ("one of each")', status: 'Not started', evidence: '' },
-    { phase: 5, deliverable: 'Confirmatory tests specified with metrics', status: 'Not started', evidence: '' },
-  ];
-
-  const scripts = [
-    {
-      script_name: 'Patient / caregiver', version: 1, content: [
-        { title: 'Open (3 min)', body: 'Thank the person. Promise: no quotes with their name without permission. Ask permission to record.' },
-        { title: 'Warm-up (5 min)', body: '"Walk me through the last time you or your family considered or went through this." Anchor in a real, recent story.' },
-        { title: 'Core: discovery', body: 'How did you first start looking for hospitals abroad? — Probe if they mention WhatsApp or a person.' },
-        { title: 'Core: trust', body: 'What made you trust one hospital more than another? — Probe if they say "a friend went there".' },
-        { title: 'Core: friction', body: 'What was the most frustrating moment in the whole process? — Wait through silence.' },
-        { title: 'Core: money', body: 'If you had to do it again, what would you pay someone to handle for you? — Anchor on the number they give.' },
-        { title: 'Core: severity', body: 'Was there a moment you nearly gave up? — That moment is the wedge.' },
-        { title: 'Close (3 min)', body: '"Is there anything I should have asked but didn\'t?" · Ask for two specific introductions · Confirm follow-up permission.' },
-      ],
-    },
-    {
-      script_name: 'Hospital IPD', version: 1, content: [
-        { title: 'Open (2 min)', body: 'Brief professional intro. Not selling, not asking for referrals. Permission to record.' },
-        { title: 'Warm-up (3 min)', body: '"Tell me how your IPD is structured — who handles East African inquiries?"' },
-        { title: 'Core: qualified leads', body: 'What makes a lead from East Africa qualified vs unqualified? — Which document is missing most often?' },
-        { title: 'Core: documents', body: 'What information do you need before the medical team will review a case? — Would they pay for cases pre-formatted to that standard?' },
-        { title: 'Core: response time', body: 'From first inquiry, how fast do you usually reply, and what slows you down?' },
-        { title: 'Core: commissions', body: 'What do you currently pay agents per converted patient? — Does it vary by specialty?' },
-        { title: 'Core: SaaS interest', body: 'Would you pay for software that pre-qualifies and packages African cases for you? — What would have to be true?' },
-        { title: 'Close (5 min)', body: '"Anything I should have asked?" · "Who else at the hospital?" · Follow-up permission.' },
-      ],
-    },
-    {
-      script_name: 'Agent / facilitator', version: 1, content: [
-        { title: 'Open (3 min)', body: 'Friendly but specific. Upfront: building patient-side. Their candour matters.' },
-        { title: 'Warm-up (5 min)', body: '"Walk me through your last patient — first call to follow-up at home."' },
-        { title: 'Core: workflow', body: 'Where do you add the most value? — Emotional vs transactional answer = different MVPs.' },
-        { title: 'Core: pain', body: 'What\'s painfully manual? — Quote-chasing or document re-formatting = leverage.' },
-        { title: 'Core: money', body: 'How do you get paid, and by whom? — Both sides? Ask which resists more.' },
-        { title: 'Core: adoption', body: 'What would a tool have to do for you to use it daily? — Which feature, removed, kills adoption?' },
-        { title: 'Close (3 min)', body: 'Anything missed · Two introductions · Follow-up.' },
-      ],
-    },
-  ];
+  const deliverables = buildDeliverables();
+  const scripts = buildScripts();
 
   const kill_list = [
     { hypothesis: 'Patients will use a self-serve web portal to compare hospital quotes', evidence: 'Zero of twelve interviewees started with a website. Every journey began with a person — a relative, a nurse, an agent. Discovery is social, not searched. (INT-001, INT-002, INT-008, INT-010)', killed_date: daysAgo(4) },
@@ -207,5 +218,24 @@ tagged under Friction — money transfer.`,
     outreach, interviews, matrix, deliverables, scripts, kill_list, field_checks,
     documents,
     economics: [], segment_cards: [], decision_memos: [], reports: [],
+  };
+}
+
+/**
+ * "Start fresh for real fieldwork" seed: every research input is wiped
+ * (outreach, interviews, matrix, documents, reports, kill list, field
+ * checks, economics, memos, segment cards), but the stock framework the
+ * app ships with is restored — the three interview scripts at their
+ * original version, and the six phases' deliverables checklist reset to
+ * "Not started" (evidence cleared). Segments/themes/templates/the manual
+ * are not stored data at all (they live in js/config.js and the Reference
+ * screens), so they survive automatically without any action here.
+ */
+export function buildFreshFieldworkSeed() {
+  return {
+    outreach: [], interviews: [], matrix: [], documents: [], reports: [],
+    kill_list: [], field_checks: [], economics: [], segment_cards: [], decision_memos: [],
+    scripts: buildScripts(),
+    deliverables: buildDeliverables().map(d => ({ ...d, status: 'Not started', evidence: '' })),
   };
 }

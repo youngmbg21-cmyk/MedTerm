@@ -19,7 +19,7 @@ Two things to know:
 
 - **Settings** (sidebar footer): set the display names for the project lead and field
   coordinator (defaults: Young, Simon). Names update everywhere instantly and are never
-  hardcoded. "Reset demo data" restores the seed.
+  hardcoded. Data management (export, import, resets) also lives here — see below.
 - **The assistant panel is intentionally disabled** in local mode — it needs the Claude
   API key, which lives server-side. Everything else works without it.
 
@@ -83,6 +83,38 @@ Added after the initial rebuild, working in both modes:
 - **Backups**: Settings → "Export everything" downloads one JSON with every record,
   including full notes and document text. A storage meter shows demo-mode headroom.
   Do the export weekly until the backend is live.
+
+## Data portability, safer resets, and the executive briefing report
+
+Added after the sole-repository upgrade, in Settings → Data management:
+
+- **Export everything** now stamps a `schema_version` and embeds any uploaded binary
+  files (images, PDFs) as base64, so the single JSON file is a complete, restorable
+  backup — not just a record dump.
+- **Import a backup**: choose a previously exported file; it's checked against the
+  app and schema version (a mismatch is refused with a specific reason, not a silent
+  failure), then a preview shows exactly how many records of each type will come in.
+  Importing REPLACES all current data — nothing is merged — and always downloads a
+  safety export of what you had first. Type IMPORT to confirm. **Local mode only** —
+  on the live backend this would silently overwrite the whole team's shared data, so
+  it's deliberately not available there.
+- **Start fresh for real fieldwork**: a second, more specific reset. Wipes every
+  outreach contact, interview, matrix quote, document, report, kill-list entry, field
+  check, economics model, and decision memo — but keeps the three stock interview
+  scripts and resets the six phases' deliverables checklist to "Not started". This is
+  the button to use the day real fieldwork begins, once you're done exploring the
+  demo. Type RESET to confirm; a safety export downloads first. Local mode only.
+- **Reset to demo data** still works as before, now behind the same typed
+  confirmation and safety export.
+- **A fourth report type, "Executive briefing"**, in Reports: a verdict-first
+  executive summary, methodology with a segment-coverage chart, core findings citing
+  interview IDs (thin-evidence themes flagged explicitly), data-driven strategic
+  implications, a 2×2 risk-assessment matrix built from the unit-economics
+  break-points and unverified field checks, and next steps with real owners (from
+  Settings' team names) and concrete target dates. The three existing reports each
+  gained one small chart too (tagging-rate meter, coverage bars, WTP-by-segment
+  bars). All charts are dependency-free inline SVG — no charting library — and print
+  identically to how they look on screen.
 
 ## Alternative backend (optional)
 
