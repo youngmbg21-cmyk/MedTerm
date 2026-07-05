@@ -232,3 +232,82 @@ README, CLAUDE.md, docs/tech-stack.md rewritten to match the code. HANDOFF.md wr
   → reset-to-demo roundtrip, plus a dedicated api-mode check (flipped
   DATA_MODE, confirmed Import/Start Fresh/Demo Reset are hidden with an
   explanatory note while Export stays available, reverted after).
+
+## Interviews and matrix restructure ✅ (2026-07-05)
+- `js/app.js`: new shared `rankThemes(rows = STATE.matrix)` and
+  `segmentCoverageRows()`, consolidating three copies of the theme-ranking
+  formula (`sensemaking.js`, `reports.js`, matrix's new Quotes view) and two
+  copies of the segment-coverage rollup (`reports.js`, interviews' new
+  coverage strip) into one each. `sensemaking.js`'s local `rankThemes()`
+  deleted in favour of the import.
+- **Interviews**: list side restructured around segment structure. Coverage
+  strip (compact `barChart(segmentCoverageRows())`) above the list. Rows
+  grouped by segment in `SEGMENTS` config order with sticky, tappable/
+  collapsible headers showing an `n/target` chip (rose/honey/sage by
+  progress) and an untagged-count dot. A pinned "Needs tagging (shortcut)"
+  block surfaces every overdue-untagged row above the groups when any exist,
+  without removing them from their real group. Unknown/missing segment rows
+  land in a honey-headed "Unassigned" tail group. Row metadata line now
+  shows format instead of segment (segment moved to the header). Master–
+  detail pattern, overdue banner, detail card (including its existing
+  hypothesis-links section), notes editor, mark-tagged, and the add/edit
+  form are all untouched.
+- **Theme matrix**: replaced the flat quote feed with a Grid | Quotes toggle
+  (segmented control, defaults to Grid at ≥10 matrix rows else Quotes,
+  recomputed live until the user picks a view manually). Grid is a true
+  theme × segment pivot (`THEMES` rows × `SEGMENT_NAMES` columns, config
+  order) with per-cell quote counts tinted by average severity (sage/honey/
+  rose), a sticky-left theme-name column (the one deliberate horizontal
+  scroll in the app), and row/column/grand totals computed self-consistently
+  from the same cell matrix. Tapping a non-empty cell drills into Quotes view
+  pre-filtered to that theme+segment with a dismissible chip. Quotes view
+  groups by theme (ranked via shared `rankThemes`, evidence-weight order),
+  collapsible headers show count/avg severity/WTP rate, with a final honey
+  "Untagged" group for quotes with no theme_tag. The four-dropdown filter row
+  became three (segment/severity/WTP — theme filtering now happens via
+  grouping/drill-down). `+ Add quote`, CSV export, the add/edit form, the
+  Link-to-hypothesis button, existing-link chips, and the post-save
+  `maybeProposeLinks` call are all preserved from the pre-restructure version
+  (see DECISIONS.md #54 — an earlier draft of this change, based on a stale
+  `main`, had mistakenly planned to drop hypothesis-linking as nonexistent).
+- **Reports**: weekly status's "Top themes so far" and executive briefing's
+  "Core analytical findings" each gained a theme-frequency `barChart()` (top
+  6 by mention count, `PALETTE.plum`), rendered identically on-screen
+  (`buildChartNode`) and in print (`chartToHtml`) — no changes needed to
+  either dispatch function, both already handle `type: 'bar'` generically.
+  Numbers come from the same `rankThemes()`/`topThemes()` rollup the matrix
+  screen uses.
+- **CSS**: `.md-list-scroll` (own scroll container so sticky group headers
+  never collide with the app's own sticky top header), `.group-header` +
+  honey/pinned variants, `.seg-toggle`/`.seg-toggle-btn` (Grid|Quotes
+  control), `.grid-pivot`/`.grid-row-header` (sticky-left pivot column),
+  `.theme-group-header` + honey variant.
+- **Bug found and fixed during verification**: the Grid/Quotes default view
+  was computed once on the very first render, which fires before async data
+  has loaded — on a direct load of `#matrix` this locked the view to Quotes
+  permanently even with 18 seeded quotes. Fixed to recompute live until
+  manually overridden (DECISIONS.md #58).
+- Rebuilt on the latest `main` after discovering this feature branch's prior
+  PR had already merged (per protocol): reset the branch to `origin/main`
+  (which had picked up an unrelated, concurrently-merged decision-engine
+  build adding real hypothesis-linking) and reapplied every edit above by
+  hand against the new base rather than blindly restoring the old files, so
+  the decision-engine's `evidence.js` integration in Interviews and Matrix
+  was not clobbered.
+- Verified: `node --check` on every changed module (`app.js`, `interviews.js`,
+  `matrix.js`, `reports.js`, `sensemaking.js`) — all pass. Import audit:
+  every import resolves to a real export. Convention audit: all `innerHTML`
+  uses are `= ''` clears only, no raw HTML from user data. No data-shape,
+  table, or column changes. Playwright walkthrough at 1280px and 375px:
+  Interviews shows the coverage chart, correct grouped counts, pinned
+  needs-tagging block, the detail card's hypothesis-links section still
+  renders, no header/sticky-header overlap, no horizontal page overflow.
+  Matrix opens in Grid on direct load with correct cell counts (16 non-empty
+  cells against the seed data), toggling to Quotes and back works, the
+  sticky column reports `position: sticky`, cell-tap drills into Quotes with
+  a working dismissible chip, the Link button and existing-link chips render
+  on every quote (18 Link buttons matching the 18 seeded quotes), no
+  unintended horizontal page overflow (the grid's own internal `.table-wrap`
+  scroll is the one exception, as designed). Reports: the weekly-status
+  "View" modal renders two charts (tagging meter + new theme bar chart) on
+  screen. Zero console/page errors across both viewports.

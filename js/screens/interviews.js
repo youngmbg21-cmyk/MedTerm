@@ -1,15 +1,20 @@
 /* Interviews — one question: "Which conversations have we had, and is each one tagged?"
-   Master–detail: list left, interview + linked quotes right. */
+   Master–detail: list left (grouped by segment — the fieldwork's real structure),
+   interview + linked quotes right. */
 import {
   STATE, registerRoute, renderCurrentRoute, h, chip, emptyState, quoteBlock,
   openModal, closeModal, formField, isUntaggedOverdue, daysSince, fmtDate, go,
+  segmentCoverageRows,
 } from '../app.js';
-import { SEGMENT_NAMES, interviewerOptions } from '../config.js';
+import { SEGMENTS, SEGMENT_NAMES, interviewerOptions } from '../config.js';
 import { data } from '../data.js';
 import { exportInterviews } from '../export.js';
 import { openLinkModal, existingLinkChips } from '../evidence.js';
+import { barChart } from '../charts.js';
 
 let selectedId = null;
+/* Manual collapse overrides, keyed by group name. Session-only — never persisted. */
+const collapseOverrides = {};
 
 function renderInterviews(page) {
   const interviews = [...STATE.interviews].sort((a, b) => String(b.date || '').localeCompare(String(a.date || '')));
@@ -42,24 +47,111 @@ function renderInterviews(page) {
 
   const layout = h('div', { class: 'md-layout' });
   const listCard = h('div', { class: 'card overflow-hidden' });
+  const coverageWrap = h('div', { class: 'px-5 pt-5 pb-2' }, [
+    h('div', { class: 'micro mb-2', style: 'color:var(--ink-mute);', text: 'Recruitment vs target' }),
+    barChart(segmentCoverageRows(), { width: 320, barHeight: 16, gap: 7 }),
+  ]);
+  listCard.appendChild(coverageWrap);
+  const groupsWrap = h('div', { class: 'md-list-scroll' });
+  listCard.appendChild(groupsWrap);
   const detailCard = h('div', { class: 'card md-detail' });
   layout.appendChild(listCard);
   layout.appendChild(detailCard);
   page.appendChild(layout);
 
-  function renderList() {
-    listCard.innerHTML = '';
+  /* Group by segment, config order, with an Unassigned tail group */
+  function buildGroups() {
+    const groups = SEGMENTS.map(s => ({ key: s.name, name: s.name, target: s.target, rows: [] }));
+    const unassigned = { key: '__unassigned', name: 'Unassigned', target: null, rows: [] };
     interviews.forEach(r => {
-      const untagged = r.tagged_same_day !== 'Y';
-      const item = h('div', { class: `md-list-item${r.id === selectedId ? ' selected' : ''}` }, [
-        h('div', { class: 'flex items-center justify-between gap-2' }, [
-          h('span', { class: 'font-medium text-sm num', text: r.interview_id || '—' }),
-          chip(untagged ? 'untagged' : 'tagged', untagged ? (isUntaggedOverdue(r) ? 'rose' : 'honey') : 'sage'),
-        ]),
-        h('div', { class: 'text-xs mt-1', style: 'color:var(--ink-mute);', text: `${fmtDate(r.date)} · ${r.segment || '—'} · ${r.interviewer || '—'}` }),
-      ]);
-      item.addEventListener('click', () => { selectedId = r.id; renderList(); renderDetail(); });
-      listCard.appendChild(item);
+      const g = groups.find(g => g.key === r.segment);
+      (g || unassigned).rows.push(r);
+    });
+    if (unassigned.rows.length) groups.push(unassigned);
+    return groups.filter(g => g.rows.length);
+  }
+
+  function coverageTone(count, target) {
+    if (!target) return 'line';
+    if (count >= target) return 'sage';
+    if (count >= target * 0.5) return 'honey';
+    return 'rose';
+  }
+
+  function isCollapsed(group) {
+    if (group.key in collapseOverrides) return collapseOverrides[group.key];
+    if (interviews.length <= 15) return false;
+    const hasSelected = group.rows.some(r => r.id === selectedId);
+    const hasOverdue = group.rows.some(isUntaggedOverdue);
+    return !(hasSelected || hasOverdue);
+  }
+
+  function makeRow(r) {
+    const untagged = r.tagged_same_day !== 'Y';
+    const item = h('div', { class: `md-list-item${r.id === selectedId ? ' selected' : ''}` }, [
+      h('div', { class: 'flex items-center justify-between gap-2' }, [
+        h('span', { class: 'font-medium text-sm num', text: r.interview_id || '—' }),
+        chip(untagged ? 'untagged' : 'tagged', untagged ? (isUntaggedOverdue(r) ? 'rose' : 'honey') : 'sage'),
+      ]),
+      h('div', { class: 'text-xs mt-1', style: 'color:var(--ink-mute);', text: `${fmtDate(r.date)} · ${r.format || '—'} · ${r.interviewer || '—'}` }),
+    ]);
+    item.addEventListener('click', () => { selectedId = r.id; renderList(); renderDetail(); });
+    return item;
+  }
+
+  function makeGroupHeader(group, collapsed, onToggle, { pinned } = {}) {
+    const untaggedCount = group.rows.filter(r => r.tagged_same_day !== 'Y').length;
+    const countChip = group.target
+      ? chip(`${group.rows.length}/${group.target}`, coverageTone(group.rows.length, group.target))
+      : chip(`${group.rows.length}`, 'honey');
+    const header = h('div', { class: 'group-header' }, [
+      h('div', { class: 'flex items-center gap-2 min-w-0' }, [
+        h('span', { class: 'group-chevron', text: collapsed ? '›' : '⌄' }),
+        h('span', { class: 'text-sm font-medium truncate', text: group.name }),
+      ]),
+      h('div', { class: 'flex items-center gap-2 flex-shrink-0' }, [
+        untaggedCount ? h('span', { class: 'flex items-center gap-1 text-xs', style: 'color:var(--rose);' }, [
+          h('span', { class: 'group-dot' }), String(untaggedCount),
+        ]) : null,
+        countChip,
+      ].filter(Boolean)),
+    ]);
+    if (pinned) header.classList.add('group-header-pinned');
+    header.addEventListener('click', onToggle);
+    return header;
+  }
+
+  function renderList() {
+    groupsWrap.innerHTML = '';
+    const groups = buildGroups();
+
+    /* Pinned shortcut: overdue-untagged rows, regardless of their real group */
+    const overdueRows = interviews.filter(isUntaggedOverdue);
+    if (overdueRows.length) {
+      const pinKey = '__needs_tagging';
+      const collapsed = collapseOverrides[pinKey] === true;
+      const pinGroup = { key: pinKey, name: 'Needs tagging (shortcut)', target: null, rows: overdueRows };
+      const body = h('div', { class: 'group-body' });
+      overdueRows.forEach(r => body.appendChild(makeRow(r)));
+      body.style.display = collapsed ? 'none' : '';
+      const header = makeGroupHeader(pinGroup, collapsed, () => {
+        collapseOverrides[pinKey] = !collapsed;
+        renderList();
+      }, { pinned: true });
+      groupsWrap.appendChild(h('div', { class: 'group-block' }, [header, body]));
+    }
+
+    groups.forEach(group => {
+      const collapsed = isCollapsed(group);
+      const body = h('div', { class: 'group-body' });
+      group.rows.forEach(r => body.appendChild(makeRow(r)));
+      body.style.display = collapsed ? 'none' : '';
+      const header = makeGroupHeader(group, collapsed, () => {
+        collapseOverrides[group.key] = !collapsed;
+        renderList();
+      });
+      if (group.key === '__unassigned') header.classList.add('group-header-honey');
+      groupsWrap.appendChild(h('div', { class: 'group-block' }, [header, body]));
     });
   }
 

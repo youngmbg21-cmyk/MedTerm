@@ -3,11 +3,11 @@
    data. In api mode the assistant can also draft them via chat. */
 import {
   STATE, registerRoute, renderCurrentRoute, h, emptyState, fmtDate, daysSince,
-  isUntaggedOverdue, isStalled,
+  isUntaggedOverdue, isStalled, rankThemes, segmentCoverageRows,
 } from '../app.js';
 import { CURRENT_PHASE, PHASES, SEGMENTS, getTeam } from '../config.js';
 import { data, aiAvailable } from '../data.js';
-import { barChart, percentMeter, riskMatrixSvg, serializeSvg } from '../charts.js';
+import { barChart, percentMeter, riskMatrixSvg, serializeSvg, PALETTE } from '../charts.js';
 import { DEFAULT_ASSUMPTIONS, BREAKPOINTS, derive } from './economics.js';
 
 const REPORT_TYPES = [
@@ -18,38 +18,24 @@ const REPORT_TYPES = [
 ];
 
 /* ---------- Shared helpers ---------- */
+/* Text ranking by mention count, drawn from the same rollup the matrix
+   screen uses, so the two never disagree. */
 function topThemes(n = 5) {
-  const counts = {};
-  STATE.matrix.forEach(r => { if (r.theme_tag) counts[r.theme_tag] = (counts[r.theme_tag] || 0) + 1; });
-  return Object.entries(counts).sort((a, b) => b[1] - a[1]).slice(0, n);
+  return rankThemes(STATE.matrix)
+    .map(t => [t.tag, t.count])
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, n);
 }
 
-function rankThemesFull(n) {
-  const themeData = {};
-  STATE.matrix.forEach(r => {
-    if (!r.theme_tag) return;
-    if (!themeData[r.theme_tag]) themeData[r.theme_tag] = { count: 0, totalSev: 0, wtpY: 0, quotes: [] };
-    const d = themeData[r.theme_tag];
-    d.count++; d.totalSev += +r.severity || 0; if (r.wtp === 'Y') d.wtpY++;
-    d.quotes.push(r);
-  });
-  const ranked = Object.entries(themeData).map(([tag, d]) => ({
-    tag, count: d.count, avgSev: d.count ? d.totalSev / d.count : 0,
-    wtpRate: d.count ? Math.round((d.wtpY / d.count) * 100) : 0,
-    score: d.count * (d.totalSev / (d.count || 1)) * (1 + d.wtpY / (d.count || 1)),
-    quotes: d.quotes,
-  })).sort((a, b) => b.score - a.score);
-  return n ? ranked.slice(0, n) : ranked;
+/* Bar-chart rows for the theme-frequency chart — same rollup as topThemes(). */
+function themeFrequencyRows(n = 6) {
+  return topThemes(n).map(([tag, count]) => ({ label: tag, value: count, color: PALETTE.plum }));
 }
 
 function taggedPct() {
   const total = STATE.interviews.length;
   if (!total) return 100;
   return (STATE.interviews.filter(r => r.tagged_same_day === 'Y').length / total) * 100;
-}
-
-function segmentCoverageRows() {
-  return SEGMENTS.map(s => ({ label: s.name, value: STATE.interviews.filter(r => r.segment === s.name).length, target: s.target }));
 }
 
 function isEconomicsCritical(text) {
@@ -78,7 +64,11 @@ function generateWeeklyStatus() {
         chart: { type: 'meter', pct: taggedPct(), label: 'Same-day tagging rate (hard rule: must be 100%)' },
       },
       { title: 'This week\'s interviews', body: recent.length ? recent.map(r => `${r.interview_id} · ${r.segment} · ${fmtDate(r.date)} — ${r.brief_topic || 'no topic recorded'}`).join('\n') : 'No interviews in the last 7 days.' },
-      { title: 'Top themes so far', body: topThemes().map(([t, n], i) => `${i + 1}. ${t} (${n} mentions)`).join('\n') || 'No themes tagged yet.' },
+      {
+        title: 'Top themes so far',
+        body: topThemes().map(([t, n], i) => `${i + 1}. ${t} (${n} mentions)`).join('\n') || 'No themes tagged yet.',
+        chart: themeFrequencyRows().length ? { type: 'bar', rows: themeFrequencyRows() } : null,
+      },
       { title: 'Blockers', body: [
         overdue.length ? `Same-day-tag rule breached: ${overdue.map(r => r.interview_id).join(', ')} untagged past 24h.` : null,
         stalled.length ? `${stalled.length} outreach contact(s) stalled with no movement: ${stalled.map(r => r.name).join(', ')}.` : null,
@@ -142,7 +132,7 @@ function generateExecutiveBriefing() {
   const team = getTeam();
   const total = STATE.interviews.length;
   const taggedPercent = taggedPct();
-  const ranked = rankThemesFull(6);
+  const ranked = rankThemes(STATE.matrix).slice(0, 6);
   const topTheme = ranked[0];
 
   const memo = STATE.decision_memos[0];
@@ -213,7 +203,11 @@ function generateExecutiveBriefing() {
         body: `Period covered: ${period}.\nSame-day tagging rate: ${Math.round(taggedPercent)}% (hard rule requires 100%).\nInterviews by segment vs target:\n${SEGMENTS.map(s => `  ${s.name}: ${STATE.interviews.filter(r => r.segment === s.name).length}/${s.target}`).join('\n')}`,
         chart: { type: 'bar', rows: segmentCoverageRows() },
       },
-      { title: 'Core analytical findings', body: findingsBody },
+      {
+        title: 'Core analytical findings',
+        body: findingsBody,
+        chart: themeFrequencyRows().length ? { type: 'bar', rows: themeFrequencyRows() } : null,
+      },
       { title: 'Strategic implications for project teams', body: implications.map(s => `- ${s}`).join('\n') },
       {
         title: 'Investment thesis & risk assessment',
