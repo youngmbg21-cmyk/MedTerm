@@ -28,7 +28,13 @@ between the evidence and the verdict. Task ledger (execute in order):
 4. [x] Shared confirm/skip helper extracted from js/chat.js into
        js/actions.js (actionConfirmation/addActionConfirmation/applyAction,
        TABLE_FOR_ACTION incl. add_evidence_link + update_hypothesis_status)
-5. [ ] Decision Brief screen + nav entry (ungated, phase 0 onward)
+5. [x] Decision Brief screen (js/screens/decision-brief.js) + top-level nav
+       entry, ungated: leaning card w/ regenerate (calm AI-off state),
+       hypothesis board (status/direction/strength, link counts, top-2
+       quoteBlocks, gaps, what-would-change callout), kill-criteria strip,
+       trajectory strip (tap → read-only modal), divergence panel.
+       Shared helpers in js/evidence.js (latestAssessment, resolveLink,
+       openLinkModal, renderMarkdown, runAssessment).
 6. [ ] Decision memo rebuild (three seats, override rationale, draft-from-evidence)
 7. [ ] Evidence linking in matrix / interviews / field checks (manual always;
        AI proposals when available)

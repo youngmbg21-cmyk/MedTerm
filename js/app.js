@@ -114,6 +114,9 @@ export function renderCurrentRoute() {
    ------------------------------------------------------------ */
 const NAV = [
   { type: 'route', route: 'overview', label: 'Overview' },
+  // Available from Phase 0 onward by design: early on, the honest brief
+  // says INSUFFICIENT — showing that is the point.
+  { type: 'route', route: 'decision-brief', label: 'Decision Brief' },
   {
     type: 'group', id: 'fieldwork', label: 'Fieldwork', phaseLabel: 'phase 1–2',
     unlockAt: 1, activeThrough: 2,
