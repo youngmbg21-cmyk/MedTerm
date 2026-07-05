@@ -15,6 +15,59 @@ import { DATA_MODE, WORKER_URL } from './config.js';
 import { buildSeed } from './seed.js';
 
 const LS_KEY = 'medterm_data_v1';
+const IDB_NAME = 'medterm_files_v1';
+
+/* ------------------------------------------------------------
+   IndexedDB blob store — local-mode home for uploaded files.
+   (localStorage is far too small for files.)
+   ------------------------------------------------------------ */
+function openFileDb() {
+  return new Promise((resolve, reject) => {
+    const req = indexedDB.open(IDB_NAME, 1);
+    req.onupgradeneeded = () => req.result.createObjectStore('files');
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error);
+  });
+}
+
+async function idbPut(id, blob) {
+  const db = await openFileDb();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction('files', 'readwrite');
+    tx.objectStore('files').put(blob, id);
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
+  });
+}
+
+async function idbGet(id) {
+  const db = await openFileDb();
+  return new Promise((resolve, reject) => {
+    const req = db.transaction('files').objectStore('files').get(id);
+    req.onsuccess = () => resolve(req.result || null);
+    req.onerror = () => reject(req.error);
+  });
+}
+
+async function idbDelete(id) {
+  const db = await openFileDb();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction('files', 'readwrite');
+    tx.objectStore('files').delete(id);
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
+  });
+}
+
+async function idbClear() {
+  const db = await openFileDb();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction('files', 'readwrite');
+    tx.objectStore('files').clear();
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
+  });
+}
 
 /* ------------------------------------------------------------
    Local adapter — localStorage, seeded on first run.
@@ -95,11 +148,36 @@ const localAdapter = {
     const db = loadLocalDb();
     db[table] = (db[table] || []).filter(r => r.id !== id);
     persistLocal();
+    if (table === 'documents') await idbDelete(id).catch(() => {});
     return { deleted: true };
   },
   async reset() {
     localDb = seedDb();
     persistLocal();
+    await idbClear().catch(() => {});
+  },
+
+  /* File blobs live in IndexedDB, keyed by the document record's id. */
+  async putFile(id, blob) { await idbPut(id, blob); },
+  async getFile(id, record) {
+    const blob = await idbGet(id);
+    if (blob) return blob;
+    // Seeded text documents have no stored blob — rebuild from text_content.
+    if (record?.text_content != null) {
+      return new Blob([record.text_content], { type: record.mime_type || 'text/plain' });
+    }
+    return null;
+  },
+
+  /* Rough storage usage for the Settings meter. */
+  async storageInfo() {
+    const recordsBytes = (localStorage.getItem(LS_KEY) || '').length * 2; // UTF-16
+    let filesBytes = null, quota = null;
+    if (navigator.storage?.estimate) {
+      const est = await navigator.storage.estimate().catch(() => null);
+      if (est) { filesBytes = est.usage ?? null; quota = est.quota ?? null; }
+    }
+    return { recordsBytes, recordsLimit: 5 * 1024 * 1024, filesBytes, quota };
   },
 };
 
@@ -151,7 +229,38 @@ const apiAdapter = {
   async reset() {
     throw new Error('Reset is only available in local demo mode.');
   },
+
+  /* Files go to Supabase Storage through the Worker (base64 JSON keeps the
+     Worker simple; fine for field documents up to ~10 MB). */
+  async putFile(id, blob) {
+    const base64 = await blobToBase64(blob);
+    await workerFetch(`/api/documents/${id}/file`, {
+      method: 'POST',
+      body: JSON.stringify({ base64, mime_type: blob.type }),
+    });
+  },
+  async getFile(id, record) {
+    const { url } = await workerFetch(`/api/documents/${id}/link`);
+    if (!url && record?.text_content != null) {
+      return new Blob([record.text_content], { type: record.mime_type || 'text/plain' });
+    }
+    const res = await fetch(url);
+    if (!res.ok) throw new Error(`File fetch failed: ${res.status}`);
+    return res.blob();
+  },
+  async storageInfo() {
+    return { recordsBytes: null, recordsLimit: null, filesBytes: null, quota: null };
+  },
 };
+
+function blobToBase64(blob) {
+  return new Promise((resolve, reject) => {
+    const r = new FileReader();
+    r.onload = () => resolve(String(r.result).split(',')[1]);
+    r.onerror = () => reject(r.error);
+    r.readAsDataURL(blob);
+  });
+}
 
 export const data = DATA_MODE === 'api' ? apiAdapter : localAdapter;
 export const isLocalMode = DATA_MODE !== 'api';

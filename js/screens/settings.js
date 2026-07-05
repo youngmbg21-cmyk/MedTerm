@@ -50,20 +50,60 @@ function renderSettings(page) {
     chip(DATA_MODE === 'api' ? 'Live backend' : 'Local demo', DATA_MODE === 'api' ? 'sage' : 'info'),
   ]));
   if (isLocalMode) {
-    modeCard.appendChild(h('div', { class: 'text-sm mb-4', style: 'color:var(--ink-soft);', text: 'Data lives in this browser (localStorage) and persists across reloads. To go live with team sync and the AI assistant, set DATA_MODE = \'api\' in js/config.js and add the backend secrets — see HANDOFF.md.' }));
-    const resetBtn = h('button', { class: 'btn btn-line', onclick: async () => {
-      if (!confirm('Reset all demo data to the original seed? Your local changes will be lost.')) return;
-      await data.reset();
-      await loadAllData();
-      renderCurrentRoute();
-    } }, 'Reset demo data');
-    modeCard.appendChild(resetBtn);
+    modeCard.appendChild(h('div', { class: 'text-sm mb-4', style: 'color:var(--ink-soft);', text: 'Data lives in this browser and persists across reloads. To go live with team sync and the AI assistant, set DATA_MODE = \'api\' in js/config.js and add the backend secrets — see HANDOFF.md.' }));
+
+    /* Storage meter — the app is the sole repository, so show headroom */
+    const meter = h('div', { class: 'mb-4' });
+    data.storageInfo().then(info => {
+      if (info.recordsBytes != null) {
+        const pct = Math.min(100, Math.round((info.recordsBytes / info.recordsLimit) * 100));
+        meter.appendChild(h('div', { class: 'flex justify-between text-xs mb-1' }, [
+          h('span', { text: 'Records (notes, quotes, contacts)' }),
+          h('span', { class: 'num', style: 'color:var(--ink-mute);', text: `${(info.recordsBytes / 1024).toFixed(0)} KB of ~5 MB` }),
+        ]));
+        const fill = h('i');
+        fill.style.width = `${pct}%`;
+        if (pct >= 80) fill.style.background = 'var(--honey)';
+        meter.appendChild(h('div', { class: 'bar-wrap mb-2' }, [fill]));
+      }
+      if (info.filesBytes != null) {
+        meter.appendChild(h('div', { class: 'text-xs', style: 'color:var(--ink-mute);', text: `Browser storage in use (incl. uploaded files): ${(info.filesBytes / 1024 / 1024).toFixed(1)} MB${info.quota ? ` of ${(info.quota / 1024 / 1024 / 1024).toFixed(1)} GB available` : ''}` }));
+      }
+    }).catch(() => {});
+    modeCard.appendChild(meter);
+
+    modeCard.appendChild(h('div', { class: 'flex flex-wrap gap-2' }, [
+      h('button', { class: 'btn btn-line', onclick: exportEverything }, 'Export everything (backup)'),
+      h('button', { class: 'btn btn-line', onclick: async () => {
+        if (!confirm('Reset all demo data to the original seed? Your local changes will be lost.')) return;
+        await data.reset();
+        await loadAllData();
+        renderCurrentRoute();
+      } }, 'Reset demo data'),
+    ]));
+    modeCard.appendChild(h('div', { class: 'text-xs mt-3', style: 'color:var(--ink-mute);', text: 'Export downloads one JSON file with every record, including full field notes and the text of uploaded documents. Binary files (PDFs, images) should be downloaded individually from Documents. Do this weekly until the backend is live.' }));
   } else {
-    modeCard.appendChild(h('div', { class: 'text-sm', style: 'color:var(--ink-soft);', text: 'Connected to the live backend. Data is shared across the team.' }));
+    modeCard.appendChild(h('div', { class: 'text-sm mb-4', style: 'color:var(--ink-soft);', text: 'Connected to the live backend. Data is shared across the team and backed up by Supabase.' }));
+    modeCard.appendChild(h('button', { class: 'btn btn-line', onclick: exportEverything }, 'Export everything (backup)'));
   }
   wrap.appendChild(modeCard);
 
   page.appendChild(wrap);
+}
+
+async function exportEverything() {
+  const tables = ['outreach', 'interviews', 'matrix', 'deliverables', 'scripts',
+    'kill_list', 'field_checks', 'economics', 'segment_cards', 'decision_memos',
+    'reports', 'documents'];
+  const dump = { exported_at: new Date().toISOString(), app: 'MedTerminal', tables: {} };
+  for (const t of tables) {
+    dump.tables[t] = await data.list(t).catch(() => []);
+  }
+  const blob = new Blob([JSON.stringify(dump, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = h('a', { href: url, download: `medterminal-backup-${new Date().toISOString().slice(0, 10)}.json` });
+  a.click();
+  URL.revokeObjectURL(url);
 }
 
 registerRoute('settings', 'Settings', renderSettings,

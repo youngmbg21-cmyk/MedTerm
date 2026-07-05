@@ -39,17 +39,17 @@ export function buildSeed() {
   ];
 
   const interviews = [
-    { interview_id: 'INT-001', date: daysAgo(18), segment: 'Patient', initials: 'JM', interviewer: FIELD, format: 'In-person', recorded: 'Y', tagged_same_day: 'Y', brief_topic: 'Kidney treatment journey, Nairobi → Ahmedabad', link_to_notes: '' },
-    { interview_id: 'INT-002', date: daysAgo(16), segment: 'Caregiver', initials: 'GW', interviewer: FIELD, format: 'In-person', recorded: 'Y', tagged_same_day: 'Y', brief_topic: 'Daughter coordinating mother\'s Delhi oncology care', link_to_notes: '' },
-    { interview_id: 'INT-003', date: daysAgo(14), segment: 'Agent', initials: 'PK', interviewer: FIELD, format: 'In-person', recorded: 'N', tagged_same_day: 'Y', brief_topic: 'Agent workflow, commissions, quote-chasing', link_to_notes: '' },
-    { interview_id: 'INT-004', date: daysAgo(12), segment: 'Hospital IPD', initials: 'AM', interviewer: LEAD, format: 'Video', recorded: 'Y', tagged_same_day: 'Y', brief_topic: 'What makes an East African lead qualified', link_to_notes: '' },
+    { interview_id: 'INT-001', date: daysAgo(18), segment: 'Patient', initials: 'JM', interviewer: FIELD, format: 'In-person', recorded: 'Y', tagged_same_day: 'Y', brief_topic: 'Kidney treatment journey, Nairobi → Ahmedabad', link_to_notes: '', notes_markdown: 'Met at his shop in Kariobangi, 70 minutes.\n\nJourney: diagnosed 2022, dialysis at KNH for 8 months while family searched for a transplant option. Cousin\'s friend had gone to Ahmedabad — that single personal connection decided everything. Never seriously compared alternatives.\n\nMoney: total cost ~KES 2.8M. Raised through family + church harambee + selling a plot. The $9,000→$13,500 quote jump (tagged) nearly collapsed the plan mid-journey; brother-in-law in the US covered the gap.\n\nStrongest moment: "You are sick, far from home, and every day the number changes." Visibly angry retelling it, two years later.\n\nFollow-ups: will introduce me to two other transplant patients from his WhatsApp support group.' },
+    { interview_id: 'INT-002', date: daysAgo(16), segment: 'Caregiver', initials: 'GW', interviewer: FIELD, format: 'In-person', recorded: 'Y', tagged_same_day: 'Y', brief_topic: 'Daughter coordinating mother\'s Delhi oncology care', link_to_notes: '', notes_markdown: 'Her sister\'s flat, Umoja. 55 minutes, mother present for part of it.\n\nShe ran the whole process on nights and weekends while holding two jobs. Sent identical scan packages to four hospitals: two never replied at all, one replied in 3 weeks, one in 4 days (they chose that one largely on responsiveness).\n\nThe unprompted "50,000 shillings just to handle the back-and-forth" quote is tagged — she repeated the number twice without being asked. Anchor for WTP in this segment.\n\nPaper trail chaos: visa letter errors, three re-issues. Kept everything in a physical folder — worth photographing for Documents next visit.' },
+    { interview_id: 'INT-003', date: daysAgo(14), segment: 'Agent', initials: 'PK', interviewer: FIELD, format: 'In-person', recorded: 'N', tagged_same_day: 'Y', brief_topic: 'Agent workflow, commissions, quote-chasing', link_to_notes: '', notes_markdown: 'His office off Kimathi Street. No recording (his request) — notes written up same evening.\n\nWorkflow: ~6 active cases at a time. Estimates half his week goes on chasing hospital quotes and reformatting patient documents. Would use software that did this "if it did not touch my commission".\n\nEconomics: 10–15% of package value from the hospital side, varies by specialty (cardiac highest). Patients also pay him a "registration fee" KES 5–15K upfront — confirmed separately (see field checks).\n\nRead: transactional operator, not hostile. The commission opacity is the business model; any patient-side transparency play threatens it. He knows this.' },
+    { interview_id: 'INT-004', date: daysAgo(12), segment: 'Hospital IPD', initials: 'AM', interviewer: LEAD, format: 'Video', recorded: 'Y', tagged_same_day: 'Y', brief_topic: 'What makes an East African lead qualified', link_to_notes: '', notes_markdown: 'Video, 40 minutes, he was generous and precise.\n\nKey numbers: ~80% of African inquiries arrive with incomplete documents; a complete case gets a treating-doctor opinion inside 48h; incomplete ones can sit for weeks. They pay agents 10–12% but "would rather pay for quality than volume".\n\nSaaS probe: cautiously positive on paying for pre-qualified, standardised case files — asked who else would be on the platform (network effects matter to them). Shared an indicative price list for common procedures (uploaded to Documents).\n\nFollow-up: he offered an intro to their Nairobi liaison office.' },
     { interview_id: 'INT-005', date: daysAgo(11), segment: 'Diaspora family', initials: 'SN', interviewer: LEAD, format: 'Video', recorded: 'Y', tagged_same_day: 'Y', brief_topic: 'Paying for father\'s cardiac care from London', link_to_notes: '' },
     { interview_id: 'INT-006', date: daysAgo(9), segment: 'Patient', initials: 'FM', interviewer: FIELD, format: 'Phone', recorded: 'N', tagged_same_day: 'Y', brief_topic: 'Oncology second opinion, gave up mid-way', link_to_notes: '' },
     { interview_id: 'INT-007', date: daysAgo(8), segment: 'Caregiver', initials: 'SO', interviewer: FIELD, format: 'In-person', recorded: 'Y', tagged_same_day: 'Y', brief_topic: 'Nurse guiding brother\'s spine surgery abroad', link_to_notes: '' },
     { interview_id: 'INT-008', date: daysAgo(6), segment: 'Patient', initials: 'HA', interviewer: FIELD, format: 'In-person', recorded: 'Y', tagged_same_day: 'Y', brief_topic: 'Cardiac patient, Mombasa; financing via harambee', link_to_notes: '' },
     { interview_id: 'INT-009', date: daysAgo(5), segment: 'Hospital IPD', initials: 'PS', interviewer: LEAD, format: 'Video', recorded: 'Y', tagged_same_day: 'Y', brief_topic: 'Fortis IPD intake process and response times', link_to_notes: '' },
     { interview_id: 'INT-010', date: daysAgo(4), segment: 'Diaspora family', initials: 'LW', interviewer: LEAD, format: 'Video', recorded: 'Y', tagged_same_day: 'Y', brief_topic: 'Hip replacement paid from Canada; money transfer pain', link_to_notes: '' },
-    { interview_id: 'INT-011', date: daysAgo(3), segment: 'Caregiver', initials: 'MA', interviewer: FIELD, format: 'In-person', recorded: 'N', tagged_same_day: 'N', brief_topic: 'Husband\'s neuro case — notes taken, NOT YET TAGGED', link_to_notes: '' },
+    { interview_id: 'INT-011', date: daysAgo(3), segment: 'Caregiver', initials: 'MA', interviewer: FIELD, format: 'In-person', recorded: 'N', tagged_same_day: 'N', brief_topic: 'Husband\'s neuro case — notes taken, NOT YET TAGGED', link_to_notes: '', notes_markdown: 'Raw notes, not yet tagged into the matrix:\n\nHusband needed neurosurgery consult; NHIF covered nothing abroad. She described "begging three different agents for the same information". One agent quoted the consult at $500, another at $150 — same hospital.\n\nMoney moved through a friend\'s hawala contact because bank transfer took too long. She was never sure the hospital had received it.\n\nCandidate tags when processed: Friction — quote chasing (sev 4), Friction — money transfer (sev 4, WTP Maybe), Trust — price clarity (sev 5).' },
     { interview_id: 'INT-012', date: daysAgo(2), segment: 'Agent', initials: 'DK', interviewer: FIELD, format: 'Phone', recorded: 'N', tagged_same_day: 'N', brief_topic: 'Freelance facilitator, Eastleigh — NOT YET TAGGED', link_to_notes: '' },
   ];
 
@@ -154,8 +154,58 @@ export function buildSeed() {
     { assumption: 'Diaspora payers outnumber local payers for planned procedures', confirmed: false, confirmed_by: '', confirmed_date: null, notes: 'Directional from interviews; needs a bigger sample.' },
   ];
 
+  const documents = [
+    {
+      filename: 'debrief-agent-walkins.md', mime_type: 'text/markdown', size_bytes: 1180,
+      segment: 'Agent', interview_id: 'INT-003', uploaded_by: FIELD,
+      description: 'Same-evening debrief after the MediLink office visit and two other agent walk-ins.',
+      text_content: `# Debrief — Nairobi agent walk-ins
+
+Three offices visited in one afternoon (MediLink, plus two smaller operators near Kimathi Street).
+
+Common pattern across all three:
+- Everyone claims exclusive hospital relationships; none could show a contract.
+- Quote-chasing is universal — each office had a wall/whiteboard tracking pending hospital replies.
+- Two of three asked patients for an upfront "registration fee" before any hospital contact.
+- WhatsApp is the operating system. One agent showed 40+ active patient chats.
+
+Watch: the smaller operators are hungrier and may talk more openly about economics.
+Next step: return to MediLink with the follow-up template (done — became INT-003).`,
+    },
+    {
+      filename: 'apollo-ipd-price-indication.csv', mime_type: 'text/csv', size_bytes: 610,
+      segment: 'Hospital IPD', interview_id: 'INT-004', uploaded_by: LEAD,
+      description: 'Indicative package prices shared by the Apollo IPD deputy head after INT-004. Not a formal quote.',
+      text_content: `procedure,indicative_package_usd,typical_stay_days,notes
+Kidney transplant (related donor),13000-16000,21,Excludes donor workup
+CABG (bypass),7000-9500,10,Most requested from East Africa
+Hip replacement (unilateral),5500-7000,7,Implant grade affects price
+Spinal fusion (2-level),8000-11000,9,Imaging review required first
+Oncology consult + PET-CT,900-1400,2,Often the entry point
+Liver transplant,32000-40000,30,Requires committee approval`,
+    },
+    {
+      filename: 'diaspora-money-transfer-notes.md', mime_type: 'text/markdown', size_bytes: 760,
+      segment: 'Diaspora family', interview_id: 'INT-005', uploaded_by: LEAD,
+      description: 'Notes on how money actually moved in the two diaspora cases (INT-005, INT-010).',
+      text_content: `# How the money actually moved — diaspora cases
+
+INT-005 (London → Delhi): three wire attempts. First bounced (name mismatch),
+second took 6 working days, third went via a UK remittance app to a Nairobi
+relative who re-sent via bank. No receipts matched to hospital invoices at any point.
+
+INT-010 (Toronto → Mumbai): ~$600 in cumulative fees on ~$12,000 moved across
+three services. She kept a spreadsheet; screenshots promised.
+
+Pattern: the payer abroad has zero visibility once money leaves their app.
+Verification is a phone call to a relative. This is a trust product waiting to exist —
+tagged under Friction — money transfer.`,
+    },
+  ];
+
   return {
     outreach, interviews, matrix, deliverables, scripts, kill_list, field_checks,
+    documents,
     economics: [], segment_cards: [], decision_memos: [], reports: [],
   };
 }

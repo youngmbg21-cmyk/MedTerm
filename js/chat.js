@@ -14,6 +14,7 @@ const QUICK_PROMPTS = [
   ['Phase exit check', 'Assess our progress against the current phase exit criteria. What still needs to be done?'],
   ['What now?', 'What is the single most important thing I should do today, given the state of the project? Be specific — name a person, a deliverable, or an interview.'],
   ['Surface themes', 'Surface the strongest themes emerging from the matrix. Quote specific entries. Flag where evidence is still thin.'],
+  ['Search the notes', 'Search all field notes and documents for the most important thing we have learned that is NOT yet reflected in the theme matrix. Quote the source.'],
 ];
 
 export function initChat() {
@@ -135,7 +136,16 @@ High-severity WTP quotes (up to 12):
 ${highSevQuotes || '(none yet)'}
 
 Kill list entries: ${STATE.kill_list.length}
-Field checks: ${STATE.field_checks.length}`;
+Field checks: ${STATE.field_checks.length}
+
+Field notes coverage: ${STATE.interviews.filter(r => r.notes_markdown).length} of ${STATE.interviews.length} interviews have full field notes.
+Documents on file: ${STATE.documents.length}${STATE.documents.length ? ' — ' + STATE.documents.slice(0, 20).map(d => `${d.filename}${d.interview_id ? ` (${d.interview_id})` : ''}`).join(', ') : ''}
+
+You have tools to reach EVERYTHING in this workspace: search_notes (full-text across
+interview field notes, outreach notes, matrix quotes, deliverable evidence, and document
+contents), query_* tools for structured records, list_documents, and read_document (returns
+a document's full contents). When a question could be answered by notes or documents,
+search before answering — never say you lack access to the team's notes.`;
 }
 
 export async function sendChat(userText) {

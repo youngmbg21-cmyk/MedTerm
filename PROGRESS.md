@@ -48,3 +48,24 @@ README, CLAUDE.md, docs/tech-stack.md rewritten to match the code. HANDOFF.md wr
   auto-ID, master-detail, mark-tagged clears red state, add + filter quote, live
   team-name propagation into dropdowns, report generate/view, kill-list append,
   deliverable cycling, demo reset, disabled chat state) — all pass.
+
+## Sole-repository upgrade ✅ (2026-07-05)
+- Interview field notes: `notes_markdown` on the log form and detail view, with an
+  in-place editor; 5 seeded interviews carry realistic full debriefs.
+- Documents screen: upload/search/view/download/delete for PDF, text, markdown, CSV,
+  images (10 MB cap, Word rejected with guidance, privacy banner). IndexedDB in local
+  mode via new `data.putFile/getFile`; Supabase Storage (`field-documents` bucket) via
+  new Worker endpoints in api mode. 3 seeded documents (agent debrief, IPD price CSV,
+  diaspora money-transfer notes) linked to interviews.
+- Interview detail shows linked documents; documents link back by interview ID.
+- Assistant now reaches everything: `search_notes` (full-text across interview notes,
+  outreach notes, matrix quotes/notes, deliverable evidence, document contents),
+  `list_documents`, `read_document` (text verbatim, PDFs transcribed once and cached,
+  images returned as image blocks), query limits raised to 50, tool rounds to 5,
+  context snapshot now reports notes coverage and the document inventory.
+- Settings: storage meter (records vs ~5 MB, browser usage) and "Export everything"
+  JSON backup including notes and document text.
+- sql/schema.sql: `documents` table + RLS + private-bucket instructions.
+- Verified: smoke suite (22 routes × 2 viewports, zero console errors) and a new
+  11-assertion interaction suite (upload → search-by-content → reload persistence →
+  download roundtrip → notes edit → export contents) all pass.

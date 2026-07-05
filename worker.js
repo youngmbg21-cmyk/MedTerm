@@ -13,6 +13,7 @@
  */
 
 const CLAUDE_MODEL = 'claude-sonnet-4-6';
+const STORAGE_BUCKET = 'field-documents';
 
 const SYSTEM_PROMPT = `You are MedTerminal, a senior research director embedded in a six-phase qualitative research programme. The programme is investigating whether a patient-side medical tourism platform (for Kenyan patients travelling to India for treatment) is viable enough to build.
 
@@ -50,7 +51,12 @@ When answering:
 - Reference specific interview IDs, participant codes, theme names — not generic advice
 - Cite the data you're drawing from
 - If asked "what should I do today?", name a specific person, deliverable, or interview
-- If evidence is thin on a topic, say so explicitly`;
+- If evidence is thin on a topic, say so explicitly
+
+This workspace is the team's sole repository. You have tools that reach everything in it:
+search_notes covers every notes field and document contents; read_document returns full
+document text (PDFs are transcribed, images shown to you). Search before saying you don't
+know, and cite filenames and interview IDs when you quote from notes or documents.`;
 
 // CORS headers
 function corsHeaders(origin, env) {
@@ -187,6 +193,45 @@ async function handleRequest(request, env) {
   const isWriteRole = member.role === 'lead' || member.role === 'partner';
   const isAdmin = member.role === 'admin' || member.role === 'lead';
 
+  // --- Document files (Supabase Storage) — before the generic table routes ---
+  const fileMatch = path.match(/^\/api\/documents\/([^/]+)\/(file|link)$/);
+  if (fileMatch) {
+    const [, docId, action] = fileMatch;
+
+    if (action === 'file' && request.method === 'POST' && isWriteRole) {
+      const { base64, mime_type } = await request.json();
+      const bytes = Uint8Array.from(atob(base64), c => c.charCodeAt(0));
+      const up = await fetch(`${env.SUPABASE_URL}/storage/v1/object/${STORAGE_BUCKET}/${docId}`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${env.SUPABASE_SERVICE_KEY}`,
+          'Content-Type': mime_type || 'application/octet-stream',
+          'x-upsert': 'true',
+        },
+        body: bytes,
+      });
+      if (!up.ok) return errorResponse(`Storage upload failed: ${await up.text()}`, 502, origin, env);
+      await supabaseRequest('PATCH', `documents?id=eq.${docId}`, { storage_path: docId }, env);
+      return jsonResponse({ stored: true }, 200, origin, env);
+    }
+
+    if (action === 'link' && request.method === 'GET') {
+      const sign = await fetch(`${env.SUPABASE_URL}/storage/v1/object/sign/${STORAGE_BUCKET}/${docId}`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${env.SUPABASE_SERVICE_KEY}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ expiresIn: 3600 }),
+      });
+      if (!sign.ok) return jsonResponse({ url: null }, 200, origin, env);
+      const { signedURL } = await sign.json();
+      return jsonResponse({ url: `${env.SUPABASE_URL}/storage/v1${signedURL}` }, 200, origin, env);
+    }
+
+    return errorResponse('Method not allowed or insufficient permissions', 405, origin, env);
+  }
+
   // --- CRUD endpoints ---
   // Table mapping
   const tableRoutes = {
@@ -201,6 +246,7 @@ async function handleRequest(request, env) {
     '/api/field_checks': 'field_checks',
     '/api/decision_memos': 'decision_memos',
     '/api/segment_cards': 'segment_cards',
+    '/api/documents': 'documents',
   };
 
   // Match /api/<table> or /api/<table>/<id>
@@ -220,6 +266,7 @@ async function handleRequest(request, env) {
       const body = await request.json();
       const row = body.fields || body;
       row.created_by = member.id;
+      if (table === 'documents') row.uploaded_by = member.display_name;
       const { data, status } = await supabaseRequest('POST', table, row, env);
       const created = Array.isArray(data) ? data[0] : data;
       await logAction(env, member.id, 'create', table, created?.id, null, row);
@@ -237,10 +284,18 @@ async function handleRequest(request, env) {
       return jsonResponse(updated, status, origin, env);
     }
 
-    if (request.method === 'DELETE' && recordId && member.role === 'lead') {
+    // Leads can delete anywhere; partners can delete their own documents.
+    if (request.method === 'DELETE' && recordId &&
+        (member.role === 'lead' || (table === 'documents' && isWriteRole))) {
       const { data, status } = await supabaseRequest(
         'DELETE', `${table}?id=eq.${recordId}`, null, env
       );
+      if (table === 'documents') {
+        await fetch(`${env.SUPABASE_URL}/storage/v1/object/${STORAGE_BUCKET}/${recordId}`, {
+          method: 'DELETE',
+          headers: { Authorization: `Bearer ${env.SUPABASE_SERVICE_KEY}` },
+        }).catch(() => {});
+      }
       await logAction(env, member.id, 'delete', table, recordId, null, null);
       return jsonResponse({ deleted: true }, status, origin, env);
     }
@@ -412,6 +467,40 @@ async function handleRequest(request, env) {
         },
       },
       {
+        name: 'search_notes',
+        description: 'Full-text search across EVERYTHING written in the workspace: interview field notes and topics, outreach notes, matrix quotes and notes, deliverable evidence, and document descriptions/contents. Use this whenever a question could be answered by the team\'s notes.',
+        input_schema: {
+          type: 'object',
+          properties: {
+            query: { type: 'string', description: 'Words to search for (case-insensitive substring match)' },
+            limit: { type: 'number', description: 'Max results per table (default 10)' },
+          },
+          required: ['query'],
+        },
+      },
+      {
+        name: 'list_documents',
+        description: 'List uploaded field documents (filename, segment, linked interview, description).',
+        input_schema: {
+          type: 'object',
+          properties: {
+            segment: { type: 'string', description: 'Filter by segment' },
+            interview_id: { type: 'string', description: 'Filter by linked interview, e.g. INT-004' },
+          },
+        },
+      },
+      {
+        name: 'read_document',
+        description: 'Read the full contents of an uploaded document by its filename or id. Text/CSV/markdown return verbatim text; PDFs are transcribed; images are returned for you to look at.',
+        input_schema: {
+          type: 'object',
+          properties: {
+            filename: { type: 'string', description: 'Exact or partial filename' },
+            document_id: { type: 'string', description: 'Document record id (alternative to filename)' },
+          },
+        },
+      },
+      {
         name: 'propose_action',
         description: 'Propose an action for the user to confirm. The action will be shown to the user with a Confirm/Skip button.',
         input_schema: {
@@ -461,7 +550,7 @@ async function handleRequest(request, env) {
     const actions = [];
     let textParts = [];
     let toolRound = 0;
-    const maxToolRounds = 3;
+    const maxToolRounds = 5;
 
     // Process tool use loop
     while (result.stop_reason === 'tool_use' && toolRound < maxToolRounds) {
@@ -481,8 +570,18 @@ async function handleRequest(request, env) {
             payload: toolBlock.input.payload,
           });
           toolResults.push({ type: 'tool_result', tool_use_id: toolBlock.id, content: 'Action proposed to user for confirmation.' });
+        } else if (toolResult && toolResult.__image) {
+          // Images go back as actual image blocks so the model can see them.
+          toolResults.push({
+            type: 'tool_result',
+            tool_use_id: toolBlock.id,
+            content: [
+              { type: 'text', text: `Document: ${toolResult.filename}${toolResult.description ? ` — ${toolResult.description}` : ''}` },
+              { type: 'image', source: { type: 'base64', media_type: toolResult.__image.media_type, data: toolResult.__image.data } },
+            ],
+          });
         } else {
-          toolResults.push({ type: 'tool_result', tool_use_id: toolBlock.id, content: JSON.stringify(toolResult).slice(0, 4000) });
+          toolResults.push({ type: 'tool_result', tool_use_id: toolBlock.id, content: JSON.stringify(toolResult).slice(0, 24000) });
         }
       }
 
@@ -537,7 +636,7 @@ async function executeToolCall(name, input, env, member) {
       let query = 'outreach?order=created_at.desc';
       if (input.status) query += `&status=eq.${input.status}`;
       if (input.segment) query += `&segment=eq.${input.segment}`;
-      query += `&limit=${input.limit || 20}`;
+      query += `&limit=${input.limit || 50}`;
       const { data } = await supabaseRequest('GET', query, null, env);
       return { records: data, count: data?.length || 0 };
     }
@@ -546,7 +645,7 @@ async function executeToolCall(name, input, env, member) {
       if (input.segment) query += `&segment=eq.${input.segment}`;
       if (input.interviewer) query += `&interviewer=eq.${input.interviewer}`;
       if (input.tagged) query += `&tagged_same_day=eq.${input.tagged}`;
-      query += `&limit=${input.limit || 20}`;
+      query += `&limit=${input.limit || 50}`;
       const { data } = await supabaseRequest('GET', query, null, env);
       return { records: data, count: data?.length || 0 };
     }
@@ -556,7 +655,7 @@ async function executeToolCall(name, input, env, member) {
       if (input.segment) query += `&segment=eq.${input.segment}`;
       if (input.min_severity) query += `&severity=gte.${input.min_severity}`;
       if (input.wtp) query += `&wtp=eq.${input.wtp}`;
-      query += `&limit=${input.limit || 20}`;
+      query += `&limit=${input.limit || 50}`;
       const { data } = await supabaseRequest('GET', query, null, env);
       return { records: data, count: data?.length || 0 };
     }
@@ -572,6 +671,100 @@ async function executeToolCall(name, input, env, member) {
       if (input.status) query += `&status=eq.${input.status}`;
       const { data } = await supabaseRequest('GET', query, null, env);
       return { records: data, count: data?.length || 0 };
+    }
+    case 'search_notes': {
+      // Sanitise for PostgREST or= syntax, then substring-match each notes-bearing column.
+      const q = String(input.query || '').replace(/[,()*%]/g, ' ').trim();
+      if (!q) return { error: 'Empty query' };
+      const lim = Math.min(input.limit || 10, 25);
+      const enc = encodeURIComponent(`*${q}*`);
+
+      const [interviews, outreach, matrix, deliverables, documents] = await Promise.all([
+        supabaseRequest('GET', `interviews?or=(notes_markdown.ilike.${enc},brief_topic.ilike.${enc})&limit=${lim}`, null, env),
+        supabaseRequest('GET', `outreach?notes=ilike.${enc}&limit=${lim}`, null, env),
+        supabaseRequest('GET', `matrix?or=(quote.ilike.${enc},notes.ilike.${enc})&limit=${lim}`, null, env),
+        supabaseRequest('GET', `deliverables?evidence=ilike.${enc}&limit=${lim}`, null, env),
+        supabaseRequest('GET', `documents?or=(filename.ilike.${enc},description.ilike.${enc},text_content.ilike.${enc})&limit=${lim}`, null, env),
+      ]);
+
+      const clip = (s, n = 1500) => (s || '').slice(0, n);
+      return {
+        query: q,
+        interviews: (interviews.data || []).map(r => ({ interview_id: r.interview_id, date: r.date, segment: r.segment, brief_topic: r.brief_topic, notes: clip(r.notes_markdown) })),
+        outreach: (outreach.data || []).map(r => ({ name: r.name, segment: r.segment, status: r.status, notes: clip(r.notes, 500) })),
+        matrix: (matrix.data || []).map(r => ({ interview_id: r.interview_id, theme_tag: r.theme_tag, segment: r.segment, severity: r.severity, wtp: r.wtp, quote: clip(r.quote, 500), notes: clip(r.notes, 300) })),
+        deliverables: (deliverables.data || []).map(r => ({ phase: r.phase, deliverable: r.deliverable, status: r.status, evidence: clip(r.evidence, 800) })),
+        documents: (documents.data || []).map(r => ({ id: r.id, filename: r.filename, segment: r.segment, interview_id: r.interview_id, description: r.description, snippet: clip(r.text_content, 800) })),
+      };
+    }
+    case 'list_documents': {
+      let query = 'documents?select=id,filename,mime_type,size_bytes,segment,interview_id,description,uploaded_by,created_at&order=created_at.desc';
+      if (input.segment) query += `&segment=eq.${encodeURIComponent(input.segment)}`;
+      if (input.interview_id) query += `&interview_id=eq.${encodeURIComponent(input.interview_id)}`;
+      const { data } = await supabaseRequest('GET', query, null, env);
+      return { documents: data, count: data?.length || 0 };
+    }
+    case 'read_document': {
+      let query = 'documents?limit=1';
+      if (input.document_id) query += `&id=eq.${encodeURIComponent(input.document_id)}`;
+      else if (input.filename) query += `&filename=ilike.${encodeURIComponent(`*${String(input.filename).replace(/[,()*%]/g, ' ').trim()}*`)}`;
+      else return { error: 'Provide filename or document_id' };
+
+      const { data } = await supabaseRequest('GET', query, null, env);
+      const doc = data?.[0];
+      if (!doc) return { error: 'Document not found. Use list_documents to see what exists.' };
+
+      // Text already on record (text files, or a previously transcribed PDF)
+      if (doc.text_content) {
+        return { filename: doc.filename, mime_type: doc.mime_type, description: doc.description, contents: doc.text_content.slice(0, 20000) };
+      }
+
+      // Fetch the binary from Storage
+      const fileRes = await fetch(`${env.SUPABASE_URL}/storage/v1/object/${STORAGE_BUCKET}/${doc.id}`, {
+        headers: { Authorization: `Bearer ${env.SUPABASE_SERVICE_KEY}` },
+      });
+      if (!fileRes.ok) return { error: `File missing from storage (${fileRes.status}).` };
+      const buf = new Uint8Array(await fileRes.arrayBuffer());
+      let binary = '';
+      for (let i = 0; i < buf.length; i += 0x8000) {
+        binary += String.fromCharCode.apply(null, buf.subarray(i, i + 0x8000));
+      }
+      const b64 = btoa(binary);
+
+      // Images: hand the image itself back to the model
+      if ((doc.mime_type || '').startsWith('image/')) {
+        return { __image: { media_type: doc.mime_type, data: b64 }, filename: doc.filename, description: doc.description };
+      }
+
+      // PDFs: transcribe once with a nested Claude call, cache into text_content
+      if (doc.mime_type === 'application/pdf') {
+        const tr = await fetch('https://api.anthropic.com/v1/messages', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'x-api-key': env.CLAUDE_API_KEY,
+            'anthropic-version': '2023-06-01',
+          },
+          body: JSON.stringify({
+            model: CLAUDE_MODEL,
+            max_tokens: 8000,
+            messages: [{
+              role: 'user',
+              content: [
+                { type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: b64 } },
+                { type: 'text', text: 'Transcribe this document faithfully as plain text. Preserve headings, tables (as rows), and all figures. Do not summarise or omit anything.' },
+              ],
+            }],
+          }),
+        });
+        if (!tr.ok) return { error: `PDF transcription failed: ${await tr.text()}` };
+        const out = await tr.json();
+        const text = (out.content || []).filter(b => b.type === 'text').map(b => b.text).join('\n');
+        await supabaseRequest('PATCH', `documents?id=eq.${doc.id}`, { text_content: text.slice(0, 200000) }, env);
+        return { filename: doc.filename, mime_type: doc.mime_type, description: doc.description, contents: text.slice(0, 20000), note: 'Transcribed from PDF and cached for future searches.' };
+      }
+
+      return { error: `Unsupported file type for reading: ${doc.mime_type}. Ask the user to re-upload as PDF or text.` };
     }
     case 'propose_action':
       return { proposed: true };

@@ -100,6 +100,32 @@ function renderInterviews(page) {
       ]));
     }
 
+    /* Field notes — the full write-up lives in the app, not in external docs */
+    detailCard.appendChild(h('div', { class: 'px-6 pt-4' }, [
+      h('div', { class: 'flex items-center justify-between mb-1' }, [
+        h('div', { class: 'micro', style: 'color:var(--ink-mute);', text: 'Field notes' }),
+        h('button', { class: 'btn btn-ghost text-xs', onclick: () => openNotesEditor(r) }, r.notes_markdown ? 'Edit notes' : 'Write notes'),
+      ]),
+      r.notes_markdown
+        ? h('div', { class: 'text-sm leading-relaxed whitespace-pre-line', text: r.notes_markdown })
+        : h('div', { class: 'text-sm', style: 'color:var(--ink-mute);', text: 'No notes yet. Write the full debrief here — this app is the single repository, and the assistant can only search what lives in it.' }),
+    ]));
+
+    /* Documents attached to this interview */
+    const docs = STATE.documents.filter(d => d.interview_id === r.interview_id);
+    if (docs.length) {
+      detailCard.appendChild(h('div', { class: 'px-6 pt-4' }, [
+        h('div', { class: 'micro mb-1', style: 'color:var(--ink-mute);', text: `Documents (${docs.length})` }),
+        h('div', { class: 'flex flex-wrap gap-2' }, docs.map(d => {
+          const c = chip(d.filename, 'info');
+          c.style.cursor = 'pointer';
+          c.title = d.description || '';
+          c.addEventListener('click', () => go('documents'));
+          return c;
+        })),
+      ]));
+    }
+
     /* Linked theme-matrix quotes */
     const quotes = STATE.matrix.filter(q => q.interview_id === r.interview_id);
     const qHead = h('div', { class: 'px-6 pt-5 pb-2 flex items-center justify-between' }, [
@@ -116,6 +142,20 @@ function renderInterviews(page) {
       quotes.forEach(q => list.appendChild(quoteBlock(q)));
       detailCard.appendChild(list);
     }
+  }
+
+  function openNotesEditor(r) {
+    const fields = [formField('Field notes (plain text; blank lines separate paragraphs)', 'notes_markdown', 'textarea', r.notes_markdown || '')];
+    const ta = fields[0].el.querySelector('textarea');
+    ta.rows = 14;
+    openModal(`Field notes — ${r.interview_id}`, fields, async (form) => {
+      try {
+        await data.update('interviews', r.id, { notes_markdown: form.notes_markdown });
+        STATE.interviews = await data.list('interviews');
+        closeModal();
+        renderCurrentRoute();
+      } catch (e) { alert('Save failed: ' + e.message); }
+    });
   }
 
   async function markTagged(r) {
@@ -141,7 +181,7 @@ function openInterviewForm(existing) {
     formField('Recorded', 'recorded', 'select', r.recorded || 'N', ['Y', 'N']),
     formField('Tagged same-day', 'tagged_same_day', 'select', r.tagged_same_day || 'N', ['Y', 'N']),
     formField('Brief topic', 'brief_topic', 'input', r.brief_topic),
-    formField('Link to notes', 'link_to_notes', 'input', r.link_to_notes),
+    formField('Field notes (full debrief — the assistant reads these)', 'notes_markdown', 'textarea', r.notes_markdown),
   ];
   openModal(existing ? `Edit ${r.interview_id}` : 'Log interview', fields, async (form) => {
     try {

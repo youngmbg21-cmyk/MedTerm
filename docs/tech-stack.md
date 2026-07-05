@@ -41,7 +41,10 @@ data.reset()                  -> local mode only: re-seed
 `interview_id`, `date`, `segment`, `tagged_same_day`, `theme_tag`, `severity`, `wtp`,
 `first_contact`, `deliverable`, `status`, `evidence`, … No `.fields` wrapper.
 
-Screens never call `fetch` or `localStorage` directly.
+File blobs go through the same module: `data.putFile(id, blob)` / `data.getFile(id)` —
+IndexedDB in local mode, the private `field-documents` Supabase Storage bucket (via
+Worker endpoints `POST /api/documents/:id/file`, `GET /api/documents/:id/link`) in api
+mode. Screens never call `fetch`, `localStorage`, or IndexedDB directly.
 
 ## Configuration (`js/config.js`)
 
@@ -80,7 +83,12 @@ Shared components: `.card`, `.kpi`, `.chip chip-*`, `.bar-wrap`, `.quote-block`
 2. Proxies CRUD to Supabase REST with the service key (never in the browser), enforcing
    lead/partner roles and writing an audit log.
 3. Handles `/api/chat`: prepends the research-director system prompt, forwards to the
-   Claude API with tool use (query tools + propose_action), and persists chat history.
+   Claude API with tool use, and persists chat history. Tools: `query_*` (structured
+   records), `search_notes` (full-text across interview notes, outreach notes, matrix
+   quotes, deliverable evidence, and document contents), `list_documents`,
+   `read_document` (text verbatim; PDFs transcribed once via a nested Claude call and
+   cached in `documents.text_content`; images returned as image blocks), and
+   `propose_action` (user confirms before any write).
 
 Secrets (Worker env): `SUPABASE_URL`, `SUPABASE_SERVICE_KEY`, `SUPABASE_ANON_KEY`,
 `CLAUDE_API_KEY`, `ALLOWED_ORIGIN`.

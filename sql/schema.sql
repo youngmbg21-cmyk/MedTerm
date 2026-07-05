@@ -453,3 +453,60 @@ CREATE TRIGGER set_updated_at BEFORE UPDATE ON chat_sessions FOR EACH ROW EXECUT
 CREATE TRIGGER set_updated_at BEFORE UPDATE ON segment_cards FOR EACH ROW EXECUTE FUNCTION update_updated_at();
 CREATE TRIGGER set_updated_at BEFORE UPDATE ON economics FOR EACH ROW EXECUTE FUNCTION update_updated_at();
 CREATE TRIGGER set_updated_at BEFORE UPDATE ON decision_memos FOR EACH ROW EXECUTE FUNCTION update_updated_at();
+
+-- ============================================================
+-- Field documents (added with the sole-repository upgrade)
+-- Files themselves live in the PRIVATE Storage bucket
+-- 'field-documents' (create it in Dashboard → Storage → New bucket,
+-- public OFF). Only the Worker's service key touches the bucket,
+-- so no storage.objects policies are required.
+-- ============================================================
+CREATE TABLE documents (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  filename TEXT NOT NULL,
+  mime_type TEXT,
+  size_bytes BIGINT,
+  segment TEXT,
+  interview_id TEXT REFERENCES interviews(interview_id),
+  description TEXT,
+  text_content TEXT,          -- text files verbatim; PDFs transcribed on first read
+  storage_path TEXT,          -- object key in the field-documents bucket
+  uploaded_by TEXT,
+  created_by UUID REFERENCES team_members(id),
+  created_at TIMESTAMPTZ DEFAULT now(),
+  updated_at TIMESTAMPTZ DEFAULT now()
+);
+
+ALTER TABLE documents ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Active members can read documents"
+  ON documents FOR SELECT
+  USING (EXISTS (
+    SELECT 1 FROM team_members tm
+    WHERE tm.user_id = auth.uid() AND tm.status = 'active'
+  ));
+
+CREATE POLICY "Partners and leads can insert documents"
+  ON documents FOR INSERT
+  WITH CHECK (EXISTS (
+    SELECT 1 FROM team_members tm
+    WHERE tm.user_id = auth.uid() AND tm.status = 'active' AND tm.role IN ('lead', 'partner')
+  ));
+
+CREATE POLICY "Owner or lead can update documents"
+  ON documents FOR UPDATE
+  USING (EXISTS (
+    SELECT 1 FROM team_members tm
+    WHERE tm.user_id = auth.uid() AND tm.status = 'active'
+    AND (tm.role = 'lead' OR tm.id = documents.created_by)
+  ));
+
+CREATE POLICY "Owner or lead can delete documents"
+  ON documents FOR DELETE
+  USING (EXISTS (
+    SELECT 1 FROM team_members tm
+    WHERE tm.user_id = auth.uid() AND tm.status = 'active'
+    AND (tm.role = 'lead' OR tm.id = documents.created_by)
+  ));
+
+CREATE TRIGGER set_updated_at BEFORE UPDATE ON documents FOR EACH ROW EXECUTE FUNCTION update_updated_at();
