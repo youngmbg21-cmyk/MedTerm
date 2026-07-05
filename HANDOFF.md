@@ -49,7 +49,9 @@ About 30–45 minutes:
 
 1. **Supabase**: create a project → SQL editor → run `sql/schema.sql`. Then insert you
    and the field coordinator into `team_members` with `status = 'active'` and roles
-   `lead` / `partner` (use your login emails).
+   `lead` / `partner` (use your login emails). Also create a **private Storage bucket
+   named `field-documents`** (Dashboard → Storage → New bucket, public OFF) — uploaded
+   field documents live there.
 2. **Worker**: `wrangler deploy worker.js` with secrets `SUPABASE_URL`,
    `SUPABASE_SERVICE_KEY`, `SUPABASE_ANON_KEY`, `CLAUDE_API_KEY`, `ALLOWED_ORIGIN`
    (`wrangler.toml` is already in the repo).
@@ -62,6 +64,25 @@ About 30–45 minutes:
 Note: local demo data does not migrate automatically. The demo is a sandbox; you start
 the real programme clean (or ask Claude to write a one-off migration from the
 localStorage blob if you've entered real data locally).
+
+## The sole-repository upgrade (notes + documents + assistant access)
+
+Added after the initial rebuild, working in both modes:
+
+- **Field notes live inside each interview** — a full-debrief text area on the log form
+  and in the interview detail. Four seeded interviews show the expected depth.
+- **Documents screen** (sidebar, above Reports): upload PDFs, text/markdown, CSVs and
+  images (10 MB each). Files are stored in the browser (IndexedDB) in demo mode and in
+  the `field-documents` Supabase bucket when live. Text contents are fully searchable in
+  the screen's search box. The upload form blocks Word files (save as PDF) and reminds
+  the team never to upload consent forms or identity documents.
+- **The assistant reaches everything** (live mode): a `search_notes` tool covers every
+  notes field and document contents across the whole database; `read_document` returns a
+  document's full text — PDFs are transcribed by Claude on first read and cached, images
+  are shown to the model directly; sharing works via 60-minute signed links.
+- **Backups**: Settings → "Export everything" downloads one JSON with every record,
+  including full notes and document text. A storage meter shows demo-mode headroom.
+  Do the export weekly until the backend is live.
 
 ## Alternative backend (optional)
 

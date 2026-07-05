@@ -29,8 +29,8 @@ calmly disabled in local mode.
 
 1. **No frameworks, no build step, no npm for the app.** Vanilla JS ES modules; Tailwind
    via CDN; one `css/theme.css`. Opens directly in a browser.
-2. **Screens never call `fetch` or `localStorage` directly.** Everything goes through
-   `js/data.js`.
+2. **Screens never call `fetch`, `localStorage`, or IndexedDB directly.** Everything —
+   records AND file blobs (`putFile/getFile`) — goes through `js/data.js`.
 3. **One canonical record shape**: flat snake_case (`interview_id`, `tagged_same_day`,
    `theme_tag`, `first_contact`). No `.fields` wrapper, ever.
 4. **Config has one home.** Segments, themes, current phase, stall threshold, and team
@@ -40,6 +40,9 @@ calmly disabled in local mode.
    `textContent`. `innerHTML` is allowed only for clearing (`= ''`).
 6. **Respect the same-day-tag rule.** The red warnings for untagged interviews are the
    app's most important data-quality mechanism. Never weaken them.
+   The app is the team's **sole repository**: interview field notes live in
+   `notes_markdown`, files live in Documents. Never add features that push content into
+   external docs the assistant cannot search.
 7. **Keep the aesthetic**: warm/editorial, sage + clay palette, Fraunces for headings and
    quotes, Inter for UI. Semantic colours: sage=done, honey=attention, rose=breach,
    info-blue=informational, plum=theme tags. Use the existing component classes
@@ -64,7 +67,7 @@ calmly disabled in local mode.
 | `js/auth.js` | Magic-link login (api mode only, lazy-loaded) |
 | `js/chat.js` | Assistant panel |
 | `js/export.js` | CSV exports |
-| `js/screens/*.js` | One screen per file |
+| `js/screens/*.js` | One screen per file (incl. `documents.js` — file uploads) |
 | `worker.js` | Cloudflare Worker backend (api mode) |
 | `sql/schema.sql` | Supabase schema + RLS |
 | `HANDOFF.md` | How to go live |

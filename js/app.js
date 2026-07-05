@@ -13,13 +13,14 @@ export { CURRENT_PHASE, PHASES };
 export const STATE = {
   outreach: [], interviews: [], matrix: [], deliverables: [],
   scripts: [], kill_list: [], field_checks: [], economics: [],
-  segment_cards: [], decision_memos: [], reports: [],
+  segment_cards: [], decision_memos: [], reports: [], documents: [],
   chatHistory: [],
   loaded: false,
 };
 
 const TABLES = ['outreach', 'interviews', 'matrix', 'deliverables', 'scripts',
-  'kill_list', 'field_checks', 'economics', 'segment_cards', 'decision_memos', 'reports'];
+  'kill_list', 'field_checks', 'economics', 'segment_cards', 'decision_memos', 'reports',
+  'documents'];
 
 export async function loadAllData() {
   setSync('Loading…');
@@ -138,6 +139,7 @@ const NAV = [
     unlockAt: 0, activeThrough: 99, startCollapsed: true,
     routes: [['scripts', 'Scripts'], ['templates', 'Templates'], ['manual', 'Operating manual']],
   },
+  { type: 'route', route: 'documents', label: 'Documents' },
   { type: 'route', route: 'reports', label: 'Reports' },
 ];
 

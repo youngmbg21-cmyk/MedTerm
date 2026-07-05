@@ -88,3 +88,42 @@ Dated 2026-07-04. Each entry is a decision the brief left open, plus the reasoni
 
 18. **The old `PHASE_INFO.exitCriteria` hardcoded list is gone** — the Overview reads
     Phase N criteria from the `deliverables` table, which is also what the seed populates.
+
+## Sole-repository upgrade (notes, documents, assistant access) — 2026-07-05
+
+19. **Field notes are plain text with preserved line breaks**, not rendered markdown.
+    A markdown renderer either means a dependency (banned) or a hand-rolled parser
+    (an XSS risk on the app's most sensitive surface). Blank-line paragraphs read fine.
+
+20. **Removed the "Link to notes" field from the interview form.** The app is now the
+    sole repository; an external-link field invites exactly the fragmentation the owner
+    ruled out. The schema column stays for compatibility; old values are ignored.
+
+21. **Files live in IndexedDB locally** (localStorage can't hold files), keyed by the
+    document record's id — still only reachable through `data.js` (`putFile/getFile`).
+    Seeded text documents store no blob; their downloads are rebuilt from `text_content`.
+
+22. **Text extraction strategy:** text/markdown/CSV/JSON files are read verbatim at
+    upload (capped at 400 KB per file) into `documents.text_content`, which makes them
+    searchable everywhere. PDFs are NOT parsed client-side (no dependency-free way) —
+    in live mode the Worker has Claude transcribe a PDF the first time it is read, then
+    caches the transcript in `text_content` so subsequent searches cover it. Images are
+    passed to the model as images. Word files are rejected at upload with a "save as
+    PDF" message rather than silently accepted and unreadable.
+
+23. **`search_notes` is substring match (ilike), not Postgres full-text search.** At
+    hundreds of records, ilike is instant and matches partial words (better for names
+    like "Eastleigh"); tsvector indexing is an optimisation to revisit at thousands.
+
+24. **Documents can be deleted by any write-role member** (their own uploads matter in
+    the field); every other table keeps lead-only deletes. Storage objects are removed
+    when the record is deleted.
+
+25. **"Export everything" backs up records + all text as one JSON**; binary files are
+    excluded (a dependency-free zip isn't worth it) and noted in the UI — download
+    binaries individually from Documents. Supabase backups cover live mode.
+
+26. **Upload guardrails:** 10 MB per file, PDF/text/CSV/image only, and a permanent
+    banner: de-identify, never upload consent forms or identity documents — matching
+    the operating manual's privacy rules, because documents are sent to the Claude API
+    when the assistant reads them.
