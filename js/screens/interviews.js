@@ -38,7 +38,8 @@ function renderInterviews(page) {
 
   if (!interviews.length) {
     page.appendChild(h('div', { class: 'card' }, [
-      emptyState('No interviews logged yet.', 'Phase 1 begins when target lists are built and the first outreach is sent.'),
+      emptyState('No interviews logged yet.', 'Phase 1 begins when target lists are built and the first outreach is sent.',
+        { label: '+ Log the first interview', onclick: () => openInterviewForm() }),
     ]));
     return;
   }

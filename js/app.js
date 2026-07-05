@@ -359,6 +359,17 @@ export function quoteBlock(entry, { showEdit } = {}) {
   return block;
 }
 
+/* 5a · Loading state — the one loading pattern app-wide */
+export function loadingState(lines = 3) {
+  const box = h('div', { class: 'loading-state' });
+  for (let i = 0; i < lines; i++) {
+    const l = h('div', { class: 'skeleton-line' });
+    l.style.width = `${85 - i * 18}%`; // dynamic value — sanctioned inline style
+    box.appendChild(l);
+  }
+  return box;
+}
+
 /* 5 · Empty state — title + one-line body + optional single action.
    Never a bare sentence in a blank panel. */
 export function emptyState(title, sub, action) {

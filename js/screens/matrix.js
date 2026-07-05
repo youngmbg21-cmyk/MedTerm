@@ -60,7 +60,8 @@ function renderMatrix(page) {
   page.appendChild(card);
 
   if (!rows.length) {
-    card.appendChild(emptyState('No quotes tagged yet.', 'Add the first one after your next interview.'));
+    card.appendChild(emptyState('No quotes tagged yet.', 'Add the first one after your next interview.',
+      { label: '+ Add the first quote', onclick: () => openMatrixForm() }));
     return;
   }
 

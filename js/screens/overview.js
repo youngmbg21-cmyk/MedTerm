@@ -2,7 +2,7 @@
    One question: "Where does the project stand right now, and what needs me?" */
 import {
   STATE, registerRoute, h, kpiCard, chip, statusTone, progressBar, emptyState,
-  isUntaggedOverdue, isStalled, daysSince, fmtDate, go, loadAllData,
+  loadingState, isUntaggedOverdue, isStalled, daysSince, fmtDate, go, loadAllData,
 } from '../app.js';
 import { CURRENT_PHASE, PHASES, SEGMENTS } from '../config.js';
 import { data, aiAvailable } from '../data.js';
@@ -10,7 +10,7 @@ import { latestAssessment, LEANING_TONE, buyerHypotheses, runAssessment } from '
 
 function renderOverview(page) {
   if (!STATE.loaded) {
-    page.appendChild(h('div', { class: 'card' }, [emptyState('Loading project data…')]));
+    page.appendChild(h('div', { class: 'card' }, [loadingState()]));
     return;
   }
 

@@ -53,7 +53,8 @@ function renderOutreach(page) {
     if (!rows.length) {
       tableWrap.appendChild(emptyState(
         STATE.outreach.length === 0 ? 'No outreach yet.' : 'No matches with current filters.',
-        STATE.outreach.length === 0 ? 'Add your first contact — templates are ready under Reference.' : null));
+        STATE.outreach.length === 0 ? 'Add your first contact — templates are ready under Reference.' : null,
+        STATE.outreach.length === 0 ? { label: '+ Add the first contact', onclick: () => openOutreachForm() } : null));
       return;
     }
 

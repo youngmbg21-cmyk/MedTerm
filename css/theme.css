@@ -246,6 +246,14 @@ body {
 .empty-state .btn { margin-top: 12px; }
 
 /* ============================================================================
+   LOADING — one pattern app-wide: quiet skeleton lines (pulse is feedback,
+   not decoration; prefers-reduced-motion stills it)
+   ========================================================================== */
+.loading-state { padding: 48px 24px; display: flex; flex-direction: column; gap: 12px; }
+.skeleton-line { height: 12px; border-radius: 6px; background: var(--line-soft); animation: skeletonPulse 1.2s ease-in-out infinite; }
+@keyframes skeletonPulse { 0%, 100% { opacity: 0.55; } 50% { opacity: 1; } }
+
+/* ============================================================================
    TABLES — dense data: row hover, right-aligned numerals, sticky header opt-in
    ========================================================================== */
 .h-row { transition: background-color var(--ease); }
