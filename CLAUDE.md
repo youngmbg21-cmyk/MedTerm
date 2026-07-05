@@ -23,9 +23,13 @@ two adapters: `local` (localStorage, seeded from `js/seed.js`, the default) and 
 `js/auth.js`). Records are flat snake_case matching `sql/schema.sql`. `js/app.js` holds
 state, the hash router, the phase-gated nav, and the shared component kit. One screen per
 file in `js/screens/`. AI availability is governed by `AI_MODE` in `js/config.js`, not by
-the data mode: `'worker'` enables the assistant, assessments, link proposals, and memo
-drafting in either data mode (with local data, the client sends the worker the workspace
-slices it needs in the request body); `'off'` (default) shows calm disabled states. The
+the data mode: `'worker'` enables the assistant, assessments, link proposals, and every
+AI-first drafting surface (memo sections, MVP scope, state of the field, report
+narratives — all through the shared `js/ai-draft.js` control row and the worker's one
+`/api/draft-section` seam; drafts always land in an edit modal or preview, never
+auto-saved) in either data mode (with local data, the client sends the worker the
+workspace slices it needs in the request body); `'off'` (default) shows calm disabled
+states. The
 decision spine — hypotheses, kill criteria, evidence links, versioned AI assessments —
 lives in ordinary tables and flows through `js/evidence.js` helpers; AI-proposed writes
 go through the Confirm/Skip pattern in `js/actions.js`.

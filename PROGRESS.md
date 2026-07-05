@@ -1,5 +1,50 @@
 # PROGRESS.md
 
+## AI-first platform pass ✅ (2026-07-05)
+
+The platform now treats AI drafting as the default path everywhere writing
+happens *about* the research, while field data collection stays human.
+One architecture, four surfaces:
+
+- **`worker.js /api/draft-section` generalised** into the single drafting
+  seam: `doc_kind` frames the prompt per surface; a new structured mode
+  (`fields[]` → validated JSON) powers multi-field drafts with the same
+  one-retry-then-loud-502 discipline as assessments. `validateDraftFields`
+  is pure and exported; offline harness passes 7/7 cases.
+- **`js/ai-draft.js`** — the shared `aiDraftControls` row every surface
+  uses: draft primary when empty, redraft ghost when filled, manual always
+  available, calm-disabled with inline explanation when AI is off, busy
+  state handled once. The decision memo was refactored onto it (net code
+  deletion), so the AI-first pattern has one implementation.
+- **State of the field**: "Draft from evidence" (one dated paragraph from
+  the whole ledger) → editor modal → human saves. Manual writing intact.
+- **MVP scope**: one structured request drafts all six "one of each"
+  fields → six-field editor modal prefilled → human saves. Manual intact.
+- **Reports**: every report type gains "Draft with assistant" — the
+  narrative is AI-drafted, every number/chart section comes from the same
+  deterministic templates (the AI never invents figures), and the draft
+  shows in a preview (same renderer as the saved-report viewer) with
+  Save/Discard. "Generate from template" remains a full peer and the only
+  path when AI is off.
+
+Human intervention is now one review-tap per artefact — the minimum the
+workspace's own constitution allows (the AI argues; it never decides;
+nothing AI-written is stored without human confirmation).
+
+Reviewed and deliberately not AI'd (DECISIONS.md #72): field collection,
+the kill list, computed rollup screens, outreach messaging, exit-criteria
+one-liners.
+
+Verified: `node --check` on every changed module; offline validator
+harness 7/7; Playwright at 375px — state of the field (draft muted first,
+note on tap, manual write → saved → filled state flips to Redraft/Edit),
+MVP scope (six-field manual editor saves), decision memo (refactor
+regression: identical buttons + 7 shared helper lines), reports (template
+generate still saves; saved-report viewer renders; AI draft card buttons
+correct); all 23 routes × 2 viewports, zero page errors. AI-on flows
+verified structurally (no worker secrets in this environment — see
+DECISIONS.md #73).
+
 ## Designer's note — design elevation pass (2026-07-05)
 
 **What changed visually.** The app now runs on a documented design system

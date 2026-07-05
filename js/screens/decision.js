@@ -4,16 +4,13 @@ import {
   openModal, closeModal, formField, fmtDate, go,
 } from '../app.js';
 import { getTeam, CURRENT_PHASE, SEGMENTS } from '../config.js';
-import { data, aiAvailable, draftSectionRequest, aiDataSlices } from '../data.js';
+import { data, draftSectionRequest, aiDataSlices } from '../data.js';
 import { latestAssessment, LEANING_TONE } from '../evidence.js';
+import { aiDraftControls, AI_DRAFT_HELPER } from '../ai-draft.js';
 
 /* ---------- Decision memo — "GO, PIVOT, or NO-GO — and on what evidence?" ---------- */
 const VERDICTS = ['Undecided', 'GO', 'PIVOT', 'NO-GO'];
 const VERDICT_TONE = { GO: 'sage', PIVOT: 'honey', 'NO-GO': 'rose', Undecided: 'line' };
-
-/* One shared string each — not seven copies (Part B §3). */
-const MEMO_AI_HELPER = 'The assistant drafts this from the evidence ledger; you edit and save. Or write it manually.';
-const MEMO_AI_OFF_NOTE = 'Connect the assistant to draft this section from your tagged quotes, hypothesis links, and economics. See HANDOFF.md → go-live.';
 
 const MEMO_SECTIONS = [
   { key: 'wedge_tested', label: 'Wedge tested', placeholder: 'Which wedge was tested and why it was chosen.' },
@@ -125,7 +122,7 @@ function renderDecisionMemo(page) {
   page.appendChild(verdictCard);
 
   /* Seven sections — AI-first: the intended flow is AI drafts → human edits
-     → human signs, and the visual hierarchy says so. The draft path renders
+     → human signs. The shared aiDraftControls row renders the draft path
      first in every state; with AI off it is visibly muted, never hidden. */
   const card = h('div', { class: 'card max-w-3xl' });
   MEMO_SECTIONS.forEach(s => {
@@ -137,36 +134,24 @@ function renderDecisionMemo(page) {
       section.appendChild(h('div', { class: 'text-sm leading-relaxed whitespace-pre-line', text: content[s.key] }));
     } else {
       section.appendChild(h('div', { class: 'text-sm t-mute', text: s.placeholder }));
-      section.appendChild(h('div', { class: 'text-xs mt-1 t-mute', text: MEMO_AI_HELPER }));
+      section.appendChild(h('div', { class: 'text-xs mt-1 t-mute', text: AI_DRAFT_HELPER }));
     }
 
-    const buttons = h('div', { class: 'mt-3 flex flex-wrap items-center gap-2' });
-    if (aiAvailable) {
-      /* Empty: Draft is the primary path. Filled: a redraft still lands in
-         the edit modal for human review — never an auto-save. */
-      const draftBtn = h('button', {
-        class: `btn ${filled ? 'btn-ghost' : 'btn-primary'} text-xs`,
-        onclick: () => draftMemoSection(s, content, draftBtn),
-      }, filled ? 'Redraft from evidence' : 'Draft from evidence');
-      buttons.appendChild(draftBtn);
-      buttons.appendChild(h('button', { class: 'btn btn-ghost text-xs', onclick: () => editMemoSection(s, content) },
-        filled ? 'Edit' : 'Write manually'));
-      section.appendChild(buttons);
-    } else {
-      /* Calm-disabled: the draft path stays visible; a tap explains how to
-         enable it instead of doing nothing. Writing manually always works. */
-      const note = h('div', { class: 'text-xs mt-2 t-mute', text: MEMO_AI_OFF_NOTE });
-      note.style.display = 'none';
-      const draftBtn = h('button', {
-        class: 'btn btn-line text-xs', 'aria-disabled': 'true',
-        onclick: () => { note.style.display = note.style.display === 'none' ? '' : 'none'; },
-      }, filled ? 'Redraft from evidence' : 'Draft from evidence');
-      buttons.appendChild(draftBtn);
-      buttons.appendChild(h('button', { class: `btn ${filled ? 'btn-ghost' : 'btn-line'} text-xs`, onclick: () => editMemoSection(s, content) },
-        filled ? 'Edit' : 'Write manually'));
-      section.appendChild(buttons);
-      section.appendChild(note);
-    }
+    section.appendChild(aiDraftControls({
+      filled,
+      onDraft: async () => {
+        const { text } = await draftSectionRequest({
+          section_key: s.key,
+          section_label: s.label,
+          placeholder: s.placeholder,
+          phase: CURRENT_PHASE,
+          segments: SEGMENTS,
+          localData: aiDataSlices(STATE),
+        });
+        editMemoSection(s, content, text || '');
+      },
+      onManual: () => editMemoSection(s, content),
+    }));
     card.appendChild(section);
   });
 
@@ -225,30 +210,6 @@ function editMemoSection(section, content, draftText) {
   });
 }
 
-/* Draft one section from the evidence ledger. The draft lands in the edit
-   modal pre-filled — the human edits and saves. Never auto-saved. */
-async function draftMemoSection(section, content, btn) {
-  const label = btn.textContent;
-  btn.disabled = true;
-  btn.textContent = 'Drafting…';
-  try {
-    const { text } = await draftSectionRequest({
-      section_key: section.key,
-      section_label: section.label,
-      placeholder: section.placeholder,
-      phase: CURRENT_PHASE,
-      segments: SEGMENTS,
-      localData: aiDataSlices(STATE),
-    });
-    editMemoSection(section, content, text || '');
-  } catch (e) {
-    alert('Draft failed: ' + e.message);
-  } finally {
-    btn.disabled = false;
-    btn.textContent = label;
-  }
-}
-
 registerRoute('decision-memo', 'Decision memo', renderDecisionMemo,
   'GO, PIVOT, or NO-GO — and on what evidence?');
 
@@ -270,9 +231,28 @@ function parseScope(record) {
   try { return JSON.parse(record?.evidence || '{}'); } catch { return {}; }
 }
 
+/* Edit modal for the six scope fields. An AI draft arrives as `prefill` and
+   pre-populates the form — the human edits and saves; never auto-saved. */
+function openScopeEditor(record, scope, prefill) {
+  const values = prefill ? { ...scope, ...prefill } : scope;
+  openModal(prefill ? 'AI draft: MVP scope — edit before saving' : 'Edit MVP scope',
+    SCOPE_FIELDS.map(f => formField(f.label, f.key, 'textarea', values[f.key] || '')),
+    async (form) => {
+      try {
+        const evidence = JSON.stringify(form);
+        if (record) await data.update('deliverables', record.id, { evidence, status: 'In progress' });
+        else await data.create('deliverables', { phase: 5, deliverable: 'If GO: MVP scope defined ("one of each")', status: 'In progress', evidence });
+        STATE.deliverables = await data.list('deliverables');
+        closeModal();
+        renderCurrentRoute();
+      } catch (e) { alert('Save failed: ' + e.message); }
+    });
+}
+
 function renderMVPScope(page) {
   const record = findScopeDeliverable();
   const scope = parseScope(record);
+  const filled = SCOPE_FIELDS.some(f => scope[f.key]);
   const card = h('div', { class: 'card p-6 max-w-3xl' });
 
   SCOPE_FIELDS.forEach(f => {
@@ -286,19 +266,31 @@ function renderMVPScope(page) {
     card.appendChild(section);
   });
 
-  card.appendChild(h('button', { class: 'btn btn-line', onclick: () => {
-    openModal('Edit MVP scope', SCOPE_FIELDS.map(f => formField(f.label, f.key, 'textarea', scope[f.key] || '')),
-      async (form) => {
-        try {
-          const evidence = JSON.stringify(form);
-          if (record) await data.update('deliverables', record.id, { evidence, status: 'In progress' });
-          else await data.create('deliverables', { phase: 5, deliverable: 'If GO: MVP scope defined ("one of each")', status: 'In progress', evidence });
-          STATE.deliverables = await data.list('deliverables');
-          closeModal();
-          renderCurrentRoute();
-        } catch (e) { alert('Save failed: ' + e.message); }
+  if (!filled) card.appendChild(h('div', { class: 'text-xs mb-1 t-mute', text: AI_DRAFT_HELPER }));
+
+  /* AI-first: draft all six "one of each" fields from the evidence ledger
+     in one structured request; the draft lands in the edit modal. */
+  card.appendChild(aiDraftControls({
+    filled,
+    draftLabel: 'Draft scope from evidence',
+    redraftLabel: 'Redraft scope from evidence',
+    manualLabel: 'Write manually',
+    editLabel: 'Edit scope',
+    compact: false,
+    onDraft: async () => {
+      const { fields } = await draftSectionRequest({
+        section_label: 'MVP scope — "one of each"',
+        placeholder: 'The narrowest thing to build first if the verdict is GO.',
+        doc_kind: 'the MVP scope block of the decision memo',
+        fields: SCOPE_FIELDS.map(f => ({ key: f.key, label: f.label, placeholder: f.placeholder })),
+        phase: CURRENT_PHASE,
+        segments: SEGMENTS,
+        localData: aiDataSlices(STATE),
       });
-  } }, 'Edit scope'));
+      openScopeEditor(record, scope, fields || {});
+    },
+    onManual: () => openScopeEditor(record, scope),
+  }));
 
   page.appendChild(card);
 }

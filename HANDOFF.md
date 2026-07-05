@@ -74,8 +74,11 @@ localStorage blob if you've entered real data locally).
 
 - `'off'` (default) — no AI anywhere. Calm disabled states; everything else works.
 - `'worker'` — the assistant, Decision Brief assessments ("Regenerate brief"),
-  evidence-link proposals after saves, phase-exit reviews, and decision-memo
-  drafting all come alive — **in either data mode**.
+  evidence-link proposals after saves, phase-exit reviews, and every AI-first
+  drafting surface (decision-memo sections, MVP scope, state of the field,
+  assistant-drafted report narratives) all come alive — **in either data mode**.
+  Every draft lands in an edit modal or preview for human review; nothing an
+  AI writes is saved without a human tap.
 
 **The intended production setup is local-first data + live AI**: keep
 `DATA_MODE = 'local'` and set `AI_MODE = 'worker'`. Records stay in the browser;

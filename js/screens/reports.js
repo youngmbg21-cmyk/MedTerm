@@ -6,9 +6,10 @@ import {
   isUntaggedOverdue, isStalled, rankThemes, segmentCoverageRows,
 } from '../app.js';
 import { CURRENT_PHASE, PHASES, SEGMENTS, getTeam } from '../config.js';
-import { data, aiAvailable } from '../data.js';
+import { data, aiAvailable, draftSectionRequest, aiDataSlices } from '../data.js';
 import { barChart, percentMeter, riskMatrixSvg, serializeSvg, PALETTE } from '../charts.js';
 import { DEFAULT_ASSUMPTIONS, BREAKPOINTS, derive } from './economics.js';
+import { aiDraftControls } from '../ai-draft.js';
 
 const REPORT_TYPES = [
   { type: 'weekly_status', name: 'Weekly status report', description: 'Single page. This week\'s interviews, outreach progress, top themes, blockers.' },
@@ -262,16 +263,27 @@ function chartToHtml(chart) {
 function renderReports(page) {
   if (!aiAvailable) {
     page.appendChild(h('div', { class: 'banner banner-info mb-4' }, [
-      h('span', { text: 'Reports are generated from live data using structured templates. Assistant-drafted prose becomes available when the assistant is connected.' }),
+      h('span', { text: 'Reports are generated from live data using structured templates. Assistant-drafted narrative becomes available when the assistant is connected.' }),
     ]));
   }
 
+  /* AI-first per report type: the assistant drafts the narrative and the
+     data sections come from the same deterministic templates (numbers are
+     computed, never AI-invented); the human reviews before anything is
+     saved. The template path stays as a full peer. */
   const grid = h('div', { class: 'grid md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6' });
   REPORT_TYPES.forEach(rt => {
     grid.appendChild(h('div', { class: 'card p-5 flex flex-col' }, [
       h('div', { class: 'serif text-base mb-1', text: rt.name }),
-      h('div', { class: 'text-xs mb-4 flex-1 t-soft', text: rt.description }),
-      h('button', { class: 'btn btn-primary w-full justify-center', onclick: () => generateAndSave(rt.type) }, 'Generate'),
+      h('div', { class: 'text-xs mb-2 flex-1 t-soft', text: rt.description }),
+      aiDraftControls({
+        filled: false,
+        draftLabel: 'Draft with assistant',
+        manualLabel: 'Generate from template',
+        manualTone: 'line',
+        onDraft: () => draftReportWithAssistant(rt),
+        onManual: () => generateAndSave(rt.type),
+      }),
     ]));
   });
   page.appendChild(grid);
@@ -306,11 +318,57 @@ async function generateAndSave(type) {
   } catch (e) { alert('Generate failed: ' + e.message); }
 }
 
-function viewReport(report) {
-  const content = report.content || {};
+/* Assistant-drafted report: the narrative comes from the drafting endpoint,
+   every data section (numbers, charts) comes from the same deterministic
+   template as always — the AI never invents figures. Nothing is saved until
+   the human reviews the preview and taps Save. */
+async function draftReportWithAssistant(rt) {
+  const content = GENERATORS[rt.type]();
+  const { text } = await draftSectionRequest({
+    section_label: rt.name,
+    placeholder: rt.description,
+    doc_kind: `the narrative summary of a "${rt.name}" for someone who wasn't in the room`,
+    phase: CURRENT_PHASE,
+    segments: SEGMENTS,
+    localData: aiDataSlices(STATE),
+  });
+  content.sections = [
+    { title: 'Narrative — assistant-drafted, human-reviewed', body: (text || '').trim() },
+    ...content.sections,
+  ];
+  content.assistant_drafted = true;
+  previewDraftReport(rt, content);
+}
+
+function previewDraftReport(rt, content) {
   const root = document.getElementById('modal-root');
   root.innerHTML = '';
+  const draft = { content, title: content.title, report_type: rt.type, created_at: new Date().toISOString().slice(0, 10) };
+  root.appendChild(h('div', { class: 'modal-bg fade-in', onclick: (e) => { if (e.target.classList.contains('modal-bg')) root.innerHTML = ''; } }, [
+    h('div', { class: 'modal p-8', style: 'max-width:800px;' }, [
+      h('div', { class: 'banner banner-info mb-4' }, [
+        h('span', { text: 'Assistant draft — review before saving. Nothing is stored until you save.' }),
+      ]),
+      reportViewNode(draft),
+      h('div', { class: 'flex justify-end gap-2 mt-5 pt-4 border-t b-soft' }, [
+        h('button', { class: 'btn btn-line', onclick: () => { root.innerHTML = ''; } }, 'Discard'),
+        h('button', { class: 'btn btn-primary', onclick: async () => {
+          try {
+            await data.create('reports', { report_type: rt.type, title: content.title, content, version: 1 });
+            STATE.reports = await data.list('reports');
+            root.innerHTML = '';
+            renderCurrentRoute();
+          } catch (e) { alert('Save failed: ' + e.message); }
+        } }, 'Save report'),
+      ]),
+    ]),
+  ]));
+}
 
+/* The one report renderer — used by the saved-report viewer and the
+   assistant-draft preview so they can never drift apart. */
+function reportViewNode(report) {
+  const content = report.content || {};
   const view = h('div', { class: 'report-print-view' });
   view.appendChild(h('div', { class: 'mb-8 pb-4 border-b b-line' }, [
     h('div', { class: 'flex items-center gap-2 mb-4' }, [
@@ -328,14 +386,19 @@ function viewReport(report) {
     if (s.body) view.appendChild(h('div', { class: 'text-sm leading-relaxed whitespace-pre-line', text: s.body }));
     if (s.chart) view.appendChild(buildChartNode(s.chart));
   });
+  return view;
+}
 
+function viewReport(report) {
+  const root = document.getElementById('modal-root');
+  root.innerHTML = '';
   root.appendChild(h('div', { class: 'modal-bg fade-in', onclick: (e) => { if (e.target.classList.contains('modal-bg')) root.innerHTML = ''; } }, [
     h('div', { class: 'modal p-8', style: 'max-width:800px;' }, [
       h('div', { class: 'flex justify-end mb-4 gap-2' }, [
         h('button', { class: 'btn btn-line text-xs', onclick: () => printReport(report) }, 'Print'),
         h('button', { class: 'btn btn-ghost text-xs', onclick: () => { root.innerHTML = ''; } }, 'Close'),
       ]),
-      view,
+      reportViewNode(report),
     ]),
   ]));
 }

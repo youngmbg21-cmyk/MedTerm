@@ -423,3 +423,60 @@ Dated 2026-07-04. Each entry is a decision the brief left open, plus the reasoni
     buttons** — the Part B verification dispatches a DOM `click()` instead.
     Real browsers deliver user taps to `aria-disabled` elements normally;
     this is a test-harness semantic, not an app defect.
+
+## AI-first platform pass — 2026-07-05
+
+69. **One drafting seam, one control row.** Rather than a bespoke AI feature
+    per screen, every AI-first surface goes through exactly two shared
+    pieces: the worker's `/api/draft-section` (generalised with a `doc_kind`
+    prompt frame and a structured `fields[]` mode validated by the pure,
+    export-tested `validateDraftFields` with the same one-retry-then-502
+    pattern as assessments) and the client's `js/ai-draft.js`
+    `aiDraftControls` row (draft primary when empty, redraft ghost when
+    filled, manual always beside it, calm-disabled with an inline
+    explanation when AI is off, busy state handled once). The decision
+    memo's Part B implementation was refactored onto the primitive so there
+    is a single source of truth for the pattern.
+
+70. **"Very little human intervention" is implemented as AI-drafts-everything,
+    human-taps-once** — not as auto-save. CLAUDE.md rule 11 ("the AI argues;
+    it never decides") is architectural: every draft lands in the existing
+    edit modal (memo sections, MVP scope, state of the field) or a preview
+    modal (reports) and becomes a record only on a human tap. This is the
+    minimum intervention compatible with the workspace's own constitution.
+
+71. **Report narratives are AI-drafted; report numbers never are.** The
+    assistant-drafted report keeps every data section (counts, charts,
+    coverage, risk matrix) from the same deterministic template generators
+    and prepends one clearly-labelled "Narrative — assistant-drafted,
+    human-reviewed" section. The AI is not allowed to be the source of a
+    figure in a document that leaves the room. Saved AI-assisted reports
+    carry `content.assistant_drafted = true` — a key inside the existing
+    JSONB content, no schema change. The template path remains a full peer
+    ("Generate from template", btn-line), because reports must still be
+    producible with AI off.
+
+72. **Surfaces reviewed and deliberately NOT given AI generation**:
+    · Field collection (interviews, field notes, outreach logging, documents,
+      confirmatory-test metrics) — excluded by the owner's instruction and
+      by the sole-repository principle: this is ground truth the AI reasons
+      *from*.
+    · Kill list — killing a hypothesis is the team's falsification act; the
+      Decision Brief assessment already argues for kills, and an AI-drafted
+      kill entry would blur who pulled the trigger on an append-only record.
+    · Segment cards / theme analysis / top pains / saturation — pure
+      computed rollups; drafting prose over them would duplicate the
+      Decision Brief.
+    · Outreach message drafting and script revisions — field-ops adjacent
+      and template-covered; logged as candidates for a later pass, not this
+      one.
+    · Exit-criteria evidence text — one-line statuses, cheaper to type than
+      to review.
+
+73. **The AI-on drafting flows could not be exercised live in this
+    environment** (no deployed worker, no secrets — by design). Verified
+    instead by: the pure validator harness (7 cases), structural symmetry
+    with the already-shipped memo drafting flow (same request helper, same
+    edit-modal landing), the preview modal reusing the exact
+    `reportViewNode` renderer the verified saved-report viewer uses, and
+    full Playwright coverage of every AI-off state and every manual path.
