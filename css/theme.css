@@ -168,6 +168,8 @@ body {
   border: 1px solid transparent; white-space: nowrap;
   max-width: 100%; overflow: hidden;
 }
+/* Large chip — the Decision Brief leaning display only */
+.chip-lg { height: 36px; padding: 0 18px; font-size: 15px; line-height: 20px; }
 .chip-sage  { background: var(--sage-soft);  color: var(--sage-text);  border-color: var(--sage-border); }
 .chip-honey { background: var(--honey-soft); color: var(--honey-text); border-color: var(--honey-border); }
 .chip-rose  { background: var(--rose-soft);  color: var(--rose-text);  border-color: var(--rose-border); }
@@ -183,7 +185,7 @@ body {
   display: inline-flex; align-items: center; justify-content: center; gap: 8px;
   min-height: 40px; padding: 8px 16px; border-radius: var(--r-ctl);
   font-size: 13px; line-height: 20px; font-weight: 500; cursor: pointer;
-  border: 1px solid transparent;
+  border: 1px solid transparent; white-space: nowrap;
   transition: background-color var(--ease), color var(--ease),
               border-color var(--ease), transform var(--ease);
 }
@@ -197,6 +199,8 @@ body {
 .btn-line:hover { background: var(--surface-inset); }
 .btn-ghost { background: transparent; color: var(--ink-soft); }
 .btn-ghost:hover { color: var(--ink); background: var(--surface-inset); }
+.btn-danger { background: var(--rose-text); color: var(--paper); }
+.btn-danger:hover { background: var(--rose); }
 /* compact variant (toolbars, card headers) still meets the 40px hit target
    on touch via padding, but reads smaller */
 .btn.text-xs { font-size: 12px; }
@@ -416,9 +420,14 @@ table.data.sticky-head thead th { position: sticky; top: 0; background: var(--su
 .mobile-overlay { display: none; position: fixed; inset: 0; background: rgba(31, 42, 40, 0.3); z-index: 35; }
 .mobile-overlay.open { display: block; }
 
+@media (max-width: 640px) {
+  /* The sync chip is informational; on a phone the header's width belongs
+     to the primary action. Sync state remains visible in Settings. */
+  #sync-status { display: none; }
+}
 @media (max-width: 768px) {
   .hamburger { display: flex; align-items: center; justify-content: center; }
-  .main-area > header .flex { flex-wrap: wrap; gap: 8px; }
+  .app-header-inner { gap: 8px; }
   #page { padding-left: var(--gutter) !important; padding-right: var(--gutter) !important; }
   .modal { max-width: 100% !important; margin: 8px; border-radius: var(--r-card); }
   table.data th, table.data td { font-size: 12px; padding: 8px 6px; }
@@ -444,6 +453,10 @@ table.data.sticky-head thead th { position: sticky; top: 0; background: var(--su
   cursor: pointer; transition: background-color var(--ease), color var(--ease), border-color var(--ease);
 }
 .quick-action:hover { background: var(--sage-soft); color: var(--sage-text); border-color: var(--sage); }
+.quick-action:disabled { opacity: 0.5; cursor: not-allowed; }
+.quick-action:disabled:hover { background: var(--surface-card); color: var(--ink-soft); border-color: var(--line); }
+/* Proposed-action cards span the panel; they are cards of work, not speech */
+.chat-msg.action-card { max-width: 100%; }
 .typing-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--ink-mute); animation: blink 1.4s infinite both; }
 .typing-dot:nth-child(2) { animation-delay: 0.2s; }
 .typing-dot:nth-child(3) { animation-delay: 0.4s; }
@@ -464,6 +477,8 @@ table.data.sticky-head thead th { position: sticky; top: 0; background: var(--su
   max-width: 560px; width: 100%; max-height: 88vh; overflow-y: auto;
   box-shadow: var(--shadow-float);
 }
+.modal-title { font-size: 20px; line-height: 26px; padding-bottom: 12px; margin-bottom: 20px; border-bottom: 1px solid var(--line-soft); }
+.modal-title-danger { border-bottom: 2px solid var(--rose); }
 
 /* ============================================================================
    MASTER–DETAIL (Interviews)

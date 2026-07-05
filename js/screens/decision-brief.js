@@ -13,7 +13,7 @@ import {
 } from '../evidence.js';
 
 function muteText(text, cls = 'text-xs') {
-  return h('div', { class: cls, style: 'color:var(--ink-mute);', text });
+  return h('div', { class: `${cls} t-mute`, text });
 }
 
 /* ---------- 1 · Leaning card ---------- */
@@ -46,7 +46,7 @@ function leaningCard(latest) {
   const card = h('div', { class: 'card p-6 mb-5' });
   if (!latest) {
     card.appendChild(h('div', { class: 'micro mb-2 t-mute', text: 'Current leaning' }));
-    card.appendChild(h('span', { class: 'chip chip-line', style: 'font-size:14px; padding:8px 16px;', text: 'INSUFFICIENT' }));
+    card.appendChild(h('span', { class: 'chip chip-line chip-lg', text: 'INSUFFICIENT' }));
     card.appendChild(h('div', { class: 'text-sm mt-3 t-soft', text: 'No assessment has been generated yet. Early in the programme, the honest answer is INSUFFICIENT — showing that plainly is the point of this screen.' }));
     card.appendChild(regenControl());
     return card;
@@ -54,13 +54,13 @@ function leaningCard(latest) {
   card.appendChild(h('div', { class: 'flex flex-wrap items-start justify-between gap-3 mb-3' }, [
     h('div', {}, [
       h('div', { class: 'micro mb-2 t-mute', text: 'Current leaning — advisory, not a verdict' }),
-      h('span', { class: `chip chip-${LEANING_TONE[latest.leaning] || 'line'}`, style: 'font-size:15px; padding:8px 18px;', text: latest.leaning }),
+      h('span', { class: `chip chip-${LEANING_TONE[latest.leaning] || 'line'} chip-lg`, text: latest.leaning }),
     ]),
     muteText(`${fmtDate(latest.created_at)} · trigger: ${latest.trigger} · phase ${latest.phase} · ${latest.model || ''}`),
   ]));
   card.appendChild(renderMarkdown(latest.summary_markdown));
   const snap = latest.data_snapshot || {};
-  card.appendChild(h('div', { class: 'mt-4 pt-3 border-t text-xs', style: 'border-color:var(--line-soft); color:var(--ink-mute);',
+  card.appendChild(h('div', { class: 'mt-4 pt-3 border-t text-xs num b-soft t-mute',
     text: `Based on ${snap.interviews ?? '?'} interviews · ${snap.matrix_entries ?? '?'} matrix entries · ${snap.evidence_links ?? '?'} evidence links · ${snap.field_checks ?? '?'} field checks` }));
   card.appendChild(regenControl());
   return card;
