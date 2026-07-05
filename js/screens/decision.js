@@ -11,6 +11,10 @@ import { latestAssessment, LEANING_TONE } from '../evidence.js';
 const VERDICTS = ['Undecided', 'GO', 'PIVOT', 'NO-GO'];
 const VERDICT_TONE = { GO: 'sage', PIVOT: 'honey', 'NO-GO': 'rose', Undecided: 'line' };
 
+/* One shared string each — not seven copies (Part B §3). */
+const MEMO_AI_HELPER = 'The assistant drafts this from the evidence ledger; you edit and save. Or write it manually.';
+const MEMO_AI_OFF_NOTE = 'Connect the assistant to draft this section from your tagged quotes, hypothesis links, and economics. See HANDOFF.md → go-live.';
+
 const MEMO_SECTIONS = [
   { key: 'wedge_tested', label: 'Wedge tested', placeholder: 'Which wedge was tested and why it was chosen.' },
   { key: 'what_we_learned', label: 'What we learned', placeholder: 'Key findings from the research — themes, patterns, surprises.' },
@@ -120,24 +124,49 @@ function renderDecisionMemo(page) {
   }
   page.appendChild(verdictCard);
 
-  /* Seven sections */
+  /* Seven sections — AI-first: the intended flow is AI drafts → human edits
+     → human signs, and the visual hierarchy says so. The draft path renders
+     first in every state; with AI off it is visibly muted, never hidden. */
   const card = h('div', { class: 'card max-w-3xl' });
   MEMO_SECTIONS.forEach(s => {
     const section = h('div', { class: 'px-6 py-5 border-b b-soft' });
     section.appendChild(h('div', { class: 'micro mb-2 t-clay', text: s.label }));
-    const buttons = h('div', { class: 'mt-2 flex flex-wrap gap-2' });
-    if (content[s.key]) {
+    const filled = !!content[s.key];
+
+    if (filled) {
       section.appendChild(h('div', { class: 'text-sm leading-relaxed whitespace-pre-line', text: content[s.key] }));
-      buttons.appendChild(h('button', { class: 'btn btn-ghost text-xs', onclick: () => editMemoSection(s, content) }, 'Edit'));
     } else {
       section.appendChild(h('div', { class: 'text-sm t-mute', text: s.placeholder }));
-      buttons.appendChild(h('button', { class: 'btn btn-line text-xs', onclick: () => editMemoSection(s, content) }, 'Write this section'));
+      section.appendChild(h('div', { class: 'text-xs mt-1 t-mute', text: MEMO_AI_HELPER }));
     }
+
+    const buttons = h('div', { class: 'mt-3 flex flex-wrap items-center gap-2' });
     if (aiAvailable) {
-      const draftBtn = h('button', { class: 'btn btn-ghost text-xs', onclick: () => draftMemoSection(s, content, draftBtn) }, 'Draft from evidence');
+      /* Empty: Draft is the primary path. Filled: a redraft still lands in
+         the edit modal for human review — never an auto-save. */
+      const draftBtn = h('button', {
+        class: `btn ${filled ? 'btn-ghost' : 'btn-primary'} text-xs`,
+        onclick: () => draftMemoSection(s, content, draftBtn),
+      }, filled ? 'Redraft from evidence' : 'Draft from evidence');
       buttons.appendChild(draftBtn);
+      buttons.appendChild(h('button', { class: 'btn btn-ghost text-xs', onclick: () => editMemoSection(s, content) },
+        filled ? 'Edit' : 'Write manually'));
+      section.appendChild(buttons);
+    } else {
+      /* Calm-disabled: the draft path stays visible; a tap explains how to
+         enable it instead of doing nothing. Writing manually always works. */
+      const note = h('div', { class: 'text-xs mt-2 t-mute', text: MEMO_AI_OFF_NOTE });
+      note.style.display = 'none';
+      const draftBtn = h('button', {
+        class: 'btn btn-line text-xs', 'aria-disabled': 'true',
+        onclick: () => { note.style.display = note.style.display === 'none' ? '' : 'none'; },
+      }, filled ? 'Redraft from evidence' : 'Draft from evidence');
+      buttons.appendChild(draftBtn);
+      buttons.appendChild(h('button', { class: `btn ${filled ? 'btn-ghost' : 'btn-line'} text-xs`, onclick: () => editMemoSection(s, content) },
+        filled ? 'Edit' : 'Write manually'));
+      section.appendChild(buttons);
+      section.appendChild(note);
     }
-    section.appendChild(buttons);
     card.appendChild(section);
   });
 

@@ -190,9 +190,10 @@ body {
               border-color var(--ease), transform var(--ease);
 }
 .btn:active { transform: translateY(0.5px); }
-.btn:disabled, .btn[aria-disabled="true"] {
-  opacity: 0.5; cursor: not-allowed; pointer-events: none;
-}
+.btn:disabled { opacity: 0.5; cursor: not-allowed; pointer-events: none; }
+/* aria-disabled looks disabled but stays interactive — the calm-disabled
+   pattern: a tap explains what would enable it instead of doing nothing */
+.btn[aria-disabled="true"] { opacity: 0.5; cursor: not-allowed; }
 .btn-primary { background: var(--sage-deep); color: var(--paper); }
 .btn-primary:hover { background: var(--sage); }
 .btn-line { background: var(--surface-card); color: var(--ink); border-color: var(--line); }
