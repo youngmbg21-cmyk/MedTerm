@@ -190,7 +190,7 @@ export function buildNav() {
       return;
     }
     if (item.type === 'route') {
-      nav.appendChild(h('a', { class: 'nav-item', 'data-route': item.route }, [
+      nav.appendChild(h('a', { class: 'nav-item', 'data-route': item.route, href: `#${item.route}` }, [
         h('span', { class: 'dot' }), item.label,
       ]));
       return;
@@ -208,7 +208,7 @@ export function buildNav() {
     ]);
     const list = h('div', { class: 'nav-group-list' });
     item.routes.forEach(([route, label]) => {
-      list.appendChild(h('a', { class: 'nav-item', 'data-route': route }, [
+      list.appendChild(h('a', { class: 'nav-item', 'data-route': route, href: `#${route}` }, [
         h('span', { class: 'dot' }), label,
       ]));
     });
@@ -234,14 +234,35 @@ export function buildNav() {
   });
 }
 
+/* Mobile drawer behaviours: body scroll locks while open, Escape closes,
+   focus moves into the drawer and returns to the opener on close. On
+   desktop the sidebar is persistent and none of this applies (closeSidebar
+   is a no-op when the drawer was never opened). */
+let drawerReturnFocus = null;
+
 export function openSidebar() {
-  document.getElementById('sidebar').classList.add('open');
+  const sb = document.getElementById('sidebar');
+  sb.classList.add('open');
   document.getElementById('mobile-overlay').classList.add('open');
+  document.body.style.overflow = 'hidden';
+  drawerReturnFocus = document.activeElement;
+  const first = sb.querySelector('a, button');
+  if (first) first.focus();
 }
+
 export function closeSidebar() {
-  document.getElementById('sidebar').classList.remove('open');
+  const sb = document.getElementById('sidebar');
+  if (!sb.classList.contains('open')) return;
+  sb.classList.remove('open');
   document.getElementById('mobile-overlay').classList.remove('open');
+  document.body.style.overflow = '';
+  if (drawerReturnFocus && typeof drawerReturnFocus.focus === 'function') drawerReturnFocus.focus();
+  drawerReturnFocus = null;
 }
+
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape') closeSidebar();
+});
 
 /* ------------------------------------------------------------
    DOM HELPERS — h() builds elements; all text goes through
