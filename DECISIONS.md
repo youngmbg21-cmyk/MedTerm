@@ -224,3 +224,23 @@ Dated 2026-07-04. Each entry is a decision the brief left open, plus the reasoni
 
 41. **Demo assessments carry `model: 'demo-seed'`** so nobody mistakes seeded
     narrative for real Claude output; real assessments record the actual model id.
+
+42. **AI_MODE 'worker' requires the same magic-link sign-in as api mode, even
+    with local data.** The Worker authenticates every call with a Supabase JWT;
+    the alternative (a shared token in js/config.js) would put a secret in the
+    frontend, which core rule 10 forbids. Login here is identity, not data —
+    records stay in the browser. Documented in HANDOFF.md.
+
+43. **`aiDataSlices(state)` lives in data.js and takes state as an argument** —
+    data.js cannot import app.js (circular), and screens already hold STATE.
+    In api data mode it returns undefined and the Worker reads Supabase itself.
+
+44. **AI-proposed evidence links are stamped `source: 'ai_confirmed'` inside
+    `applyAction()`**, not left to the model's payload — the provenance label is
+    enforced at the write path, so a mislabelled proposal can't record itself
+    as human judgment.
+
+45. **Memo section drafting gets its own small POST /api/draft-section endpoint**
+    rather than riding through the chat loop — the chat loop persists sessions
+    and runs tool rounds; a draft is a single deterministic completion whose
+    result must land in an edit modal, never auto-saved.

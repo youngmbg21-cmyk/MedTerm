@@ -6,7 +6,7 @@ import {
   isUntaggedOverdue, isStalled,
 } from '../app.js';
 import { CURRENT_PHASE, PHASES, SEGMENTS, getTeam } from '../config.js';
-import { data, isLocalMode } from '../data.js';
+import { data, aiAvailable } from '../data.js';
 import { barChart, percentMeter, riskMatrixSvg, serializeSvg } from '../charts.js';
 import { DEFAULT_ASSUMPTIONS, BREAKPOINTS, derive } from './economics.js';
 
@@ -266,9 +266,9 @@ function chartToHtml(chart) {
 
 /* ---------- Screen ---------- */
 function renderReports(page) {
-  if (isLocalMode) {
+  if (!aiAvailable) {
     page.appendChild(h('div', { class: 'banner banner-info mb-4' }, [
-      h('span', { text: 'Reports are generated from live data using structured templates. Assistant-drafted prose becomes available when the backend goes live.' }),
+      h('span', { text: 'Reports are generated from live data using structured templates. Assistant-drafted prose becomes available when the assistant is connected.' }),
     ]));
   }
 

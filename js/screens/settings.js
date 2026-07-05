@@ -1,7 +1,7 @@
 /* Settings — one question: "Who is on the team, and how is the workspace configured?" */
 import { registerRoute, renderCurrentRoute, h, chip, loadAllData } from '../app.js';
-import { getTeam, setTeam, CURRENT_PHASE, PHASES, DATA_MODE, SCHEMA_VERSION } from '../config.js';
-import { data, isLocalMode, blobToBase64 } from '../data.js';
+import { getTeam, setTeam, CURRENT_PHASE, PHASES, DATA_MODE, AI_MODE, SCHEMA_VERSION } from '../config.js';
+import { data, isLocalMode, aiAvailable, blobToBase64 } from '../data.js';
 
 function renderSettings(page) {
   const team = getTeam();
@@ -49,9 +49,13 @@ function renderSettings(page) {
     h('span', { class: 'text-sm', text: 'Mode:' }),
     chip(DATA_MODE === 'api' ? 'Live backend' : 'Local demo', DATA_MODE === 'api' ? 'sage' : 'info'),
   ]));
+  modeCard.appendChild(h('div', { class: 'flex items-center gap-2 mb-3' }, [
+    h('span', { class: 'text-sm', text: 'Assistant:' }),
+    chip(aiAvailable ? `Connected via worker (AI_MODE '${AI_MODE}')` : 'Off', aiAvailable ? 'sage' : 'line'),
+  ]));
 
   if (isLocalMode) {
-    modeCard.appendChild(h('div', { class: 'text-sm mb-4', style: 'color:var(--ink-soft);', text: 'Data lives in this browser and persists across reloads. To go live with team sync and the AI assistant, set DATA_MODE = \'api\' in js/config.js and add the backend secrets — see HANDOFF.md.' }));
+    modeCard.appendChild(h('div', { class: 'text-sm mb-4', style: 'color:var(--ink-soft);', text: 'Data lives in this browser and persists across reloads. The assistant works in this mode too — set AI_MODE = \'worker\' in js/config.js once the worker is deployed. For team sync, set DATA_MODE = \'api\' and add the backend secrets — see HANDOFF.md.' }));
 
     /* Storage meter — the app is the sole repository, so show headroom */
     const meter = h('div', { class: 'mb-4' });

@@ -7,8 +7,17 @@
    'api'   — data lives in Supabase via the Cloudflare Worker; requires login. */
 export const DATA_MODE = 'local';
 
-/* Only used in 'api' mode. */
+/* Only used in 'api' mode, or whenever AI_MODE = 'worker'. */
 export const WORKER_URL = 'https://YOUR-WORKER.workers.dev';
+
+/* 'off'    — no AI anywhere (calm disabled states, everything else works).
+   'worker' — AI via WORKER_URL, regardless of DATA_MODE. This enables the
+              intended production setup: local-first data + live AI. With
+              DATA_MODE 'local', the client sends the worker the data slices
+              it needs in the request body; nothing is stored server-side.
+              Requires the same magic-link sign-in as api mode (identity
+              only — the Claude key never reaches the browser). */
+export const AI_MODE = 'off';
 
 /* Bumped whenever the exported-backup shape changes incompatibly. Import
    checks this before touching any data — see js/data.js importAll(). */

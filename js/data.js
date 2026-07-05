@@ -19,7 +19,7 @@
 
    Records are flat snake_case objects matching sql/schema.sql.
    ============================================================ */
-import { DATA_MODE, WORKER_URL } from './config.js';
+import { DATA_MODE, AI_MODE, WORKER_URL } from './config.js';
 import { buildSeed, buildFreshFieldworkSeed, buildHypotheses } from './seed.js';
 
 const LS_KEY = 'medterm_data_v1';
@@ -340,8 +340,57 @@ const apiAdapter = {
 export const data = DATA_MODE === 'api' ? apiAdapter : localAdapter;
 export const isLocalMode = DATA_MODE !== 'api';
 
-/* Chat goes through the Worker in api mode; unavailable locally. */
+/* ------------------------------------------------------------
+   AI endpoints — gated on AI_MODE, NOT on the data mode. The
+   worker holds every secret; these are the only paths to it.
+   ------------------------------------------------------------ */
+export const aiAvailable = AI_MODE === 'worker';
+
+const AI_OFF_MESSAGE = 'The assistant connects when AI_MODE is set to \'worker\' in js/config.js — see HANDOFF.md.';
+
+/* In local data mode the worker has no database to read, so AI requests
+   carry the relevant workspace slices in the body. Pure function of the
+   caller's state (screens pass STATE) — data.js never imports app.js. */
+export function aiDataSlices(state) {
+  if (!isLocalMode) return undefined; // api mode: the worker reads Supabase itself
+  return {
+    hypotheses: state.hypotheses,
+    evidence_links: state.evidence_links,
+    ai_assessments: state.ai_assessments,
+    interviews: state.interviews,
+    matrix: state.matrix,
+    outreach: state.outreach,
+    deliverables: state.deliverables,
+    field_checks: state.field_checks,
+    economics: state.economics,
+    kill_list: state.kill_list,
+    documents: state.documents,
+    scripts: state.scripts,
+  };
+}
+
+/* Chat goes through the Worker whenever AI_MODE is 'worker'. */
 export async function chatRequest(payload) {
-  if (isLocalMode) throw new Error('The assistant connects when API keys are added.');
+  if (!aiAvailable) throw new Error(AI_OFF_MESSAGE);
   return workerFetch('/api/chat', { method: 'POST', body: JSON.stringify(payload) });
+}
+
+/* Structured assessment pipeline — POST /api/assessment.
+   Returns the assessment record; in local data mode the caller persists it
+   through data.create('ai_assessments', …). */
+export async function assessmentRequest(payload) {
+  if (!aiAvailable) throw new Error(AI_OFF_MESSAGE);
+  return workerFetch('/api/assessment', { method: 'POST', body: JSON.stringify(payload) });
+}
+
+/* 0–2 proposed evidence links for a just-saved record — POST /api/propose-links. */
+export async function proposeLinksRequest(payload) {
+  if (!aiAvailable) throw new Error(AI_OFF_MESSAGE);
+  return workerFetch('/api/propose-links', { method: 'POST', body: JSON.stringify(payload) });
+}
+
+/* Draft one decision-memo section from the evidence ledger — POST /api/draft-section. */
+export async function draftSectionRequest(payload) {
+  if (!aiAvailable) throw new Error(AI_OFF_MESSAGE);
+  return workerFetch('/api/draft-section', { method: 'POST', body: JSON.stringify(payload) });
 }

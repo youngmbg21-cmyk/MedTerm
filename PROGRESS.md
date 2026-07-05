@@ -6,14 +6,21 @@ Hypotheses, kill criteria, evidence links, and versioned AI assessments become
 first-class records; a Decision Brief screen and a three-seat Decision memo sit
 between the evidence and the verdict. Task ledger (execute in order):
 
-1. [ ] Schema: hypotheses / evidence_links / ai_assessments in sql/schema.sql,
+1. [x] Schema: hypotheses / evidence_links / ai_assessments in sql/schema.sql,
        data.js KNOWN_TABLES, app.js STATE, settings export list, seed.js
-       (6 hypotheses, ~15 demo links, 2 demo assessments INSUFFICIENT→PIVOT)
-2. [ ] Config: AI_MODE; decouple all AI touchpoints from isLocalMode
+       (6 hypotheses, 16 demo links, 2 demo assessments INSUFFICIENT→PIVOT).
+       Verified: smoke-seed harness (links resolve, trajectory, steelman).
+2. [x] Config: AI_MODE in js/config.js; chat/reports/settings/data.js AI
+       touchpoints now check aiAvailable, not isLocalMode; boot requires
+       magic-link login when AI_MODE='worker' (identity for the worker);
+       data.js gained assessmentRequest / proposeLinksRequest /
+       draftSectionRequest / aiDataSlices(state).
 3. [ ] Worker: DB-injected hypotheses in prompts; POST /api/assessment;
        POST /api/propose-links; POST /api/draft-section; new chat tools +
        action types; body-provided-data mode for local-first setups
-4. [ ] Shared confirm/skip helper extracted from js/chat.js (js/actions.js)
+4. [x] Shared confirm/skip helper extracted from js/chat.js into
+       js/actions.js (actionConfirmation/addActionConfirmation/applyAction,
+       TABLE_FOR_ACTION incl. add_evidence_link + update_hypothesis_status)
 5. [ ] Decision Brief screen + nav entry (ungated, phase 0 onward)
 6. [ ] Decision memo rebuild (three seats, override rationale, draft-from-evidence)
 7. [ ] Evidence linking in matrix / interviews / field checks (manual always;
