@@ -244,3 +244,24 @@ Dated 2026-07-04. Each entry is a decision the brief left open, plus the reasoni
     rather than riding through the chat loop — the chat loop persists sessions
     and runs tool rounds; a draft is a single deterministic completion whose
     result must land in an edit modal, never auto-saved.
+
+46. **All worker chat tools now filter in JS over one `fetchRows()` seam** instead
+    of building PostgREST filter strings — the same code path serves Supabase reads
+    and body-provided data (local-first mode), so the two modes cannot drift. At
+    this workspace's scale (hundreds of rows) fetching a table and filtering in
+    JS costs nothing measurable.
+
+47. **The client sends `phase` and `segments` in AI request bodies.** CURRENT_PHASE
+    and segment targets live in js/config.js (client-side by design); the worker
+    has no copy and should not grow one. They are not secrets.
+
+48. **/api/propose-links fails soft** (returns an empty proposal list on any
+    model or validation failure after one retry) — a link proposal is a quiet
+    nicety after a save; it must never turn a successful save into an error
+    banner. /api/assessment fails loud (502 with the validation errors) — an
+    assessment is an explicit, deliberate act.
+
+49. **worker.js exports its pure validators** (`validateAssessment`,
+    `validateProposals`, `extractJson`) as named exports alongside the default
+    Worker handler — Cloudflare ignores them; the offline smoke harness tests
+    the exact code that gates real assessments.

@@ -15,9 +15,16 @@ between the evidence and the verdict. Task ledger (execute in order):
        magic-link login when AI_MODE='worker' (identity for the worker);
        data.js gained assessmentRequest / proposeLinksRequest /
        draftSectionRequest / aiDataSlices(state).
-3. [ ] Worker: DB-injected hypotheses in prompts; POST /api/assessment;
-       POST /api/propose-links; POST /api/draft-section; new chat tools +
-       action types; body-provided-data mode for local-first setups
+3. [x] Worker: hypotheses/kill criteria removed from the system prompt and
+       injected from the DB (or the request body); POST /api/assessment
+       (validate + one retry, append-only insert or return-for-client-persist);
+       POST /api/propose-links (0–2, fail-soft); POST /api/draft-section;
+       chat tools query_hypotheses / query_evidence_links /
+       get_latest_assessment; propose_action gains add_evidence_link +
+       update_hypothesis_status; every tool reads via fetchRows(env,
+       localData, table) so body-provided data works identically.
+       Verified: node --check + smoke-worker harness (validators, extractJson,
+       prompt injection).
 4. [x] Shared confirm/skip helper extracted from js/chat.js into
        js/actions.js (actionConfirmation/addActionConfirmation/applyAction,
        TABLE_FOR_ACTION incl. add_evidence_link + update_hypothesis_status)
