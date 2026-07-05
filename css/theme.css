@@ -306,6 +306,64 @@ table.data.sticky-head thead th { position: sticky; top: 0; background: var(--su
 /* ============================================================================
    APPLICATION SHELL
    ========================================================================== */
+.main-area { padding-left: 240px; min-height: 100vh; }
+
+.app-header {
+  position: sticky; top: 0; z-index: 20;
+  background: rgba(245, 241, 234, 0.92);
+  backdrop-filter: saturate(150%) blur(8px);
+  border-bottom: 1px solid var(--line-soft);
+}
+.app-header-inner {
+  max-width: calc(var(--content-max) + 2 * var(--gutter));
+  margin: 0 auto; padding: 12px var(--gutter);
+  display: flex; align-items: center; justify-content: space-between; gap: 16px;
+}
+#page-title { font-size: 22px; line-height: 28px; letter-spacing: -0.01em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.page-question { font-size: 13px; line-height: 20px; color: var(--ink-soft); margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+.page-content {
+  max-width: calc(var(--content-max) + 2 * var(--gutter));
+  margin: 0 auto; padding: var(--gutter);
+}
+
+/* Sidebar internals */
+.wordmark {
+  display: flex; align-items: center; gap: 10px;
+  padding: 20px 20px 16px; border-bottom: 1px solid var(--line-soft);
+}
+.wordmark-badge {
+  width: 30px; height: 30px; border-radius: 9px; flex-shrink: 0;
+  display: flex; align-items: center; justify-content: center;
+  background: var(--sage-deep); color: var(--paper); font-size: 16px;
+}
+.wordmark-name { font-size: 15px; line-height: 20px; color: var(--ink); }
+.wordmark-sub { color: var(--clay-text); margin-top: 1px; }
+
+.nav-scroll { flex: 1; padding: 16px 12px; overflow-y: auto; }
+
+.sidebar-foot { padding: 16px; border-top: 1px solid var(--line-soft); }
+.nav-foot-link {
+  display: inline-flex; align-items: center; min-height: 40px; padding: 0 8px;
+  font-size: 12px; line-height: 16px; color: var(--ink-mute); cursor: pointer;
+  border-radius: var(--r-ctl); text-decoration: none;
+  transition: color var(--ease), background-color var(--ease);
+}
+.nav-foot-link:hover { color: var(--ink); background: var(--surface-inset); }
+
+/* Nav group header: label left, phase badge + chevron right-aligned column */
+.nav-phase-badge { font-size: 9.5px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--ink-mute); white-space: nowrap; }
+.nav-group-right { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
+
+/* Shell layout — owned classes, never utility-dependent */
+.header-left { display: flex; align-items: center; gap: 12px; min-width: 0; }
+.header-title-block { min-width: 0; }
+.header-right { display: flex; align-items: center; gap: 12px; flex-shrink: 0; }
+.header-actions { display: flex; align-items: center; gap: 8px; }
+.header-actions:empty { display: none; }
+.sidebar-foot .btn { width: 100%; }
+.sidebar-foot-row { display: flex; align-items: center; justify-content: space-between; margin-top: 8px; }
+
 /* The sidebar's positioning is defined HERE, not with utility classes —
    the shell must survive the Tailwind CDN failing or loading late, and
    utility z-index classes were beating the mobile drawer's stacking

@@ -124,6 +124,15 @@ export function go(route) {
   location.hash = route;
 }
 
+/* The screen's single primary action lives top-right in the app header.
+   Screens set it via setPageActions(); it clears on every route render. */
+export function setPageActions(...nodes) {
+  const slot = document.getElementById('page-actions');
+  if (!slot) return;
+  slot.innerHTML = '';
+  nodes.filter(Boolean).forEach(n => slot.appendChild(n));
+}
+
 export function renderCurrentRoute() {
   let route = (location.hash || '#overview').slice(1);
   if (route === 'dashboard') route = 'overview'; // legacy hash
@@ -132,6 +141,7 @@ export function renderCurrentRoute() {
   document.getElementById('page-title').textContent = r.title;
   const q = document.getElementById('page-question');
   if (q) q.textContent = r.question || '';
+  setPageActions(); // screens re-add their primary action during render
   document.querySelectorAll('[data-route]').forEach(el => {
     el.classList.toggle('active', el.dataset.route === route);
   });
@@ -202,9 +212,15 @@ export function buildNav() {
 
     const group = h('div', { class: `nav-group${locked ? ' locked' : ''}` });
     const chevron = h('span', { class: 'nav-chevron', text: '›' });
+    /* Label left; phase badge + chevron (or lock) as a right-aligned column */
     const header = h('button', { class: 'nav-group-header', type: 'button' }, [
-      h('span', { class: 'micro', text: locked ? item.label : item.label + (item.phaseLabel ? ` · ${item.phaseLabel}` : '') }),
-      locked ? h('span', { class: 'nav-lock', title: `Unlocks at phase ${item.unlockAt}`, text: `🔒 phase ${item.unlockAt}` }) : chevron,
+      h('span', { class: 'micro', text: item.label }),
+      h('span', { class: 'nav-group-right' }, [
+        locked
+          ? h('span', { class: 'nav-lock', title: `Unlocks at phase ${item.unlockAt}`, text: `🔒 phase ${item.unlockAt}` })
+          : (item.phaseLabel ? h('span', { class: 'nav-phase-badge', text: item.phaseLabel }) : null),
+        locked ? null : chevron,
+      ].filter(Boolean)),
     ]);
     const list = h('div', { class: 'nav-group-list' });
     item.routes.forEach(([route, label]) => {
