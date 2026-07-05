@@ -2,7 +2,7 @@
    APP CORE — state, router, phase-gated nav, shared components.
    Data access lives in data.js. Config lives in config.js.
    ============================================================ */
-import { CURRENT_PHASE, PHASES, STALL_DAYS } from './config.js';
+import { CURRENT_PHASE, PHASES, STALL_DAYS, SEGMENTS } from './config.js';
 import { data, isLocalMode } from './data.js';
 
 export { CURRENT_PHASE, PHASES };
@@ -75,6 +75,39 @@ export function isUntaggedOverdue(interview) {
 export function isStalled(contact) {
   return ['Sent', 'Replied'].includes(contact.status) &&
     (daysSince(contact.first_contact) ?? 0) >= STALL_DAYS;
+}
+
+/* ------------------------------------------------------------
+   SHARED ANALYSIS HELPERS — one formula, one rollup, used by
+   sensemaking, matrix, and reports so their numbers never disagree.
+   ------------------------------------------------------------ */
+
+/** Rank theme tags by evidence weight: count × avg severity × (1 + WTP-Y share). */
+export function rankThemes(rows = STATE.matrix) {
+  const data = {};
+  rows.forEach(r => {
+    const tag = r.theme_tag;
+    if (!tag) return;
+    if (!data[tag]) data[tag] = { tag, count: 0, totalSev: 0, wtpY: 0, quotes: [] };
+    const d = data[tag];
+    d.count++;
+    d.totalSev += +r.severity || 0;
+    if (r.wtp === 'Y') d.wtpY++;
+    d.quotes.push(r);
+  });
+  return Object.values(data).map(d => ({
+    tag: d.tag,
+    count: d.count,
+    avgSev: d.count ? d.totalSev / d.count : 0,
+    wtpRate: d.count ? Math.round((d.wtpY / d.count) * 100) : 0,
+    score: d.count * (d.totalSev / (d.count || 1)) * (1 + d.wtpY / (d.count || 1)),
+    quotes: d.quotes,
+  })).sort((a, b) => b.score - a.score);
+}
+
+/** Interviews logged per segment vs. recruitment target, in config order. */
+export function segmentCoverageRows() {
+  return SEGMENTS.map(s => ({ label: s.name, value: STATE.interviews.filter(r => r.segment === s.name).length, target: s.target }));
 }
 
 /* ------------------------------------------------------------

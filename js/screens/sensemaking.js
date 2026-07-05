@@ -2,33 +2,12 @@
    All read the canonical snake_case shape via STATE / data.js. */
 import {
   STATE, registerRoute, renderCurrentRoute, h, chip, emptyState, quoteBlock,
-  openModal, closeModal, formField, fmtDate,
+  openModal, closeModal, formField, fmtDate, rankThemes,
 } from '../app.js';
 import { data } from '../data.js';
 import { exportKillList } from '../export.js';
 
 /* ---------- Theme analysis — "Which themes are strongest?" ---------- */
-function rankThemes() {
-  const themeData = {};
-  STATE.matrix.forEach(r => {
-    if (!r.theme_tag) return;
-    if (!themeData[r.theme_tag]) themeData[r.theme_tag] = { count: 0, totalSev: 0, wtpY: 0 };
-    const d = themeData[r.theme_tag];
-    d.count++;
-    d.totalSev += +r.severity || 0;
-    if (r.wtp === 'Y') d.wtpY++;
-  });
-  return Object.entries(themeData)
-    .map(([tag, d]) => ({
-      tag,
-      count: d.count,
-      avgSev: d.count ? d.totalSev / d.count : 0,
-      wtpRate: d.count ? Math.round((d.wtpY / d.count) * 100) : 0,
-      score: d.count * (d.totalSev / (d.count || 1)) * (1 + d.wtpY / (d.count || 1)),
-    }))
-    .sort((a, b) => b.score - a.score);
-}
-
 function renderThemeAnalysis(page) {
   const ranked = rankThemes();
 
