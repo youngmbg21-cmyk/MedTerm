@@ -69,10 +69,17 @@ function renderScripts(page) {
     const latest = versions[0];
     const sections = Array.isArray(latest.content) ? latest.content : [];
 
+    const isConfigSegment = SEGMENT_NAMES.includes(activeScript);
     const headRight = h('div', { class: 'flex flex-wrap items-center gap-2' }, [
       h('button', { class: 'btn btn-line text-xs', onclick: () => { showHistory = !showHistory; renderTab(); } },
         showHistory ? 'Hide history' : 'Version history'),
-    ]);
+      /* Legacy/custom scripts (not a current config segment) can be removed —
+         the migration never auto-deletes anything with edit history, so the
+         human gets the explicit control instead. Segment scripts stay. */
+      !isConfigSegment
+        ? h('button', { class: 'btn btn-ghost text-xs t-rose', onclick: () => removeScript(activeScript, versions) }, 'Remove script')
+        : null,
+    ].filter(Boolean));
     /* AI-first: the assistant revises the questions from what the field is
        surfacing; the redraft lands in the editor for review — saving it
        creates a new version, the old one is preserved. */
@@ -104,7 +111,7 @@ function renderScripts(page) {
     content.appendChild(h('div', { class: 'px-6 pt-5 pb-4 flex flex-wrap items-center justify-between gap-2 border-b b-soft' }, [
       h('div', {}, [
         h('div', { class: 'serif text-xl', text: activeScript }),
-        h('div', { class: 'text-xs mt-1 t-mute', text: `Version ${latest.version}` }),
+        h('div', { class: 'text-xs mt-1 t-mute', text: `Version ${latest.version}${isConfigSegment ? '' : ' · not a current segment — kept from an earlier setup'}` }),
       ]),
       headRight,
     ]));
@@ -210,6 +217,20 @@ function openScriptEditor(scriptName, latest, draftContent) {
   root.appendChild(h('div', { class: 'modal-bg fade-in', onclick: (e) => { if (e.target.classList.contains('modal-bg')) closeModal(); } }, [
     h('div', { class: 'modal p-6', style: 'max-width:640px;' }, [form]),
   ]));
+}
+
+/* Remove a legacy/custom script lineage — every version. Only offered for
+   scripts whose name is not a current config segment; a destructive act,
+   so it is explicit and confirmed, never automatic. */
+async function removeScript(name, versions) {
+  const edited = versions.length > 1;
+  if (!confirm(`Remove "${name}" and all ${versions.length} version${versions.length === 1 ? '' : 's'}?${edited ? ' This script has edit history — removing it deletes those edits too.' : ''} This cannot be undone.`)) return;
+  try {
+    for (const v of versions) await data.remove('scripts', v.id);
+    STATE.scripts = await data.list('scripts');
+    activeScript = null; // fall back to the first segment tab
+    renderCurrentRoute();
+  } catch (e) { alert('Remove failed: ' + e.message); }
 }
 
 async function revertToVersion(scriptName, versionRecord, latest) {

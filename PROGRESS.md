@@ -1,5 +1,14 @@
 # PROGRESS.md
 
+## Legacy script removal control ✅ (2026-07-06)
+Non-config script tabs (e.g. an edited 'Agent / facilitator' the migration
+rightly refused to auto-delete) now show a "not a current segment" note and
+an explicit, confirmed Remove control deleting the whole lineage. Config
+segment scripts never show it. Verified against a simulation of the exact
+reported state: edited legacy lineage survives migration, shows the
+control, removal persists across reload, config tabs unaffected.
+
+
 ## Referring doctor + aftercare + script de-duplication ✅ (2026-07-06)
 
 - New config segment **Referring doctor** (target 4, sum now 36 —
