@@ -19,7 +19,7 @@
 
    Records are flat snake_case objects matching sql/schema.sql.
    ============================================================ */
-import { DATA_MODE, AI_MODE, WORKER_URL, SEGMENT_NAMES } from './config.js';
+import { DATA_MODE, AI_MODE, WORKER_URL, SUPABASE_ANON_KEY, SEGMENT_NAMES } from './config.js';
 import { buildSeed, buildFreshFieldworkSeed, buildHypotheses, buildScripts } from './seed.js';
 
 const LS_KEY = 'medterm_data_v1';
@@ -325,6 +325,9 @@ async function workerFetch(path, opts = {}) {
     ...opts,
     headers: {
       'Content-Type': 'application/json',
+      // Supabase Edge Functions expect the anon key as `apikey`; a plain
+      // Cloudflare Worker ignores it. Harmless either way.
+      ...(SUPABASE_ANON_KEY ? { apikey: SUPABASE_ANON_KEY } : {}),
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
       ...(opts.headers || {}),
     },
