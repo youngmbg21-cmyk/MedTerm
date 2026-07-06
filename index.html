@@ -117,6 +117,16 @@
 
   document.getElementById('hamburger-btn').addEventListener('click', openSidebar);
   document.getElementById('mobile-overlay').addEventListener('click', closeSidebar);
+
+  // Hidden admin door: five quick taps on the wordmark → admin.html.
+  // Taps more than 1.5s apart reset the count, so ordinary clicks never trigger it.
+  let wordmarkTaps = 0, wordmarkTimer = null;
+  document.querySelector('.wordmark').addEventListener('click', () => {
+    wordmarkTaps++;
+    clearTimeout(wordmarkTimer);
+    wordmarkTimer = setTimeout(() => { wordmarkTaps = 0; }, 1500);
+    if (wordmarkTaps >= 5) { wordmarkTaps = 0; window.location.href = 'admin.html'; }
+  });
   document.getElementById('refresh-btn').addEventListener('click', () => loadAllData());
   document.getElementById('settings-link').addEventListener('click', () => { go('settings'); closeSidebar(); });
 
