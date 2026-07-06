@@ -564,3 +564,13 @@ Dated 2026-07-04. Each entry is a decision the brief left open, plus the reasoni
     aftercare actor, not a buyer — H1–H3 remain the board. If aftercare
     evidence accumulates into a paid-service hypothesis, adding it is a
     deliberate team act on the hypothesis board, not a config change.
+
+82. **Edited legacy scripts get a manual "Remove script" control, not a
+    forced migration.** The reported surviving 'Agent / facilitator' tab had
+    edit history (version > 1), which decision #80's migration deliberately
+    protects — but the Scripts screen offered no way to remove it, leaving
+    the user stuck with a tab the platform refused to clean up. Non-config
+    script tabs now carry a header note ("not a current segment — kept from
+    an earlier setup") and a confirmed, explicit Remove control that deletes
+    the whole lineage. Config-segment scripts never show it: they are the
+    canonical set and would only be recreated.
