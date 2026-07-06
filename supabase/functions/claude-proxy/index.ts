@@ -1,21 +1,29 @@
 /**
  * MedTerminal — Supabase Edge Function `claude-proxy`
  *
- * The AI backend for the app (AI_MODE = 'worker'). It mirrors the AI surface of
- * the Cloudflare `worker.js` so the app works with NO Cloudflare account:
+ * The single backend for the app, mirroring the Cloudflare `worker.js` so the
+ * whole thing runs with NO Cloudflare account. It serves two surfaces:
  *
+ * AI (AI_MODE = 'worker'):
  *   POST .../claude-proxy/api/chat            — assistant panel (tool use loop)
  *   POST .../claude-proxy/api/assessment      — Decision Brief "Regenerate"
  *   POST .../claude-proxy/api/propose-links   — evidence-link proposals after a save
  *   POST .../claude-proxy/api/draft-section   — every AI-first drafting surface
  *   POST .../claude-proxy                     — bare call = chat (admin.html "Test connection")
  *
- * Data seam: in local data mode the client sends the workspace slices it needs
- * in `localData`, so this function never needs the app's data tables in Supabase.
+ * Shared data (DATA_MODE = 'api') — the synced team workspace:
+ *   GET/POST/PATCH/DELETE .../claude-proxy/api/<table>[/<id>]   — record CRUD
+ *   POST  .../claude-proxy/api/documents/<id>/file             — upload a file
+ *   GET   .../claude-proxy/api/documents/<id>/link             — signed download URL
  *
- * Auth: any signed-in Supabase user is allowed. The app is a trusted 2-person
- * team and, in local-first mode, there is no shared server-side data to protect —
- * so no `team_members` row is required (login is enough).
+ * Data seam: in local data mode the client sends the workspace slices it needs
+ * in `localData`; in api mode this function reads/writes Supabase directly with
+ * the service role, so every active team member shares one database.
+ *
+ * Auth: the caller must be signed in AND an ACTIVE row in `team_members`
+ * (matched by auth user id). Anyone can request a magic link, so membership —
+ * not merely a valid login — is what keeps the shared workspace private to the
+ * team. Roles: lead/partner can write; only lead can delete non-document rows.
  *
  * Claude API key: read from the `settings` table (key = 'claude_api_key'), which
  * the admin page writes. Falls back to the ANTHROPIC_API_KEY / CLAUDE_API_KEY
@@ -525,7 +533,7 @@ async function getClaudeApiKey(admin: ReturnType<typeof createClient>): Promise<
 }
 
 /* ------------------------------------------------------------ Endpoint handlers */
-async function handleAssessment(body: any, env: Env) {
+async function handleAssessment(body: any, env: Env, member: Member | null) {
   const trigger = ['manual', 'phase_exit', 'weekly'].includes(body.trigger) ? body.trigger : 'manual';
   const phase = Number.isInteger(body.phase) ? body.phase : 0;
   const localData = body.localData || null;
@@ -609,7 +617,7 @@ Produce the assessment JSON now. Trigger: ${trigger}.`;
   if (localData) {
     return jsonResponse({ assessment: { ...record, created_at: new Date().toISOString() }, persisted: false });
   }
-  const { data, status } = await supabaseRequest('POST', 'ai_assessments', record, env);
+  const { data, status } = await supabaseRequest('POST', 'ai_assessments', { ...record, created_by: member?.id }, env);
   const created = Array.isArray(data) ? data[0] : data;
   return jsonResponse({ assessment: created, persisted: true }, status);
 }
@@ -831,10 +839,135 @@ async function handleChat(body: any, env: Env, userId: string) {
   return jsonResponse({ text: finalText, sessionId: activeSessionId, actions, patterns: [] });
 }
 
+/* ------------------------------------------------------------ Data storage (api mode)
+   These power DATA_MODE = 'api' — the shared, synced workspace. Every record
+   read/write goes through the service role (RLS is enforced here in code by the
+   team-membership check), so all active team members see one shared database. */
+
+type Member = { id: string; role: string; display_name: string; userId: string };
+
+// The only tables the app reads/writes. Anything else 404s — no arbitrary access.
+const DATA_TABLES = new Set([
+  'outreach', 'interviews', 'matrix', 'deliverables', 'scripts', 'reports',
+  'kill_list', 'economics', 'field_checks', 'decision_memos', 'segment_cards',
+  'documents', 'hypotheses', 'evidence_links', 'ai_assessments',
+]);
+
+async function logAction(env: Env, actorId: string, action: string, table: string, recordId: string | null, newValues: unknown) {
+  // Audit is best-effort — a write must never fail because the log did.
+  try {
+    await supabaseRequest('POST', 'audit_log', {
+      actor_id: actorId, action, table_name: table, record_id: recordId, new_values: newValues,
+    }, env);
+  } catch { /* ignore */ }
+}
+
+async function handleTableCrud(method: string, table: string, recordId: string | null, req: Request, env: Env, member: Member) {
+  const isWriteRole = member.role === 'lead' || member.role === 'partner';
+
+  // ai_assessments are append-only: the trajectory over time is itself evidence.
+  if (table === 'ai_assessments' && (method === 'PATCH' || method === 'DELETE')) {
+    return errorResponse('Assessments are append-only — they are never updated or deleted.', 405);
+  }
+
+  if (method === 'GET') {
+    const query = recordId ? `${table}?id=eq.${recordId}` : `${table}?order=created_at.desc`;
+    const { data, status } = await supabaseRequest('GET', query, null, env);
+    return jsonResponse({ records: Array.isArray(data) ? data : (data ? [data] : []) }, status);
+  }
+
+  if (method === 'POST' && isWriteRole) {
+    const body = await req.json();
+    const row = body.fields || body;
+    row.created_by = member.id;
+    if (table === 'documents') row.uploaded_by = member.display_name;
+    const { data, status } = await supabaseRequest('POST', table, row, env);
+    const created = Array.isArray(data) ? data[0] : data;
+    await logAction(env, member.id, 'create', table, (created as any)?.id, row);
+    return jsonResponse(created, status);
+  }
+
+  if (method === 'PATCH' && recordId && isWriteRole) {
+    const body = await req.json();
+    const fields = body.fields || body;
+    const { data, status } = await supabaseRequest('PATCH', `${table}?id=eq.${recordId}`, fields, env);
+    const updated = Array.isArray(data) ? data[0] : data;
+    await logAction(env, member.id, 'update', table, recordId, fields);
+    return jsonResponse(updated, status);
+  }
+
+  // Leads delete anywhere; partners may delete their own documents.
+  if (method === 'DELETE' && recordId && (member.role === 'lead' || (table === 'documents' && isWriteRole))) {
+    const { status } = await supabaseRequest('DELETE', `${table}?id=eq.${recordId}`, null, env);
+    if (table === 'documents') {
+      await fetch(`${env.SUPABASE_URL}/storage/v1/object/${STORAGE_BUCKET}/${recordId}`, {
+        method: 'DELETE', headers: { Authorization: `Bearer ${env.SUPABASE_SERVICE_KEY}` },
+      }).catch(() => {});
+    }
+    await logAction(env, member.id, 'delete', table, recordId, null);
+    return jsonResponse({ deleted: true }, status);
+  }
+
+  return errorResponse('Method not allowed or insufficient permissions', 405);
+}
+
+async function handleDocumentFile(docId: string, action: string, method: string, req: Request, env: Env, member: Member) {
+  const isWriteRole = member.role === 'lead' || member.role === 'partner';
+
+  if (action === 'file' && method === 'POST' && isWriteRole) {
+    const { base64, mime_type } = await req.json();
+    const bytes = Uint8Array.from(atob(base64), c => c.charCodeAt(0));
+    const up = await fetch(`${env.SUPABASE_URL}/storage/v1/object/${STORAGE_BUCKET}/${docId}`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${env.SUPABASE_SERVICE_KEY}`,
+        'Content-Type': mime_type || 'application/octet-stream',
+        'x-upsert': 'true',
+      },
+      body: bytes,
+    });
+    if (!up.ok) return errorResponse(`Storage upload failed: ${await up.text()}`, 502);
+    await supabaseRequest('PATCH', `documents?id=eq.${docId}`, { storage_path: docId }, env);
+    return jsonResponse({ stored: true });
+  }
+
+  if (action === 'link' && method === 'GET') {
+    const sign = await fetch(`${env.SUPABASE_URL}/storage/v1/object/sign/${STORAGE_BUCKET}/${docId}`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${env.SUPABASE_SERVICE_KEY}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ expiresIn: 3600 }),
+    });
+    if (!sign.ok) return jsonResponse({ url: null });
+    const { signedURL } = await sign.json();
+    return jsonResponse({ url: `${env.SUPABASE_URL}/storage/v1${signedURL}` });
+  }
+
+  return errorResponse('Method not allowed or insufficient permissions', 405);
+}
+
+/* Verify the caller's JWT, then confirm they are an ACTIVE team member.
+   Returns null for both "not signed in" and "signed in but not on the team". */
+async function authenticate(req: Request, env: Env): Promise<Member | null> {
+  const authHeader = req.headers.get('Authorization');
+  if (!authHeader?.startsWith('Bearer ')) return null;
+  const userClient = createClient(env.SUPABASE_URL, env.SUPABASE_ANON_KEY, {
+    global: { headers: { Authorization: authHeader } },
+  });
+  const { data: { user }, error } = await userClient.auth.getUser();
+  if (error || !user) return null;
+
+  // Service role bypasses RLS for the membership lookup itself.
+  const { data } = await supabaseRequest(
+    'GET', `team_members?user_id=eq.${user.id}&status=eq.active&select=id,role,display_name`, null, env,
+  );
+  const row = Array.isArray(data) ? data[0] : null;
+  if (!row) return null;
+  return { id: (row as any).id, role: (row as any).role, display_name: (row as any).display_name, userId: user.id };
+}
+
 /* ------------------------------------------------------------ Entry */
 Deno.serve(async (req: Request) => {
   if (req.method === 'OPTIONS') return new Response(null, { status: 204, headers: corsHeaders });
-  if (req.method !== 'POST') return errorResponse('Method not allowed', 405);
 
   try {
     const env: Env = {
@@ -844,33 +977,46 @@ Deno.serve(async (req: Request) => {
       CLAUDE_API_KEY: '',
     };
 
-    // Any signed-in user is allowed (see header comment).
-    const authHeader = req.headers.get('Authorization');
-    if (!authHeader?.startsWith('Bearer ')) return errorResponse('Not authenticated', 401);
-    const userClient = createClient(env.SUPABASE_URL, env.SUPABASE_ANON_KEY, {
-      global: { headers: { Authorization: authHeader } },
-    });
-    const { data: { user }, error: userError } = await userClient.auth.getUser();
-    if (userError || !user) return errorResponse('Not authenticated', 401);
-
-    // Claude key: settings table first (admin page), then an Edge Function secret.
-    const admin = createClient(env.SUPABASE_URL, env.SUPABASE_SERVICE_KEY);
-    env.CLAUDE_API_KEY = (await getClaudeApiKey(admin))
-      || Deno.env.get('ANTHROPIC_API_KEY')
-      || Deno.env.get('CLAUDE_API_KEY')
-      || '';
-    if (!env.CLAUDE_API_KEY) {
-      return errorResponse('Claude API key not configured. Set it on the admin page, or as an ANTHROPIC_API_KEY Edge Function secret.', 503);
+    // Must be signed in AND an active team member. This is what keeps the shared
+    // workspace private to the team even though anyone can request a magic link.
+    const member = await authenticate(req, env);
+    if (!member) {
+      return errorResponse(
+        'Not authorised. You must be signed in and listed as an active member in the team_members table. Ask the project lead to add you.',
+        403,
+      );
     }
 
     const path = new URL(req.url).pathname;
-    const body = await req.json();
+    const apiIdx = path.indexOf('/api/');
+    const sub = (apiIdx >= 0 ? path.slice(apiIdx + 5) : '').replace(/\/+$/, '');
 
-    if (path.endsWith('/api/assessment')) return await handleAssessment(body, env);
-    if (path.endsWith('/api/propose-links')) return await handleProposeLinks(body, env);
-    if (path.endsWith('/api/draft-section')) return await handleDraftSection(body, env);
-    // /api/chat and the bare function URL (admin "Test connection") both chat.
-    if (path.endsWith('/api/chat') || !path.includes('/api/')) return await handleChat(body, env, user.id);
+    // ---- AI routes (need the Claude key) ----
+    const isAiRoute = sub === '' || sub === 'chat' || sub === 'assessment' || sub === 'propose-links' || sub === 'draft-section';
+    if (isAiRoute) {
+      if (req.method !== 'POST') return errorResponse('Method not allowed', 405);
+      const admin = createClient(env.SUPABASE_URL, env.SUPABASE_SERVICE_KEY);
+      env.CLAUDE_API_KEY = (await getClaudeApiKey(admin))
+        || Deno.env.get('ANTHROPIC_API_KEY') || Deno.env.get('CLAUDE_API_KEY') || '';
+      if (!env.CLAUDE_API_KEY) {
+        return errorResponse('Claude API key not configured. Set it on the admin page, or as an ANTHROPIC_API_KEY Edge Function secret.', 503);
+      }
+      const body = await req.json();
+      if (sub === 'assessment') return await handleAssessment(body, env, member);
+      if (sub === 'propose-links') return await handleProposeLinks(body, env);
+      if (sub === 'draft-section') return await handleDraftSection(body, env);
+      return await handleChat(body, env, member.userId); // 'chat' or bare function URL
+    }
+
+    // ---- Document file / signed-link routes ----
+    const fileMatch = sub.match(/^documents\/([^/]+)\/(file|link)$/);
+    if (fileMatch) return await handleDocumentFile(fileMatch[1], fileMatch[2], req.method, req, env, member);
+
+    // ---- Table CRUD routes: <table> or <table>/<id> ----
+    const parts = sub.split('/');
+    if (DATA_TABLES.has(parts[0])) {
+      return await handleTableCrud(req.method, parts[0], parts[1] || null, req, env, member);
+    }
 
     return errorResponse('Not found', 404);
   } catch (e) {
