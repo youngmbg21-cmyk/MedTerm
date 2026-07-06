@@ -52,7 +52,7 @@ function buildDeliverables() {
   return [
     { phase: 0, deliverable: "Lead's pre-work completed", status: 'Complete', evidence: 'Market notes + corridor sizing shared in workspace.' },
     { phase: 0, deliverable: 'Workspace live, both have written content', status: 'Complete', evidence: 'Both roles active in the workspace.' },
-    { phase: 0, deliverable: 'Interview scripts v1 drafted', status: 'Complete', evidence: 'Three scripts drafted — see Scripts.' },
+    { phase: 0, deliverable: 'Interview scripts v1 drafted', status: 'Complete', evidence: 'Segment scripts v1 drafted for all seven segments — see Scripts.' },
     { phase: 0, deliverable: 'Wedge brief signed and dated', status: 'Complete', evidence: 'Signed: patient-side coordination for Kenya→India corridor.' },
     { phase: 0, deliverable: 'Lead can explain the project unaided', status: 'Complete', evidence: 'Dry-run recorded on the Friday call.' },
     { phase: 0, deliverable: 'Lead has flagged ≥2 plan changes', status: 'Complete', evidence: 'Dropped Turkey corridor; added insurance-broker segment.' },
@@ -80,42 +80,110 @@ function buildDeliverables() {
   ];
 }
 
-/* The three stock interview scripts, version 1, as the app ships. */
-function buildScripts() {
+/* The stock interview scripts — one per config segment, version 1, as the
+   app ships. Every script covers the full theme taxonomy (Discovery, Trust,
+   Friction, Pain, Money, Buyer) and aims questions at the hypothesis board
+   (H1 family abroad · H2 patient/Nairobi family · H3 Hospital IPD pays) and
+   the kill criteria (K1 CAC · K2 conversion <15% · K3 cost/case >$300)
+   wherever that segment can answer them. Edit freely — saving in Scripts
+   creates a new version and the old one is preserved. */
+export function buildScripts() {
   return [
     {
-      script_name: 'Patient / caregiver', version: 1, content: [
-        { title: 'Open (3 min)', body: 'Thank the person. Promise: no quotes with their name without permission. Ask permission to record.' },
-        { title: 'Warm-up (5 min)', body: '"Walk me through the last time you or your family considered or went through this." Anchor in a real, recent story.' },
-        { title: 'Core: discovery', body: 'How did you first start looking for hospitals abroad? — Probe if they mention WhatsApp or a person.' },
-        { title: 'Core: trust', body: 'What made you trust one hospital more than another? — Probe if they say "a friend went there".' },
-        { title: 'Core: friction', body: 'What was the most frustrating moment in the whole process? — Wait through silence.' },
-        { title: 'Core: money', body: 'If you had to do it again, what would you pay someone to handle for you? — Anchor on the number they give.' },
-        { title: 'Core: severity', body: 'Was there a moment you nearly gave up? — That moment is the wedge.' },
-        { title: 'Close (3 min)', body: '"Is there anything I should have asked but didn\'t?" · Ask for two specific introductions · Confirm follow-up permission.' },
+      script_name: 'Patient', version: 1, content: [
+        { title: 'Open (3 min)', body: 'Thank them. Promise: nothing quoted with their name without permission; notes are de-identified (initials only). Ask permission to record. One line on the project: understanding how Kenyan patients arrange treatment in India.' },
+        { title: 'Story anchor (5 min)', body: '"Walk me through the last time you travelled — or seriously considered travelling — for treatment, from the day you knew you needed care abroad." Anchor everything that follows in this real story. Get dates, hospital, condition class (no medical detail needed).' },
+        { title: 'Discovery — how the search started', body: '"How did you first start looking for hospitals abroad?" Probe: WhatsApp groups? A person who had been? Google? A broker who found YOU? Feeds Discovery — WhatsApp/personal · search/online · broker/agent.' },
+        { title: 'Trust — how one option won', body: '"What made you trust one hospital or doctor over another?" Probe: doctor reputation, accreditation, how fast they replied, whether the price was clear up front. "Was there anyone you decided NOT to trust — why?" Feeds Trust — all four tags.' },
+        { title: 'Friction — the hardest part', body: '"What was the most frustrating moment of the whole process?" Wait through the silence. Probe: chasing quotes, paperwork and reports, language, moving money to India, response delays. Feeds Friction — all five tags.' },
+        { title: 'Pain & severity — the near-quit moment', body: '"Was there a moment you nearly gave up?" That moment is the wedge. Probe whether the pain was financial, emotional, coordination, or fear about the outcome. Rate severity in your notes 1–5. Feeds Pain — all four tags.' },
+        { title: 'Money & true cost (K3 check)', body: '"Roughly what did the whole coordination cost — agent fees, calls, document couriering, wasted trips — on top of treatment?" Then: "If you did it again, what would you PAY someone to take off your plate, and how much?" Anchor on their number; do not suggest one. Feeds Money — willingness to pay and the $300/case kill check.' },
+        { title: 'Buyer — who decided, who paid (H1/H2)', body: '"Who actually made the final decision to go — and whose money paid for the trip and the help around it?" Probe: self, spouse, children abroad sending money, extended family in Nairobi. This is the direct H1 vs H2 test — record it verbatim.' },
+        { title: 'Close (3 min)', body: '"What should I have asked that I didn\'t?" Ask for two specific introductions (another patient, an agent they used). Confirm permission to follow up. Same-day: tag quotes into the matrix.' },
+        { title: 'Requirements check (after the call)', body: 'You should now be able to tag: at least one Discovery, one Trust, one Friction, one Pain quote with severity; a WTP answer with a number or a refusal; and a clear H1-or-H2 data point. If any is missing, note the gap in the interview record.' },
+      ],
+    },
+    {
+      script_name: 'Caregiver', version: 1, content: [
+        { title: 'Open (3 min)', body: 'Thank them. Acknowledge up front they carried this for someone else — this interview is about THEIR experience, not the patient\'s medical detail. De-identification promise, permission to record.' },
+        { title: 'Story anchor (5 min)', body: '"Tell me about the time you organised treatment abroad for your [parent/spouse/relative] — starting from the day you realised local care wasn\'t enough."' },
+        { title: 'Discovery — searching on someone\'s behalf', body: '"How did you look for options — and how was that different because it wasn\'t for you?" Probe: who in the family network fed you leads, which WhatsApp groups, whether a broker approached the family. Feeds Discovery tags.' },
+        { title: 'Trust — trusting for someone else', body: '"How did you decide what was safe enough for someone you love?" Probe: second opinions, accreditation, testimonials from other families, price clarity as a trust signal. "What almost broke your trust?" Feeds Trust tags.' },
+        { title: 'Friction — coordinating as the proxy', body: '"What did the coordination actually involve, day to day?" Probe: collecting reports, translating medical language for the family, chasing quotes across time zones, moving money when the account wasn\'t yours. Feeds Friction tags.' },
+        { title: 'Pain — the load nobody sees (severity)', body: '"What was the heaviest moment for YOU, separate from the patient\'s health?" Probe emotional load, family pressure, blame risk if it went wrong, money stress. Severity 1–5 in notes. Feeds Pain — emotional/coordination/financial.' },
+        { title: 'Money & decision authority (H1/H2)', body: '"Who paid for what — and who had the final say when family members disagreed?" Probe: children abroad vs Nairobi family, whether money arrived as remittances, who a service would have to convince. Then WTP: "What would the family have paid a trustworthy coordinator, honestly?" Feeds H1/H2 and Money tags.' },
+        { title: 'Kill checks (K2/K3 signal)', body: '"Did the patient actually travel in the end — and if not, what stopped it?" (conversion signal for K2). "What did the arranging itself cost the family?" (K3 signal).' },
+        { title: 'Close (3 min)', body: 'Anything missed · two introductions (another caregiver, the agent or hospital contact they used) · follow-up permission · same-day tag.' },
+        { title: 'Requirements check (after the call)', body: 'Must-haves: proxy-decision dynamics (who decides vs who pays — H1/H2), one coordination-pain quote with severity, a WTP number or refusal, and the travelled/didn\'t-travel outcome.' },
       ],
     },
     {
       script_name: 'Hospital IPD', version: 1, content: [
-        { title: 'Open (2 min)', body: 'Brief professional intro. Not selling, not asking for referrals. Permission to record.' },
-        { title: 'Warm-up (3 min)', body: '"Tell me how your IPD is structured — who handles East African inquiries?"' },
-        { title: 'Core: qualified leads', body: 'What makes a lead from East Africa qualified vs unqualified? — Which document is missing most often?' },
-        { title: 'Core: documents', body: 'What information do you need before the medical team will review a case? — Would they pay for cases pre-formatted to that standard?' },
-        { title: 'Core: response time', body: 'From first inquiry, how fast do you usually reply, and what slows you down?' },
-        { title: 'Core: commissions', body: 'What do you currently pay agents per converted patient? — Does it vary by specialty?' },
-        { title: 'Core: SaaS interest', body: 'Would you pay for software that pre-qualifies and packages African cases for you? — What would have to be true?' },
-        { title: 'Close (5 min)', body: '"Anything I should have asked?" · "Who else at the hospital?" · Follow-up permission.' },
+        { title: 'Open (2 min)', body: 'Brief professional intro. You are researching the Kenya→India corridor; not selling, not asking for referrals. Spell out International Patient Department on first use. Permission to record.' },
+        { title: 'Warm-up (3 min)', body: '"Tell me how your IPD is structured — who handles East African inquiries, and how many do you see a month?"' },
+        { title: 'Leads — qualified vs noise', body: '"What makes an East African lead qualified vs unqualified for you?" Probe: which document is missing most often, what share of inquiries are complete on arrival. Feeds Trust/Friction from the supply side.' },
+        { title: 'Documents & case packaging', body: '"What must be in the file before your medical team reviews a case?" Then: "If cases arrived pre-formatted to that exact standard, what would that be worth to you?" Direct H3 probe.' },
+        { title: 'Response time — the reply gap', body: '"From first inquiry to your first substantive reply — how long, honestly, and what slows it down?" Cross-checks the patient-side Friction — slow response theme from the other end.' },
+        { title: 'Conversion funnel (K2 check)', body: '"Of 100 East African inquiries, how many get a treatment plan, how many actually travel, how many complete treatment?" Get their real funnel numbers — this is the consult-to-travelled conversion evidence for K2.' },
+        { title: 'Commissions & economics (K1 context)', body: '"What do you currently pay agents per converted patient — and does it vary by specialty?" Probe what that implies about acceptable CAC on the corridor. Feeds Money — broker commission and K1.' },
+        { title: 'H3 — would the hospital pay?', body: '"Would you pay for software or a service that pre-qualifies and packages African cases to your standard? What would have to be true? Who signs that cheque?" Push past politeness: ask what they REJECTED before and why.' },
+        { title: 'Close (5 min)', body: '"What should I have asked?" · "Who else at the hospital should I talk to?" · Follow-up permission · same-day tag.' },
+        { title: 'Requirements check (after the call)', body: 'Must-haves: funnel numbers (K2), agent commission range (K1), the document standard, a direct H3 willingness answer with the decision-maker named.' },
       ],
     },
     {
-      script_name: 'Agent / facilitator', version: 1, content: [
-        { title: 'Open (3 min)', body: 'Friendly but specific. Upfront: building patient-side. Their candour matters.' },
-        { title: 'Warm-up (5 min)', body: '"Walk me through your last patient — first call to follow-up at home."' },
-        { title: 'Core: workflow', body: 'Where do you add the most value? — Emotional vs transactional answer = different MVPs.' },
-        { title: 'Core: pain', body: 'What\'s painfully manual? — Quote-chasing or document re-formatting = leverage.' },
-        { title: 'Core: money', body: 'How do you get paid, and by whom? — Both sides? Ask which resists more.' },
-        { title: 'Core: adoption', body: 'What would a tool have to do for you to use it daily? — Which feature, removed, kills adoption?' },
-        { title: 'Close (3 min)', body: 'Anything missed · Two introductions · Follow-up.' },
+      script_name: 'Aggregator', version: 1, content: [
+        { title: 'Open (3 min)', body: 'Peer-to-peer tone — they run or work in a medical-travel platform/aggregator. Honest framing: you are researching the patient side of the corridor; their view of the economics matters. Permission to record.' },
+        { title: 'Warm-up (5 min)', body: '"Walk me through your model — where do patients come from, what happens to a lead, and where do you make money?"' },
+        { title: 'Acquisition & CAC (K1 check)', body: '"What does it cost you to acquire one patient who actually travels — ads, content, call-centre time, all in?" This is the single most important number: direct K1 evidence. Probe channel by channel.' },
+        { title: 'Conversion (K2 check)', body: '"Of the leads you touch, what share converts to a travelled patient? Where does the funnel leak worst?" Direct K2 evidence — get denominators, not vibes.' },
+        { title: 'Cost to serve (K3 check)', body: '"Once a patient says yes, what does it cost you to serve one case end-to-end — people-hours, calls, document handling?" Direct K3 evidence.' },
+        { title: 'What patients actually pay for', body: '"Where in the journey are patients genuinely willing to pay — and where do they expect free?" Probe how they charge (hospital commission vs patient fee) and which side resists more. Feeds Money tags and H2.' },
+        { title: 'The broken parts', body: '"What part of the corridor is most broken from where you sit — discovery, trust, documents, money movement, aftercare?" Feeds Friction/Pain from the operator\'s view; compare against patient answers.' },
+        { title: 'Competition or partnership', body: '"If someone built patient-side coordination for this corridor, does that help you or compete with you? What would make you plug into it?" Reveals the wedge\'s room to exist.' },
+        { title: 'Close (3 min)', body: 'Anything missed · two introductions (a hospital IPD contact, an agent they rate) · follow-up permission · same-day tag.' },
+        { title: 'Requirements check (after the call)', body: 'Must-haves: a CAC number or range (K1), a funnel conversion figure (K2), a cost-to-serve estimate (K3), and who-pays evidence for H2/H3. This segment exists to put numbers under the kill criteria — do not leave without them.' },
+      ],
+    },
+    {
+      script_name: 'Agent', version: 1, content: [
+        { title: 'Open (3 min)', body: 'Friendly but specific. Be upfront: you are exploring building patient-side coordination; their candour matters more than their pitch. Permission to record.' },
+        { title: 'Story anchor (5 min)', body: '"Walk me through your last patient — from the first phone call to the follow-up after they came home." Get the real workflow, step by step.' },
+        { title: 'Workflow — where the value sits', body: '"Where do you personally add the most value?" An emotional answer (hand-holding, reassurance) and a transactional answer (quotes, visas, transfers) imply different MVPs — note which they lead with.' },
+        { title: 'Friction — the manual grind', body: '"What is painfully manual in your week?" Probe: chasing hospital quotes, reformatting medical documents, arranging money transfer, visa paperwork. Quote-chasing or document work = leverage for the platform. Feeds Friction tags.' },
+        { title: 'Money — who pays whom (K1/H2/H3)', body: '"How do you get paid — patient side, hospital side, or both? How much per case, and which side resists paying more?" Feeds Money — broker commission, and the buyer question from the middleman\'s seat.' },
+        { title: 'Conversion & cost (K2/K3 check)', body: '"Of the families who reach you, how many actually travel? And how many hours does one case take you, end to end?" Their conversion and effort-per-case put field numbers under K2 and K3.' },
+        { title: 'Trust — how they win families', body: '"Why do families pick you over searching themselves?" Probe what trust signals they manufacture (testimonials, hospital relationships, being local). Feeds Trust tags — and shows what a product must replicate.' },
+        { title: 'Adoption — the daily-use test', body: '"What would a tool have to do for you to use it every day? Which single feature, if missing, kills it?" Also: "What have you tried and abandoned?"' },
+        { title: 'Close (3 min)', body: 'Anything missed · two introductions (a family they served, an IPD contact) · follow-up permission · same-day tag.' },
+        { title: 'Requirements check (after the call)', body: 'Must-haves: commission structure with numbers (K1), their conversion rate (K2), hours per case (K3), one manual-grind quote with severity, and which side of the market pays (H2 vs H3).' },
+      ],
+    },
+    {
+      script_name: 'Insurance broker', version: 1, content: [
+        { title: 'Open (3 min)', body: 'Professional intro. You are researching how Kenyan families finance treatment in India and where insurance fits or fails. Not selling. Permission to record.' },
+        { title: 'Warm-up (3 min)', body: '"What share of your clients ask about cover for treatment abroad — and what do you tell them?"' },
+        { title: 'Coverage reality — the NHIF/private gap', body: '"When a client needs treatment in India, what does their cover actually pay for — and what falls on the family?" Probe NHIF limits, private policy exclusions, evacuation-only riders. Feeds Money — insurance and the financial Pain theme.' },
+        { title: 'Claims friction', body: '"Walk me through what happens when someone tries to claim for cross-border treatment. Where does it break?" Probe pre-authorisation, receipts from Indian hospitals, currency, reimbursement delays. Feeds Friction tags from the finance side.' },
+        { title: 'Who actually pays (H1/H2 finance view)', body: '"In the cases you see, whose money ultimately covers an India trip — savings, harambee, children abroad, loans?" The broker sees family finance honestly; this is corroborating H1/H2 evidence.' },
+        { title: 'Product gap — insurable or not?', body: '"Could a medical-travel coordination benefit be attached to a policy you sell? Would an insurer underwrite it — and would clients pay the premium?" Tests an alternate buyer and the Money — insurance theme.' },
+        { title: 'Referral economics', body: '"Do you ever refer clients to agents or hospitals for treatment abroad? Is there a commission in it for you?" Reveals whether brokers are a hidden channel — and their price.' },
+        { title: 'Close (3 min)', body: 'Anything missed · two introductions (a client who travelled, an insurer product manager) · follow-up permission · same-day tag.' },
+        { title: 'Requirements check (after the call)', body: 'Must-haves: what cover excludes (financial-pain evidence), one claims-friction quote, who-pays corroboration for H1/H2, and a yes/no-with-reasons on an insurable coordination product.' },
+      ],
+    },
+    {
+      script_name: 'Diaspora family', version: 1, content: [
+        { title: 'Open (3 min)', body: 'Warm intro — they organised or funded care for someone back home from abroad. De-identification promise, permission to record. Acknowledge the distance is the story.' },
+        { title: 'Story anchor (5 min)', body: '"Tell me about the time you helped a parent or relative in Kenya get treatment in India — from the phone call where you first heard, sitting wherever you were in the world."' },
+        { title: 'Discovery — searching from abroad', body: '"How did you research options from another country?" Probe: diaspora Facebook groups, WhatsApp family committees, calling hospitals directly at odd hours, whether Kenyan-based relatives fed different information. Feeds Discovery tags and the family-abroad channel.' },
+        { title: 'Trust — at a distance (H1 core)', body: '"How did you decide what to trust when you couldn\'t see anything yourself?" Probe: video calls with doctors, accreditation lookups, who on the ground they trusted as eyes and ears, price clarity as proof of honesty. Feeds Trust tags.' },
+        { title: 'Money movement — the transfer maze', body: '"Walk me through actually getting money to the hospital." Probe: bank transfer delays, remittance apps, hawala, sending to a relative first, fees, and the fear of paying the wrong account. Feeds Friction — money transfer; this is usually the sharpest diaspora pain.' },
+        { title: 'Control & coordination pain', body: '"What was the worst part of managing this from far away?" Probe: information lag, relatives filtering bad news, decisions made without them despite paying, time zones. Severity 1–5. Feeds Pain — emotional/coordination.' },
+        { title: 'WTP — the H1 test, directly', body: '"If a service had handled the hospital search, quotes, documents and payments — with you seeing everything in real time — what would you have paid for that, honestly?" Anchor their number. Then: "Who else in the family would have needed to agree?" This is the primary H1 evidence — record verbatim.' },
+        { title: 'Kill checks (K2/K3 signal)', body: '"Did the trip happen? What nearly stopped it?" (K2 signal). "Beyond treatment, what did arranging it all cost — fees, calls, a relative\'s travel?" (K3 signal).' },
+        { title: 'Close (3 min)', body: 'Anything missed · two introductions (another diaspora buyer, the on-the-ground relative) · follow-up permission · same-day tag.' },
+        { title: 'Requirements check (after the call)', body: 'Must-haves: a direct WTP number or refusal from the person who actually paid (H1), one money-transfer friction quote, one at-a-distance trust quote, and the decision-authority map (payer abroad vs decider in Nairobi).' },
       ],
     },
   ];

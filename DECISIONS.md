@@ -480,3 +480,39 @@ Dated 2026-07-04. Each entry is a decision the brief left open, plus the reasoni
     edit-modal landing), the preview modal reusing the exact
     `reportViewNode` renderer the verified saved-report viewer uses, and
     full Playwright coverage of every AI-off state and every manual path.
+
+## Segment interview scripts — 2026-07-05
+
+74. **One script per config segment, named exactly after `SEGMENT_NAMES`.**
+    The old three scripts (with a combined "Patient / caregiver") could not
+    answer "do we have questions for every interview type?" — now coverage
+    is checkable against config, and the screen always shows a tab for
+    every segment. Patient and Caregiver were split: the caregiver script
+    probes proxy decision-making, family money dynamics and the load of
+    coordinating for someone else — different questions, different
+    hypothesis evidence.
+
+75. **"Comprehensive enough for the research" is operationalised, not
+    asserted.** Every script walks Open → story anchor → Discovery → Trust
+    → Friction → Pain/severity → Money/WTP → buyer/kill-criteria checks →
+    Close, and ends with a "Requirements check" section listing exactly
+    what must be tag-able after the call (which theme tags, which
+    hypothesis data points, which kill-criterion numbers). The supply-side
+    scripts (Aggregator, Agent, Hospital IPD) exist to put field numbers
+    under K1/K2/K3; the demand-side scripts test H1/H2 verbatim.
+
+76. **Missing scripts are a one-tap starter, not a silent write.** Seeds
+    only run at first load in local mode and never in api mode, so the
+    screen offers "Add starter questions" for any config segment without a
+    script — creating v1 from the exported canonical `buildScripts()`
+    template (with a bare-skeleton fallback if config ever gains a segment
+    the starter set doesn't know). Legacy script names coexist as extra
+    tabs after the config segments.
+
+77. **Scripts joined the AI-first pattern** ("Redraft with assistant"): the
+    structured drafting seam revises each existing section's questions from
+    the live evidence (per-section keys, validated), the redraft lands in
+    the version editor for human review, and saving creates a new version —
+    the version history doubles as the record of how the questions evolved
+    with the research. Section structure stays human-controlled; the AI
+    revises bodies, it does not invent or delete sections.

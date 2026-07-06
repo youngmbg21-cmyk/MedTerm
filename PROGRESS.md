@@ -1,5 +1,26 @@
 # PROGRESS.md
 
+## Segment interview scripts ✅ (2026-07-05)
+
+- One comprehensive, versioned script per config segment (7 tabs, config
+  order): Patient, Caregiver, Hospital IPD, Aggregator, Agent, Insurance
+  broker, Diaspora family. Every script covers the full theme taxonomy,
+  aims questions at H1/H2/H3 and the K1/K2/K3 kill numbers where that
+  segment can answer them, and closes with a "Requirements check" listing
+  what must be tag-able after the call.
+- Editing ships as before (section editor, save = new version, history +
+  revert) — plus "Redraft with assistant" through the shared drafting seam
+  (per-section structured draft → editor prefilled → human saves).
+- Config segments with no script show a one-tap "Add starter questions"
+  (canonical `buildScripts()` export) — covers live/api mode where seeds
+  never run, and demo workspaces created before this change.
+- Verified (Playwright, 375px): 7 tabs render; Patient script shows 10
+  sections ending in the Requirements check; edit → Version 2 → history
+  lists both; deleting a segment's scripts surfaces the starter state and
+  one tap restores the full canonical script (CAC/K1 content confirmed);
+  redraft button calm-disabled with AI off; no overflow, zero page errors;
+  full 23-route smoke at both viewports clean.
+
 ## AI-first platform pass ✅ (2026-07-05)
 
 The platform now treats AI drafting as the default path everywhere writing

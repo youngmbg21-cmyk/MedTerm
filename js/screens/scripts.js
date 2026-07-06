@@ -1,8 +1,15 @@
-/* Scripts — one question: "What exactly do we ask each segment?" (versioned) */
+/* Scripts — one question: "What exactly do we ask each segment?" (versioned)
+   One tab per config segment: comprehensive starter questions ship with the
+   app (one tap to add if a segment has none yet), every save creates a new
+   version, and the assistant can redraft a script from the evidence so the
+   questions chase what the field is actually surfacing. */
 import {
   STATE, registerRoute, renderCurrentRoute, h, chip, emptyState, closeModal, fmtDate,
 } from '../app.js';
-import { data } from '../data.js';
+import { SEGMENT_NAMES, CURRENT_PHASE, SEGMENTS } from '../config.js';
+import { data, draftSectionRequest, aiDataSlices } from '../data.js';
+import { buildScripts } from '../seed.js';
+import { aiDraftControls } from '../ai-draft.js';
 
 function groupScripts() {
   const grouped = {};
@@ -14,20 +21,20 @@ function groupScripts() {
   return grouped;
 }
 
+/* Tab order: config segments first (always shown, even before their script
+   exists), then any legacy/custom script names found in the data. */
+function tabNames(grouped) {
+  const extras = Object.keys(grouped).filter(n => !SEGMENT_NAMES.includes(n));
+  return [...SEGMENT_NAMES, ...extras];
+}
+
 let activeScript = null;
 
 function renderScripts(page) {
   const grouped = groupScripts();
-  const names = Object.keys(grouped);
+  const names = tabNames(grouped);
 
-  if (!names.length) {
-    page.appendChild(h('div', { class: 'card' }, [
-      emptyState('No interview scripts yet.', 'Scripts are seeded with demo data — use Reset demo data in Settings if they are missing.'),
-    ]));
-    return;
-  }
-
-  if (!activeScript || !grouped[activeScript]) activeScript = names[0];
+  if (!activeScript || !names.includes(activeScript)) activeScript = names[0];
   let showHistory = false;
 
   const tabs = h('div', { class: 'flex flex-wrap gap-2 mb-5 border-b pb-3 b-soft' });
@@ -36,27 +43,70 @@ function renderScripts(page) {
   function renderTab() {
     tabs.innerHTML = '';
     names.forEach(name => {
-      tabs.appendChild(h('button', {
+      const missing = !grouped[name];
+      const btn = h('button', {
         class: `btn ${name === activeScript ? 'btn-primary' : 'btn-line'}`,
         onclick: () => { activeScript = name; showHistory = false; renderTab(); },
-      }, name));
+      }, name);
+      if (missing) btn.classList.add('text-xs');
+      tabs.appendChild(btn);
     });
 
     content.innerHTML = '';
     const versions = grouped[activeScript];
+
+    /* A config segment with no script yet: one tap adds the comprehensive
+       starter questions the app ships with (works in demo AND live mode,
+       where seeds never run). */
+    if (!versions) {
+      content.appendChild(emptyState(
+        `No script for ${activeScript} yet.`,
+        'Add the starter questions — they cover discovery, trust, friction, pain, money and the hypothesis checks for this segment — then edit them to fit.',
+        { label: '+ Add starter questions', onclick: () => addStarterScript(activeScript) }));
+      return;
+    }
+
     const latest = versions[0];
     const sections = Array.isArray(latest.content) ? latest.content : [];
+
+    const headRight = h('div', { class: 'flex flex-wrap items-center gap-2' }, [
+      h('button', { class: 'btn btn-line text-xs', onclick: () => { showHistory = !showHistory; renderTab(); } },
+        showHistory ? 'Hide history' : 'Version history'),
+    ]);
+    /* AI-first: the assistant revises the questions from what the field is
+       surfacing; the redraft lands in the editor for review — saving it
+       creates a new version, the old one is preserved. */
+    headRight.appendChild(aiDraftControls({
+      filled: true,
+      redraftLabel: 'Redraft with assistant',
+      editLabel: 'Edit script',
+      onDraft: async () => {
+        const fields = sections.map((s, i) => ({
+          key: `sec_${i}`,
+          label: s.title || `Section ${i + 1}`,
+          placeholder: (s.body || '').slice(0, 140),
+        }));
+        const res = await draftSectionRequest({
+          section_label: `${activeScript} interview script`,
+          placeholder: 'Revise each section\'s questions and probes to chase the themes and hypothesis gaps the evidence is showing for this segment. Keep the interviewer\'s voice: short questions, concrete probes.',
+          doc_kind: `a revised interview script for the "${activeScript}" segment`,
+          fields,
+          phase: CURRENT_PHASE,
+          segments: SEGMENTS,
+          localData: aiDataSlices(STATE),
+        });
+        const drafted = sections.map((s, i) => ({ title: s.title, body: (res.fields || {})[`sec_${i}`] || s.body }));
+        openScriptEditor(activeScript, latest, drafted);
+      },
+      onManual: () => openScriptEditor(activeScript, latest),
+    }));
 
     content.appendChild(h('div', { class: 'px-6 pt-5 pb-4 flex flex-wrap items-center justify-between gap-2 border-b b-soft' }, [
       h('div', {}, [
         h('div', { class: 'serif text-xl', text: activeScript }),
         h('div', { class: 'text-xs mt-1 t-mute', text: `Version ${latest.version}` }),
       ]),
-      h('div', { class: 'flex gap-2' }, [
-        h('button', { class: 'btn btn-line text-xs', onclick: () => { showHistory = !showHistory; renderTab(); } },
-          showHistory ? 'Hide history' : 'Version history'),
-        h('button', { class: 'btn btn-primary text-xs', onclick: () => openScriptEditor(activeScript, latest) }, 'Edit script'),
-      ]),
+      headRight,
     ]));
 
     if (showHistory) {
@@ -91,8 +141,32 @@ function renderScripts(page) {
   renderTab();
 }
 
-function openScriptEditor(scriptName, latest) {
-  const sections = Array.isArray(latest.content) ? [...latest.content] : [];
+/* Create version 1 of a segment's script from the canonical starter set.
+   Falls back to a bare skeleton if config gained a segment the starter set
+   doesn't know — never a dead click. */
+async function addStarterScript(name) {
+  const template = buildScripts().find(s => s.script_name === name);
+  const record = template || {
+    script_name: name, version: 1, content: [
+      { title: 'Open (3 min)', body: 'Introduce the project, promise de-identification, ask permission to record.' },
+      { title: 'Story anchor (5 min)', body: `"Walk me through your most recent experience relevant to ${name}." Anchor in a real, recent story.` },
+      { title: 'Core questions', body: 'Cover discovery, trust, friction, pain (with severity), and willingness to pay for this segment.' },
+      { title: 'Close (3 min)', body: 'Anything missed · two introductions · follow-up permission · same-day tag.' },
+    ],
+  };
+  try {
+    await data.create('scripts', record);
+    STATE.scripts = await data.list('scripts');
+    renderCurrentRoute();
+  } catch (e) { alert('Could not add the starter script: ' + e.message); }
+}
+
+/* Section-by-section editor. An assistant redraft arrives as `draftContent`
+   and pre-fills the rows — the human edits and saves; never auto-saved.
+   Saving always creates a new version; the old one is preserved. */
+function openScriptEditor(scriptName, latest, draftContent) {
+  const isDraft = draftContent != null;
+  const sections = isDraft ? [...draftContent] : (Array.isArray(latest.content) ? [...latest.content] : []);
   const root = document.getElementById('modal-root');
   root.innerHTML = '';
 
@@ -121,7 +195,7 @@ function openScriptEditor(scriptName, latest) {
       renderCurrentRoute();
     } catch (err) { alert('Save failed: ' + err.message); }
   } }, [
-    h('div', { class: 'serif text-xl mb-2', text: `Edit: ${scriptName}` }),
+    h('div', { class: 'serif text-xl mb-2', text: isDraft ? `AI redraft: ${scriptName} — edit before saving` : `Edit: ${scriptName}` }),
     h('div', { class: 'text-xs mb-4 t-mute', text: 'Saving creates a new version. The previous version is preserved.' }),
     sectionsWrap,
     h('div', { class: 'mt-1 mb-4' }, [
