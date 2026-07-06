@@ -141,8 +141,22 @@ const LEGACY_STOCK_SCRIPTS = ['Patient / caregiver', 'Agent / facilitator'];
    stays in history, revertible), and backfill a starter script for any
    config segment that has none. Field data is never touched. */
 function migrateLocalDb(db) {
-  if (!Array.isArray(db.scripts)) return false;
   let changed = false;
+
+  // Tables added to the app after this workspace was created are missing
+  // from the stored blob — they start as empty arrays.
+  KNOWN_TABLES.forEach(t => {
+    if (!Array.isArray(db[t])) { db[t] = []; changed = true; }
+  });
+
+  // Workspaces created before the decision engine have an empty hypothesis
+  // board, which blocks every AI assessment — backfill the stock framework
+  // (H1–H3, K1–K3). A board with any records is the team's and is never touched.
+  if (!db.hypotheses.length) {
+    db.hypotheses = buildHypotheses();
+    changed = true;
+  }
+
   const versionsOf = (name) => db.scripts.filter(s => s.script_name === name);
 
   LEGACY_STOCK_SCRIPTS.forEach(name => {
