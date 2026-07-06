@@ -288,14 +288,42 @@ function renderReports(page) {
   });
   page.appendChild(grid);
 
-  page.appendChild(h('div', { class: 'micro mb-3 t-mute', text: 'Generated reports' }));
+  /* Bulk delete: tick the reports to remove, then "Delete selected". The bar
+     stays hidden until at least one is checked. Selection resets on re-render. */
+  selectedReports.clear();
+  const selCount = h('span', { class: 'text-xs t-mute' });
+  const selBar = h('div', { class: 'flex items-center gap-2', style: 'display:none;' }, [
+    selCount,
+    h('button', { class: 'btn btn-line text-xs t-rose', onclick: () => deleteSelectedReports() }, 'Delete selected'),
+    h('button', { class: 'btn btn-ghost text-xs', onclick: () => renderCurrentRoute() }, 'Clear'),
+  ]);
+  const updateSelBar = () => {
+    const n = selectedReports.size;
+    selBar.style.display = n ? 'flex' : 'none';
+    selCount.textContent = `${n} selected`;
+  };
+
+  page.appendChild(h('div', { class: 'flex items-center justify-between gap-2 mb-3' }, [
+    h('div', { class: 'micro t-mute', text: 'Generated reports' }),
+    selBar,
+  ]));
+
   const pastCard = h('div', { class: 'card' });
   if (!STATE.reports.length) {
     pastCard.appendChild(emptyState('No reports generated yet.'));
   } else {
     [...STATE.reports].reverse().forEach(r => {
-      pastCard.appendChild(h('div', { class: 'px-6 py-4 border-b flex flex-wrap items-center justify-between gap-2 b-soft' }, [
-        h('div', {}, [
+      pastCard.appendChild(h('div', { class: 'px-6 py-4 border-b flex flex-wrap items-center gap-3 b-soft' }, [
+        h('input', {
+          type: 'checkbox',
+          'aria-label': `Select ${r.title || r.report_type}`,
+          style: 'width:18px; height:18px; cursor:pointer; flex-shrink:0;',
+          onchange: (e) => {
+            if (e.target.checked) selectedReports.add(r.id); else selectedReports.delete(r.id);
+            updateSelBar();
+          },
+        }),
+        h('div', { class: 'flex-1 min-w-0' }, [
           h('div', { class: 'font-medium text-sm', text: r.title || r.report_type }),
           h('div', { class: 'text-xs t-mute', text: `${r.report_type} · ${fmtDate(r.created_at)}` }),
         ]),
@@ -307,6 +335,22 @@ function renderReports(page) {
     });
   }
   page.appendChild(pastCard);
+}
+
+/* Ids of reports ticked in the list. Module-level so it survives checkbox
+   toggles (which don't re-render); cleared on every full render of the screen. */
+const selectedReports = new Set();
+
+async function deleteSelectedReports() {
+  const ids = [...selectedReports];
+  if (!ids.length) return;
+  if (!confirm(`Delete ${ids.length} report${ids.length === 1 ? '' : 's'}? This cannot be undone.`)) return;
+  try {
+    for (const id of ids) await data.remove('reports', id);
+    selectedReports.clear();
+    STATE.reports = await data.list('reports');
+    renderCurrentRoute();
+  } catch (e) { alert('Delete failed: ' + e.message); }
 }
 
 async function generateAndSave(type) {
