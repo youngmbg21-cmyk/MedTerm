@@ -38,7 +38,7 @@ function renderOverview(page) {
   const themeCount = new Set(STATE.matrix.map(r => r.theme_tag).filter(Boolean)).size;
 
   page.appendChild(h('div', { class: 'grid grid-cols-2 md:grid-cols-4 gap-4 mb-4' }, [
-    kpiCard('Interviews logged', totalInterviews, `target ~30 by Phase 2 close`),
+    kpiCard('Interviews logged', totalInterviews, `target ${SEGMENTS.reduce((s, x) => s + x.target, 0)} by Phase 2 close`),
     kpiCard('Same-day tagged', `${taggedPct}%`, taggedPct === 100 ? 'Hard rule holding' : 'Hard rule: must be 100%',
       taggedPct === 100 ? 'sage' : taggedPct >= 80 ? 'honey' : 'rose'),
     kpiCard('Outreach contacted', contacted, `${booked} booked or done`),

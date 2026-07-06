@@ -30,7 +30,7 @@ Voice rules:
 The six phases:
 0. Foundation & onboarding
 1. Outreach & exploratory interviews
-2. Depth interviews (target: ~30 interviews across segments until themes saturate)
+2. Depth interviews (across all segments, to their configured targets, until themes saturate)
 3. Sense-making (theme ranking, segment cards, kill-list, top-3 pains)
 4. Economics & stress-test (unit economics, break-point analysis)
 5. Decision & scoping (decision memo: GO / PIVOT / NO-GO)
