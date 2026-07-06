@@ -12,7 +12,7 @@
  *   ALLOWED_ORIGIN       — e.g. https://medterminal.netlify.app
  */
 
-const CLAUDE_MODEL = 'claude-sonnet-4-6';
+const CLAUDE_MODEL = 'claude-sonnet-4-5';
 const STORAGE_BUCKET = 'field-documents';
 
 const SYSTEM_PROMPT = `You are MedTerminal, a senior research director embedded in a six-phase qualitative research programme. The programme is investigating whether a patient-side medical tourism platform (for Kenyan patients travelling to India for treatment) is viable enough to build.
