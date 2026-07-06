@@ -853,6 +853,18 @@ const DATA_TABLES = new Set([
   'documents', 'hypotheses', 'evidence_links', 'ai_assessments',
 ]);
 
+// Which column records "who created this" on insert — it is NOT `created_by`
+// everywhere (see sql/schema.sql). Tables absent here have no such column, so
+// we stamp nothing. Stamping a non-existent column makes PostgREST 400 (PGRST204).
+const CREATOR_COLUMN: Record<string, string> = {
+  outreach: 'created_by', interviews: 'created_by', matrix: 'created_by',
+  scripts: 'created_by', economics: 'created_by', field_checks: 'created_by',
+  decision_memos: 'created_by', segment_cards: 'created_by', documents: 'created_by',
+  evidence_links: 'created_by', ai_assessments: 'created_by',
+  reports: 'generated_by', kill_list: 'killed_by',
+  // deliverables, hypotheses: no creator column — stamp nothing.
+};
+
 async function logAction(env: Env, actorId: string, action: string, table: string, recordId: string | null, newValues: unknown) {
   // Audit is best-effort — a write must never fail because the log did.
   try {
@@ -879,7 +891,8 @@ async function handleTableCrud(method: string, table: string, recordId: string |
   if (method === 'POST' && isWriteRole) {
     const body = await req.json();
     const row = body.fields || body;
-    row.created_by = member.id;
+    const creatorCol = CREATOR_COLUMN[table];
+    if (creatorCol) row[creatorCol] = member.id;
     if (table === 'documents') row.uploaded_by = member.display_name;
     const { data, status } = await supabaseRequest('POST', table, row, env);
     const created = Array.isArray(data) ? data[0] : data;
