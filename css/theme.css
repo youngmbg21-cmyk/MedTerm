@@ -167,6 +167,9 @@ body {
   font-size: 11px; line-height: 16px; font-weight: 500;
   border: 1px solid transparent; white-space: nowrap;
   max-width: 100%; overflow: hidden;
+  /* Never shrink below the label in a flex row — the neighbouring text wraps
+     instead. Without this, status chips get clipped ("Not starte…"). */
+  flex-shrink: 0;
 }
 /* Large chip — the Decision Brief leaning display only */
 .chip-lg { height: 36px; padding: 0 18px; font-size: 15px; line-height: 20px; }
