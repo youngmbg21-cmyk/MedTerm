@@ -1,5 +1,31 @@
 # PROGRESS.md
 
+## Referring doctor + aftercare + script de-duplication ✅ (2026-07-06)
+
+- New config segment **Referring doctor** (target 4, sum now 36 —
+  overview KPI computes it) flows automatically into every dropdown,
+  the interview groups and coverage strip, matrix pivot, saturation,
+  overview, reports, and all AI prompts. Comprehensive 11-section script:
+  referral moment, handover gap, document prep, trust, commission
+  economics, aftercare handback, channel test, requirements check.
+- New theme tags: 'Discovery — doctor referral' + three **Aftercare** tags
+  (finding follow-up care · records back home · complications &
+  readmission). Every segment script gained a tailored aftercare section
+  and its Requirements check now demands an aftercare data point.
+- **Legacy duplicates migrated away**: idempotent `migrateLocalDb()` in
+  data.js (runs at load and on backup import) retires untouched v1
+  'Patient / caregiver' and 'Agent / facilitator' stock scripts, upgrades
+  untouched outdated stock scripts as a NEW revertible version, and
+  backfills starters for scriptless segments. Edited lineages are never
+  touched; field data is never migrated.
+- Verified (Playwright): simulated a legacy workspace exactly like the
+  reported screenshot — after load the duplicate tabs are gone, Hospital
+  IPD shows Version 2 with aftercare (v1 in history), all 8 segment
+  scripts present, and an edited custom lineage survives untouched. Fresh
+  workspace: Referring doctor in the interview form, coverage strip,
+  overview (target 36), matrix pivot column, saturation; Aftercare tags in
+  the quote form and pivot rows. Full 23-route smoke × 2 viewports clean.
+
 ## Segment interview scripts ✅ (2026-07-05)
 
 - One comprehensive, versioned script per config segment (7 tabs, config

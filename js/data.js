@@ -19,8 +19,8 @@
 
    Records are flat snake_case objects matching sql/schema.sql.
    ============================================================ */
-import { DATA_MODE, AI_MODE, WORKER_URL } from './config.js';
-import { buildSeed, buildFreshFieldworkSeed, buildHypotheses } from './seed.js';
+import { DATA_MODE, AI_MODE, WORKER_URL, SEGMENT_NAMES } from './config.js';
+import { buildSeed, buildFreshFieldworkSeed, buildHypotheses, buildScripts } from './seed.js';
 
 const LS_KEY = 'medterm_data_v1';
 const IDB_NAME = 'medterm_files_v1';
@@ -130,6 +130,49 @@ function base64ToBlob(base64, mimeType) {
 
 let localDb = null;
 
+/* Stock scripts that were replaced when scripts became one-per-segment.
+   Only untouched version-1 copies are retired — any lineage the team has
+   edited (version > 1 exists) is never touched. */
+const LEGACY_STOCK_SCRIPTS = ['Patient / caregiver', 'Agent / facilitator'];
+
+/* One-time, idempotent catch-up for local workspaces created before the
+   current seed: retire superseded stock scripts, upgrade untouched stock
+   scripts to the current starter content AS A NEW VERSION (the old one
+   stays in history, revertible), and backfill a starter script for any
+   config segment that has none. Field data is never touched. */
+function migrateLocalDb(db) {
+  if (!Array.isArray(db.scripts)) return false;
+  let changed = false;
+  const versionsOf = (name) => db.scripts.filter(s => s.script_name === name);
+
+  LEGACY_STOCK_SCRIPTS.forEach(name => {
+    const versions = versionsOf(name);
+    if (versions.length === 1 && (versions[0].version || 1) === 1) {
+      db.scripts = db.scripts.filter(s => s.script_name !== name);
+      changed = true;
+    }
+  });
+
+  buildScripts().forEach(stock => {
+    if (!SEGMENT_NAMES.includes(stock.script_name)) return;
+    const versions = versionsOf(stock.script_name)
+      .sort((a, b) => (b.version || 0) - (a.version || 0));
+    if (!versions.length) {
+      db.scripts.push({ id: makeId(), created_at: new Date().toISOString(), ...stock });
+      changed = true;
+    } else if (versions.length === 1 && (versions[0].version || 1) === 1
+        && JSON.stringify(versions[0].content) !== JSON.stringify(stock.content)) {
+      db.scripts.push({
+        id: makeId(), created_at: new Date().toISOString(),
+        script_name: stock.script_name, version: 2, content: stock.content,
+        revert_note: 'Starter questions updated (aftercare + kill-criteria coverage)',
+      });
+      changed = true;
+    }
+  });
+  return changed;
+}
+
 function loadLocalDb() {
   if (localDb) return localDb;
   try {
@@ -137,6 +180,8 @@ function loadLocalDb() {
   } catch { localDb = null; }
   if (!localDb || typeof localDb !== 'object') {
     localDb = seedDb();
+    persistLocal();
+  } else if (migrateLocalDb(localDb)) {
     persistLocal();
   }
   return localDb;
@@ -231,6 +276,9 @@ const localAdapter = {
     // Backups made before the decision engine carry no hypotheses — restore
     // the stock framework rather than leaving the hypothesis board empty.
     if (!db.hypotheses.length) db.hypotheses = buildHypotheses();
+    // Backups made before scripts became one-per-segment get the same
+    // catch-up as live workspaces (legacy stock retired, starters filled in).
+    migrateLocalDb(db);
     localDb = db;
     persistLocal();
   },

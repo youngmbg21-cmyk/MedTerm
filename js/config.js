@@ -44,6 +44,7 @@ export const PHASES = [
 export const SEGMENTS = [
   { name: 'Patient',          target: 8 },
   { name: 'Caregiver',        target: 6 },
+  { name: 'Referring doctor', target: 4 },
   { name: 'Hospital IPD',     target: 5 },
   { name: 'Aggregator',       target: 3 },
   { name: 'Agent',            target: 4 },
@@ -56,12 +57,13 @@ export const SEGMENT_NAMES = SEGMENTS.map(s => s.name);
    Theme taxonomy
    ------------------------------------------------------------ */
 export const THEMES = [
-  'Discovery — WhatsApp/personal', 'Discovery — search/online', 'Discovery — broker/agent',
+  'Discovery — WhatsApp/personal', 'Discovery — search/online', 'Discovery — broker/agent', 'Discovery — doctor referral',
   'Trust — doctor reputation', 'Trust — price clarity', 'Trust — speed of reply', 'Trust — accreditation',
   'Friction — slow response', 'Friction — paperwork', 'Friction — language', 'Friction — money transfer', 'Friction — quote chasing',
   'Pain — financial', 'Pain — emotional', 'Pain — coordination', 'Pain — outcome',
   'Money — willingness to pay', 'Money — broker commission', 'Money — insurance',
   'Buyer — family abroad', 'Buyer — Nairobi family', 'Buyer — Hospital IPD',
+  'Aftercare — finding follow-up care', 'Aftercare — records back home', 'Aftercare — complications & readmission',
 ];
 
 export const OUTREACH_STATUSES = ['Cold', 'Sent', 'Replied', 'Booked', 'Done', 'Declined'];

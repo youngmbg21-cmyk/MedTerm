@@ -516,3 +516,51 @@ Dated 2026-07-04. Each entry is a decision the brief left open, plus the reasoni
     the version history doubles as the record of how the questions evolved
     with the research. Section structure stays human-controlled; the AI
     revises bodies, it does not invent or delete sections.
+
+## Referring doctor, aftercare, and the script migration — 2026-07-06
+
+78. **"Referring doctor" is a config segment (target 4), not a special
+    case.** Because segments have exactly one home (`js/config.js`), adding
+    the entry propagates everywhere with zero screen changes: interview
+    form dropdown, segment-grouped interview list and coverage strip,
+    matrix pivot column, saturation bars, overview coverage panel, report
+    coverage rows, outreach dropdown, and every AI prompt (segments ride
+    along in each request). Placed third in the list — patient, caregiver,
+    then the doctor who starts the journey — so every ordered surface reads
+    journey-wise. The overview KPI's interview target is now computed from
+    the config sum (36) instead of the stale hardcoded "~30"; the worker's
+    static prompt now defers to configured targets too.
+
+79. **Aftercare is a theme group, not a screen.** Three tags — finding
+    follow-up care · records back home · complications & readmission — plus
+    'Discovery — doctor referral' joined the taxonomy in config, so they
+    appear in the quote form, pivot rows, theme ranking, and AI context
+    automatically. Every one of the eight scripts gained a segment-specific
+    aftercare section (the patient's return, the caregiver's handover
+    chase, the referring doctor resuming care blind, the IPD's discharge
+    protocol, the aggregator/agent's post-flight void, the broker's
+    complications-exclusion question, the diaspora payer watching recovery
+    from abroad), and the Requirements checks now demand an aftercare data
+    point.
+
+80. **Duplicate script tabs were fixed with a data migration, not a UI
+    filter.** The screenshot showed 'Patient / caregiver' and
+    'Agent / facilitator' surviving in an existing workspace's localStorage
+    — hiding them would leave dead data. `migrateLocalDb()` runs once at
+    load (and on backup import), idempotently: (a) retires the two
+    superseded stock scripts ONLY if they are untouched version-1 copies —
+    any lineage with a version > 1 was edited by the team and is never
+    touched; (b) upgrades an untouched v1 stock script whose content is
+    outdated by appending the current starter content as version 2 with a
+    revert note — nothing is overwritten, history keeps the old questions;
+    (c) backfills a starter script for any config segment that has none.
+    Field data (interviews, quotes, notes) is never migrated. This
+    deliberately supersedes decision #76's "no silent writes" for STOCK
+    REFERENCE CONTENT only — starter scripts are the seed catching up, and
+    the one-tap starter CTA remains the mechanism in api mode where the
+    client must not write on load.
+
+81. **No new hypothesis records.** Referring doctors are a channel and an
+    aftercare actor, not a buyer — H1–H3 remain the board. If aftercare
+    evidence accumulates into a paid-service hypothesis, adding it is a
+    deliberate team act on the hypothesis board, not a config change.
