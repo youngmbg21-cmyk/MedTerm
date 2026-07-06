@@ -4,8 +4,9 @@
    ============================================================ */
 
 /* 'local' — data lives in localStorage, seeded with demo data, zero credentials.
-   'api'   — data lives in Supabase via the Cloudflare Worker; requires login. */
-export const DATA_MODE = 'local';
+   'api'   — data lives in Supabase via the claude-proxy Edge Function; every
+             active team member shares one synced workspace (requires login). */
+export const DATA_MODE = 'api';
 
 /* Your unique Supabase Connection Credentials */
 export const SUPABASE_URL = 'https://qezefhbywzvhgcavnopu.supabase.co';
