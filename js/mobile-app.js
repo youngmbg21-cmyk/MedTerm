@@ -1343,8 +1343,18 @@ function assistantSeed() {
     const which = overdue.join(', ');
     return `I've read the workspace. ${overdue.length} interview${overdue.length === 1 ? ' is' : 's are'} still untagged past 24h (${which}), which breaches the same-day hard rule. Want me to summarise ${overdue.length === 1 ? 'it' : 'them'} so you can tag fast?`;
   }
-  return "I've read the workspace — every interview is tagged and nothing is overdue. Ask me anything about where the project stands or what to do next.";
+  return "I've read the workspace — every interview is tagged and nothing is overdue. Ask me for a strategy read, ask me to stress-test the economics or steel-man the risk, or ask what to do next.";
 }
+
+/* Short chips send a fuller, analyst-grade instruction so a tap yields real
+   strategic reasoning rather than a one-liner. Mirrors the desktop QUICK_PROMPTS. */
+const STRATEGY_PROMPTS = [
+  ['Strategy read', 'Give me your current strategy read on whether this is viable enough to build. Reason across demand, willingness to pay, unit economics, trust/moat, and execution risk — pull the interviews, matrix, segment cards, economics, and evidence links first. Land on a leaning, say what it hinges on, and name the single most valuable piece of evidence we still lack.'],
+  ['Biggest risk', 'Argue the strongest case AGAINST building this. What is the most likely reason it fails, which kill criterion is closest to tripping, and what in our own data supports the bear case? Cite it.'],
+  ['Economics', 'Stress-test the unit economics. Pull the economics rows, name the single assumption the case rests on, and tell me what must be true at the break-point for this to work. Flag any number with no evidence behind it.'],
+  ['Compare segments', 'Compare the segments strategically using the segment cards and matrix. Which segment has the sharpest, best-paid pain — and which should we drop? Cite the pains and WTP per segment.'],
+  ['What now?', 'What is the single most important thing I should do today to de-risk the decision, given the state of the project? Be specific — name a person, a deliverable, or an interview.'],
+];
 
 function renderAssistant() {
   if (!UI.messages.length) UI.messages.push({ role: 'bot', text: assistantSeed() });
@@ -1357,7 +1367,7 @@ function renderAssistant() {
     }));
   });
   const quick = h('div', { style: 'padding:0 16px 8px;display:flex;flex-wrap:wrap;gap:7px;' },
-    ['Status check', 'What now?', 'Surface themes'].map(q => h('button', { class: 'pill', style: 'height:31px;font-size:11.5px;', onclick: () => sendChat(q), text: q })));
+    STRATEGY_PROMPTS.map(([label, prompt]) => h('button', { class: 'pill', style: 'height:31px;font-size:11.5px;', onclick: () => sendChat(prompt), text: label })));
   const input = h('input', { class: 'field', style: 'flex:1;height:42px;border-radius:12px;', placeholder: 'Ask about the project state…', value: UI.chatInput,
     oninput: (e) => { UI.chatInput = e.target.value; } });
   input.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); sendChat(input.value); } });
@@ -1366,7 +1376,7 @@ function renderAssistant() {
     h('div', { class: 'overlay-head', style: 'display:flex;align-items:flex-start;justify-content:space-between;gap:10px;' }, [
       h('div', {}, [
         h('div', { class: 'serif', style: 'font-size:19px;line-height:24px;', text: 'Research assistant' }),
-        h('div', { style: 'font-size:11.5px;color:#6E6A5E;margin-top:2px;', text: 'Reads your data · advises next steps' }),
+        h('div', { style: 'font-size:11.5px;color:#6E6A5E;margin-top:2px;', text: 'Reasons from your research · strategy analyst' }),
       ]),
       h('button', { class: 'icon-btn', style: 'width:34px;height:34px;color:#4A5651;font-size:15px;', onclick: () => setState({ assistantOpen: false }), text: '✕' }),
     ]),

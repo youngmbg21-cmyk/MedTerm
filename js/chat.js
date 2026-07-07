@@ -11,11 +11,12 @@ import { addActionConfirmation } from './actions.js';
 let currentSessionId = null;
 
 const QUICK_PROMPTS = [
-  ['Status check', 'Give me a one-paragraph status of where the project is right now. Be specific. Use the data.'],
-  ['Phase exit check', 'Assess our progress against the current phase exit criteria. What still needs to be done?'],
-  ['What now?', 'What is the single most important thing I should do today, given the state of the project? Be specific — name a person, a deliverable, or an interview.'],
-  ['Surface themes', 'Surface the strongest themes emerging from the matrix. Quote specific entries. Flag where evidence is still thin.'],
-  ['Search the notes', 'Search all field notes and documents for the most important thing we have learned that is NOT yet reflected in the theme matrix. Quote the source.'],
+  ['Strategy read', 'Give me your current strategy read on whether this is viable enough to build. Reason across demand, willingness to pay, unit economics, trust/moat, and execution risk — pull the interviews, matrix, segment cards, economics, and evidence links first. Land on a leaning, say what it hinges on, and name the single most valuable piece of evidence we still lack.'],
+  ['Steel-man the risk', 'Argue the strongest case AGAINST building this. What is the most likely reason this fails, which kill criterion is closest to tripping, and what evidence in our own data supports the bear case? Be specific and cite it.'],
+  ['Economics stress-test', 'Stress-test the unit economics. Pull the economics rows, name the single assumption the whole case rests on, and tell me what would have to be true at the break-point for this to work. Flag any number that has no evidence behind it.'],
+  ['Compare segments', 'Compare the segments strategically using the segment cards and matrix. Which segment has the sharpest, best-paid pain — and which should we drop? Cite the pains and WTP signal per segment.'],
+  ['What now?', 'What is the single most important thing I should do today to de-risk the decision, given the state of the project? Be specific — name a person, a deliverable, or an interview.'],
+  ['Search the notes', 'Search all field notes and documents for the most important thing we have learned that is NOT yet reflected in the theme matrix or an evidence link. Quote the source and say what it implies strategically.'],
 ];
 
 export function initChat() {
@@ -73,7 +74,7 @@ export function toggleChat(forceOpen) {
     if (!aiAvailable) {
       addChatMessage('bot', 'The assistant connects when AI_MODE is set to \'worker\' — it works with local data too. Everything else in the workspace works without it; see Settings for how to go live.');
     } else {
-      addChatMessage('bot', 'Hi. I read your interviews, outreach, matrix, and the hypothesis board every time you ask. Try a quick action below, or type a question.');
+      addChatMessage('bot', 'Hi. I read your interviews, outreach, matrix, economics, segment cards, and the hypothesis board every time you ask — then reason from them like a strategy analyst, not just report them. Ask for a strategy read, stress-test the economics, or steel-man the risk. Try a quick action below, or type a question.');
     }
   }
 }

@@ -70,6 +70,20 @@ When answering:
 - If asked "what should I do today?", name a specific person, deliverable, or interview
 - If evidence is thin on a topic, say so explicitly
 
+--- YOUR ROLE AS A STRATEGY ANALYST ---
+Beyond reporting where the programme stands, you are the team's strategy analyst. Your job is to REASON from the evidence to its business implications — not just describe the data. When a question has strategic weight (viability, positioning, pricing, go-to-market, sequencing, risk, "should we build this"), work it deliberately:
+
+1. Read the evidence first. Pull the relevant interviews, matrix entries, segment cards, economics, kill list, and evidence links BEFORE you reason. A strategic claim with no cited evidence is an inference — label it one.
+2. Reason across the lenses that matter, and say which ones the evidence actually supports versus where you are inferring:
+   - Demand — how sharp and how widespread is the pain? A top-3 pain for a real segment, or an occasional annoyance?
+   - Willingness to pay — does the WTP signal survive the gap between what people say and what they'd pay? Where is it thin?
+   - Unit economics — do the numbers in the economics table survive their own break-point? Name the single assumption the case rests on.
+   - Trust & moat — why would a Kenyan patient trust this over a hospital's own International Patient Department (IPD) or an existing agent? What is defensible?
+   - Execution & regulatory risk — what must be true operationally, and what could kill it? Map risks to the kill criteria on the board.
+3. Land on a read, not a shrug. State the leaning (GO / PIVOT / NO-GO / INSUFFICIENT), the one or two things it hinges on, and the single most valuable piece of evidence you do not yet have. Then argue the strongest case AGAINST your own read before the team has to.
+
+You may reason beyond the literal records — draw implications, propose strategy, name second-order effects, sketch what to test next — but keep inference visibly separate from cited evidence, and stay conservative when the data is thin (~28 interviews is a small n; treat it like one). You still argue, never decide: the leaning is advisory, the humans co-sign, divergence gets written down, and no numeric confidence scores appear anywhere.
+
 This workspace is the team's sole repository. You have tools that reach everything in it:
 search_notes covers every notes field and document contents; read_document returns full
 document text (PDFs are transcribed, images shown to you). Search before saying you don't
@@ -387,6 +401,21 @@ async function executeToolCall(
       if (input.phase !== undefined) rows = rows.filter(r => r.phase === input.phase);
       if (input.status) rows = rows.filter(r => r.status === input.status);
       rows = [...rows].sort((a, b) => (a.phase || 0) - (b.phase || 0));
+      return { records: rows, count: rows.length };
+    }
+    case 'query_economics': {
+      let rows: any[] = await fetchRows(env, localData, 'economics');
+      if (input.segment) rows = rows.filter(r => r.segment === input.segment);
+      rows = rows.slice(0, cap(input.limit));
+      return { records: rows, count: rows.length };
+    }
+    case 'query_segment_cards': {
+      let rows: any[] = await fetchRows(env, localData, 'segment_cards');
+      if (input.segment) rows = rows.filter(r => r.segment === input.segment);
+      return { records: rows, count: rows.length };
+    }
+    case 'query_kill_list': {
+      const rows: any[] = (await fetchRows(env, localData, 'kill_list')).slice(0, cap(input.limit));
       return { records: rows, count: rows.length };
     }
     case 'query_hypotheses': {
@@ -777,6 +806,9 @@ async function handleChat(body: any, env: Env, userId: string) {
     { name: 'query_matrix', description: 'Query theme matrix entries with optional filters.', input_schema: { type: 'object', properties: { theme_tag: { type: 'string', description: 'Filter by theme tag' }, segment: { type: 'string', description: 'Filter by segment' }, min_severity: { type: 'number', description: 'Minimum severity (1-5)' }, wtp: { type: 'string', description: 'Filter by WTP: Y, Maybe, N' }, limit: { type: 'number', description: 'Max records to return (default 20)' } } } },
     { name: 'query_scripts', description: 'Query interview scripts. Returns the latest version of each script.', input_schema: { type: 'object', properties: { script_name: { type: 'string', description: 'Filter by script name' } } } },
     { name: 'query_deliverables', description: 'Query phase deliverables and exit criteria.', input_schema: { type: 'object', properties: { phase: { type: 'number', description: 'Filter by phase number (0-5)' }, status: { type: 'string', description: 'Filter by status' } } } },
+    { name: 'query_economics', description: 'Query the unit-economics rows: assumptions, cost/revenue lines, break-point analysis. Use this for any pricing, margin, or "do the numbers work" question — never estimate economics you can query.', input_schema: { type: 'object', properties: { segment: { type: 'string', description: 'Filter by segment (optional)' }, limit: { type: 'number', description: 'Max records to return (default 50)' } } } },
+    { name: 'query_segment_cards', description: 'Query the per-segment synthesis cards: each segment\'s top pains, willingness-to-pay read, demand strength, and the summary the team has written. The fastest way to compare segments strategically.', input_schema: { type: 'object', properties: { segment: { type: 'string', description: 'Filter by segment name (optional)' } } } },
+    { name: 'query_kill_list', description: 'Query the kill list — ideas, segments, or features the team has explicitly ruled out, with the reason and who killed it. Read this before proposing anything, so you never re-propose a killed direction.', input_schema: { type: 'object', properties: { limit: { type: 'number', description: 'Max records to return (default 50)' } } } },
     { name: 'search_notes', description: 'Full-text search across EVERYTHING written in the workspace: interview field notes and topics, outreach notes, matrix quotes and notes, deliverable evidence, and document descriptions/contents. Use this whenever a question could be answered by the team\'s notes.', input_schema: { type: 'object', properties: { query: { type: 'string', description: 'Words to search for (case-insensitive substring match)' }, limit: { type: 'number', description: 'Max results per table (default 10)' } }, required: ['query'] } },
     { name: 'list_documents', description: 'List uploaded field documents (filename, segment, linked interview, description).', input_schema: { type: 'object', properties: { segment: { type: 'string', description: 'Filter by segment' }, interview_id: { type: 'string', description: 'Filter by linked interview, e.g. INT-004' } } } },
     { name: 'read_document', description: 'Read the full contents of an uploaded document by its filename or id. Text/CSV/markdown return verbatim text; PDFs are transcribed; images are returned for you to look at.', input_schema: { type: 'object', properties: { filename: { type: 'string', description: 'Exact or partial filename' }, document_id: { type: 'string', description: 'Document record id (alternative to filename)' } } } },

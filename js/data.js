@@ -465,6 +465,7 @@ export function aiDataSlices(state) {
     field_checks: state.field_checks,
     economics: state.economics,
     kill_list: state.kill_list,
+    segment_cards: state.segment_cards,
     documents: state.documents,
     scripts: state.scripts,
   };
