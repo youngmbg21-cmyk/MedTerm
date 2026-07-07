@@ -260,7 +260,7 @@ function openImportPreview(dump, filename, onDone) {
     ]),
   ]);
 
-  root.appendChild(h('div', { class: 'modal-bg fade-in' }, [h('div', { class: 'modal p-6' }, [form])]));
+  root.appendChild(h('div', { class: 'modal-bg fade-in' }, [h('div', { class: 'modal' }, [form])]));
 }
 
 /* ------------------------------------------------------------
@@ -306,7 +306,7 @@ function openTypedConfirm({ title, body, word, onConfirm, dangerText }) {
     ]),
   ]);
 
-  root.appendChild(h('div', { class: 'modal-bg fade-in' }, [h('div', { class: 'modal p-6' }, [form])]));
+  root.appendChild(h('div', { class: 'modal-bg fade-in' }, [h('div', { class: 'modal' }, [form])]));
 }
 
 function confirmStartFresh() {

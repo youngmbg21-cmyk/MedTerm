@@ -215,7 +215,7 @@ function openScriptEditor(scriptName, latest, draftContent) {
   ]);
 
   root.appendChild(h('div', { class: 'modal-bg fade-in', onclick: (e) => { if (e.target.classList.contains('modal-bg')) closeModal(); } }, [
-    h('div', { class: 'modal p-6', style: 'max-width:640px;' }, [form]),
+    h('div', { class: 'modal', style: 'max-width:640px;' }, [form]),
   ]));
 }
 
