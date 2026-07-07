@@ -3,7 +3,7 @@
    runs when AI_MODE is 'worker' (independent of the data mode).
    Otherwise it shows a calm disabled state instead of erroring.
    ============================================================ */
-import { STATE, h } from './app.js';
+import { STATE, h, lockScroll, unlockScroll } from './app.js';
 import { CURRENT_PHASE, PHASES, SEGMENTS } from './config.js';
 import { aiAvailable, chatRequest, aiDataSlices } from './data.js';
 import { addActionConfirmation } from './actions.js';
@@ -44,11 +44,23 @@ export function initChat() {
   }
 }
 
+/* On phones/tablets the chat panel is a full-screen overlay, so the page
+   behind it must be frozen like any other overlay; on desktop it's a docked
+   side panel and the page stays scrollable. Tracked so the lock is released
+   symmetrically no matter how the panel is toggled. */
+let chatScrollLocked = false;
+function syncChatScrollLock(isOpen) {
+  const overlay = isOpen && window.matchMedia('(max-width: 1024px)').matches;
+  if (overlay && !chatScrollLocked) { lockScroll(); chatScrollLocked = true; }
+  else if (!overlay && chatScrollLocked) { unlockScroll(); chatScrollLocked = false; }
+}
+
 export function toggleChat(forceOpen) {
   const panel = document.getElementById('chat-panel');
   if (forceOpen === true) panel.classList.remove('closed');
   else if (forceOpen === false) panel.classList.add('closed');
   else panel.classList.toggle('closed');
+  syncChatScrollLock(!panel.classList.contains('closed'));
 
   if (!panel.classList.contains('closed') && document.getElementById('chat-messages').children.length === 0) {
     if (!aiAvailable) {

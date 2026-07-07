@@ -256,11 +256,27 @@ export function buildNav() {
    is a no-op when the drawer was never opened). */
 let drawerReturnFocus = null;
 
+/* Scroll lock — while an overlay (modal, drawer, chat) owns the screen, the
+   page beneath must stay still: no rubber-band, no sideways drift behind a
+   fixed layer. A depth counter keeps it correct when overlays overlap (e.g. a
+   modal opened while the chat panel is open) — the page only unlocks once the
+   last overlay closes. The visual containment lives in css/theme.css. */
+let scrollLockDepth = 0;
+export function lockScroll() {
+  scrollLockDepth += 1;
+  document.body.classList.add('scroll-locked');
+}
+export function unlockScroll() {
+  scrollLockDepth = Math.max(0, scrollLockDepth - 1);
+  if (scrollLockDepth === 0) document.body.classList.remove('scroll-locked');
+}
+
 export function openSidebar() {
   const sb = document.getElementById('sidebar');
+  if (sb.classList.contains('open')) return;
   sb.classList.add('open');
   document.getElementById('mobile-overlay').classList.add('open');
-  document.body.style.overflow = 'hidden';
+  lockScroll();
   drawerReturnFocus = document.activeElement;
   const first = sb.querySelector('a, button');
   if (first) first.focus();
@@ -271,7 +287,7 @@ export function closeSidebar() {
   if (!sb.classList.contains('open')) return;
   sb.classList.remove('open');
   document.getElementById('mobile-overlay').classList.remove('open');
-  document.body.style.overflow = '';
+  unlockScroll();
   if (drawerReturnFocus && typeof drawerReturnFocus.focus === 'function') drawerReturnFocus.focus();
   drawerReturnFocus = null;
 }
@@ -388,6 +404,8 @@ export function emptyState(title, sub, action) {
    ------------------------------------------------------------ */
 export function openModal(title, fields, onSubmit, submitLabel = 'Save', { danger } = {}) {
   const root = document.getElementById('modal-root');
+  // Re-opening replaces the current modal; only lock once for the modal layer.
+  const alreadyOpen = root.children.length > 0;
   root.innerHTML = '';
 
   const form = h('form', { onsubmit: (e) => {
@@ -415,10 +433,14 @@ export function openModal(title, fields, onSubmit, submitLabel = 'Save', { dange
     class: 'modal-bg fade-in',
     onclick: (e) => { if (e.target.classList.contains('modal-bg')) closeModal(); },
   }, [h('div', { class: 'modal p-6' }, [form])]));
+  if (!alreadyOpen) lockScroll();
 }
 
 export function closeModal() {
-  document.getElementById('modal-root').innerHTML = '';
+  const root = document.getElementById('modal-root');
+  const wasOpen = root.children.length > 0;
+  root.innerHTML = '';
+  if (wasOpen) unlockScroll();
 }
 
 export function formField(label, key, type, value, options, inputType, attrs = {}) {
