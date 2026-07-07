@@ -406,31 +406,36 @@ function renderToday() {
   const interviews = STATE.interviews;
   const outreach = STATE.outreach;
   const tagged = interviews.filter(isTagged).length;
-  const taggedPct = interviews.length ? Math.round((tagged / interviews.length) * 100) : 100;
+  // Null (not 100) when there are no interviews — an empty ledger must never
+  // masquerade as "100% same-day tagged" and green-light the hard rule.
+  const taggedPct = interviews.length ? Math.round((tagged / interviews.length) * 100) : null;
   const contacted = outreach.filter(o => o.status && o.status !== 'Cold').length;
   const bookedDone = outreach.filter(o => ['Booked', 'Done'].includes(o.status)).length;
   const themeCount = new Set(STATE.matrix.map(m => m.theme_tag).filter(Boolean)).size;
 
   // phase rail
   const rail = h('div', { class: 'mtscroll', style: 'display:flex;gap:6px;overflow-x:auto;' });
+  let currentPhaseEl = null;
   PHASES.forEach(p => {
     const current = p.n === CURRENT_PHASE, done = p.n < CURRENT_PHASE;
-    const t = done ? TONE.sage : current ? TONE.line : TONE.line;
     const bg = done ? TONE.sage.bg : '#fff';
     const border = current ? '#3F5A4D' : done ? TONE.sage.border : '#E5DDD0';
     const ink = done ? '#3F5A4D' : current ? '#1F2A28' : '#6E6A5E';
     const pct = p.n < CURRENT_PHASE ? '100%' : p.n === CURRENT_PHASE ? '20%' : '—';
-    rail.appendChild(h('div', { style: `flex:0 0 auto;min-width:74px;padding:9px 11px;border-radius:12px;border:1px solid ${border};background:${bg};` }, [
+    const cell = h('div', { style: `flex:0 0 auto;min-width:74px;padding:9px 11px;border-radius:12px;border:1px solid ${border};background:${bg};` }, [
       h('div', { class: 'micro', style: `color:${ink};font-size:9.5px;`, text: `Phase ${p.n}` }),
       h('div', { class: 'serif', style: `font-size:13px;line-height:16px;margin-top:2px;color:${ink};`, text: p.name }),
       h('div', { class: 'num', style: `font-size:12px;color:${ink};opacity:.85;margin-top:3px;`, text: pct }),
-    ]));
+    ]);
+    if (current) currentPhaseEl = cell;
+    rail.appendChild(cell);
   });
+  keepActiveInView(rail, currentPhaseEl); // don't let the current phase sit clipped off-frame
 
   // KPIs
   const kpis = [
     { value: String(interviews.length), label: 'Interviews logged', note: 'target 36 by phase 2 close', color: '#1F2A28' },
-    { value: `${taggedPct}%`, label: 'Same-day tagged', note: 'hard rule: must be 100%', color: taggedPct >= 100 ? '#3F5A4D' : '#755A1E' },
+    { value: taggedPct == null ? '—' : `${taggedPct}%`, label: 'Same-day tagged', note: 'hard rule: must be 100%', color: taggedPct == null ? '#6E6A5E' : (taggedPct >= 100 ? '#3F5A4D' : '#755A1E') },
     { value: String(contacted), label: 'Outreach contacted', note: `${bookedDone} booked or done`, color: '#1F2A28' },
     { value: String(themeCount), label: 'Themes surfaced', note: 'rich pool', color: '#1F2A28' },
   ];
@@ -511,6 +516,7 @@ function attnRow(tone, text, onclick) {
 /* ------------------------------------------------------------ INTERVIEWS */
 function renderInterviews() {
   const rows = [...STATE.interviews].sort((a, b) => String(b.date || '').localeCompare(String(a.date || '')));
+  if (!rows.length) return screenWrap([emptyCard('No interviews logged yet', 'Log the first from the + Log button. Every conversation and its field notes live here.')]);
   const overdue = rows.filter(isOverdue);
   const kids = [];
   if (overdue.length) kids.push(h('div', { class: 'banner rose', style: 'margin-bottom:12px;' }, [
@@ -537,6 +543,7 @@ function renderInterviews() {
 /* ------------------------------------------------------------ OUTREACH */
 function renderOutreach() {
   const rows = [...STATE.outreach].sort((a, b) => (isStalled(b) - isStalled(a)) || String(b.first_contact || '').localeCompare(String(a.first_contact || '')));
+  if (!rows.length) return screenWrap([emptyCard('No contacts yet', 'Add the first with the + Contact button. Outreach comes before interviews.')]);
   const stalled = rows.filter(isStalled);
   const contacted = rows.filter(o => o.status && o.status !== 'Cold').length;
   const bookedDone = rows.filter(o => ['Booked', 'Done'].includes(o.status)).length;
@@ -563,6 +570,7 @@ function renderOutreach() {
 
 /* ------------------------------------------------------------ MATRIX */
 function renderMatrix() {
+  if (!STATE.matrix.length) return screenWrap([emptyCard('Nothing tagged yet', 'Tag quotes from an interview (+ Quote) — the matrix ranks them by theme, severity and willingness-to-pay.')]);
   const ranked = rankThemes(STATE.matrix);
   const missing = STATE.interviews.filter(isOverdue).map(r => r.interview_id);
   const kids = [];
@@ -636,11 +644,12 @@ function renderPains() {
       h('div', { style: 'font-size:11px;color:#6E6A5E;text-align:right;margin-top:6px;', text: strongest.interview_id || '' }),
     ]);
   });
-  return screenWrap(cards, '16px 16px 28px', '12px');
+  return screenWrap(cards.length ? cards : [emptyCard('No pains ranked yet', 'The top-3 pains surface once quotes are tagged in the matrix.')], '16px 16px 28px', '12px');
 }
 
 /* ------------------------------------------------------------ INSIGHTS: THEMES */
 function renderThemes() {
+  if (!STATE.matrix.length) return screenWrap([emptyCard('No themes yet', 'Themes rank themselves once you tag quotes in the matrix.')]);
   const ranked = rankThemes(STATE.matrix);
   const themeCount = new Set(STATE.matrix.map(m => m.theme_tag).filter(Boolean)).size;
   const list = h('div', { class: 'listcard' });

@@ -48,3 +48,10 @@ recent work and the reported symptoms live), with desktop checked where shared.
   an "Edit" affordance to the populated view. Verified: saves round-trip.
 
 _(further batches appended below as they land)_
+
+### Batch A — missing empty states + phase-rail clip + false-100% (P10, P3)
+- **`renderInterviews` / `renderOutreach` / `renderMatrix` / `renderThemes` / `renderPains`** — on empty data these rendered a count line over an empty `.listcard` sliver (or, for pains, a completely blank screen). Root cause (P10): list screens mapped over `STATE.<table>` with no length guard. Fix: early-return an `emptyCard(...)` when the source is empty. Verified: all six show a proper empty state, zero empty `.listcard`s, no console errors.
+- **Today phase rail** — `overflow-x:auto` row highlighting the current phase but NOT calling `keepActiveInView` (P3, a missed instance of the earlier sub-nav fix). Fix: capture the current-phase cell and `keepActiveInView(rail, cell)` so it's never clipped off-frame. (Also removed a dead unused `const t` in the loop.)
+- **Today "Same-day tagged" KPI showed 100% with zero interviews** — `taggedPct = interviews.length ? … : 100` made an empty ledger read as a perfect, green, rule-satisfied 100% (dangerous — weakens the same-day hard rule, CLAUDE.md rule 6). Fix: null → render "—" in a neutral color when there are no interviews. Verified: empty Today shows "—".
+
+Note discovered (logged in DEFERRED): the mobile app writes the URL hash on render but has no `hashchange` listener, so runtime hash edits / browser back-forward don't navigate (deep-links on load do work).
