@@ -217,9 +217,9 @@ export function buildNav() {
       h('span', { class: 'micro', text: item.label }),
       h('span', { class: 'nav-group-right' }, [
         locked
-          ? h('span', { class: 'nav-lock', title: `Unlocks at phase ${item.unlockAt}`, text: `🔒 phase ${item.unlockAt}` })
+          ? h('span', { class: 'nav-lock', title: `Ahead of the current phase — opens early`, text: `🔒 phase ${item.unlockAt}` })
           : (item.phaseLabel ? h('span', { class: 'nav-phase-badge', text: item.phaseLabel }) : null),
-        locked ? null : chevron,
+        chevron,
       ].filter(Boolean)),
     ]);
     const list = h('div', { class: 'nav-group-list' });
@@ -233,15 +233,10 @@ export function buildNav() {
       list.style.display = collapsed ? 'none' : '';
       chevron.style.transform = collapsed ? '' : 'rotate(90deg)';
     }
-    // A locked group has no chevron and must not expand — otherwise clicking its
-    // header reveals routes the 🔒 badge says are inaccessible and lets you walk
-    // straight into a future phase. Keep it collapsed and inert.
-    if (locked) {
-      header.style.cursor = 'default';
-      header.setAttribute('aria-disabled', 'true');
-    } else {
-      header.addEventListener('click', () => { collapsed = !collapsed; applyCollapsed(); });
-    }
+    // Every group — including phases ahead of the current one — expands on tap.
+    // The 🔒 badge stays as a hint that the section is ahead of schedule, but it
+    // never blocks access: the lead can work or review any phase early.
+    header.addEventListener('click', () => { collapsed = !collapsed; applyCollapsed(); });
     applyCollapsed();
 
     group.appendChild(header);
@@ -249,11 +244,9 @@ export function buildNav() {
     nav.appendChild(group);
   });
 
-  // route clicks (delegated per element so .active toggling keeps working).
-  // Guard locked groups so a route can never be entered from a locked section.
+  // route clicks (delegated per element so .active toggling keeps working)
   nav.querySelectorAll('[data-route]').forEach(el => {
-    el.addEventListener('click', (e) => {
-      if (el.closest('.nav-group.locked')) { e.preventDefault(); return; }
+    el.addEventListener('click', () => {
       go(el.dataset.route);
       closeSidebar();
     });
