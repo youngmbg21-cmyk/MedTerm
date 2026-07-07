@@ -68,3 +68,10 @@ Note discovered (logged in DEFERRED): the mobile app writes the URL hash on rend
 - **Chat answer could attach to the wrong bubble / crash on Clear** `sendChat` wrote `UI.messages[length-1]` after the await. A second send or a Clear mid-flight made that index wrong (answer on the wrong question, or a bogus `-1` write). Fix: hold the typing placeholder by object identity, replace it via `indexOf`, and bail if it's gone (cleared). Verified: Clear mid-flight drops the pending answer with no crash.
 - **Rapid verdict taps created duplicate memo records** `pickVerdict`/`saveMemo` chose create-vs-update from `decision_memos[0]` with no in-flight guard — two quick taps both created a memo, losing a verdict. Fix: `UI.savingMemo` guard + disabled/dimmed seats while saving. Verified: triple-tap creates only one record.
 - **Brief leaning card was a dead tap before any assessment** — it was always a `cursor:pointer` button whose handler was `() => {}` when no assessment existed. Fix: render a plain div (no pointer, no dead onclick) until an assessment exists; only then is it the tappable "open the assessment" affordance.
+
+### Batch E — a11y / interaction polish (P13, additive)
+- **No `:focus-visible` anywhere** (design contract requires rings) — added a global focus-visible outline for keyboard/switch users.
+- **No pressed/`:active` feedback** on any control (no hover on touch → taps felt dead) — added a subtle `filter: brightness(.95)` press state to all buttons/pills/tabs/rows.
+- **`.btn-link` was a ~16px tap target** used for primary nav (form Cancel, "‹ More"/"‹ Interviews" back) — now a real 44px inline-flex target. Verified: Cancel is 44px, header still aligned.
+- **Bottom tab bar used a hardcoded 22px inset** instead of the iOS home-indicator safe area — now `max(12px, env(safe-area-inset-bottom))`; `.tab` given a 44px min-height hit area. Verified: tab 44px.
+- **`.icon-btn` 36→40px** (header/overlay-dismiss — most frequent controls). Inline verdict seats 32→38px and Document "View" 30→36px were bumped in their batches.

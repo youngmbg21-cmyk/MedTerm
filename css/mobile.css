@@ -46,6 +46,16 @@ a:hover { color: var(--clay-hover); }
 @keyframes mtrise  { from { transform: translateY(100%); } to { transform: translateY(0); } }
 @media (prefers-reduced-motion: reduce) { * { animation: none !important; } }
 
+/* Interactive states — the design contract asks for :focus-visible rings and
+   pressed feedback; the kit had neither. Keyboard/switch users now get a ring,
+   and taps get a subtle press response (no hover on touch). */
+:focus-visible { outline: 2px solid var(--sage); outline-offset: 2px; border-radius: 8px; }
+.btn:active, .btn-line:active, .btn-primary:active, .btn-danger:active, .btn-go:active,
+.btn-link:active, .icon-btn:active, .pill:active, .seg-btn:active, .tab:active, .rowbtn:active {
+  filter: brightness(0.95);
+}
+button:disabled, .btn:disabled { cursor: default; }
+
 /* ---------------------------------------------------------------- SHELL */
 /* On a phone the frame fills the screen; on a large desktop screen it centres
    as a device for design preview. */
@@ -75,7 +85,7 @@ a:hover { color: var(--clay-hover); }
 .hdr-title { margin: 0; font-size: 23px; line-height: 27px; color: var(--ink); }
 .hdr-q { font-size: 12px; line-height: 16px; color: var(--ink-soft); margin-top: 3px; }
 .hdr-actions { display: flex; align-items: center; gap: 7px; flex-shrink: 0; }
-.icon-btn { width: 36px; height: 36px; border-radius: 10px; border: 1px solid var(--line); background: #fff; color: var(--sage); cursor: pointer; display: inline-flex; align-items: center; justify-content: center; }
+.icon-btn { width: 40px; height: 40px; border-radius: 10px; border: 1px solid var(--line); background: #fff; color: var(--sage); cursor: pointer; display: inline-flex; align-items: center; justify-content: center; }
 .moreback { padding: 0 18px 11px; }
 .subnav { display: flex; gap: 7px; overflow-x: auto; padding: 0 18px 11px; }
 
@@ -85,9 +95,9 @@ a:hover { color: var(--clay-hover); }
 .tabbar {
   flex-shrink: 0; z-index: 46; background: rgba(245,241,234,0.96);
   backdrop-filter: saturate(150%) blur(10px); -webkit-backdrop-filter: saturate(150%) blur(10px);
-  border-top: 1px solid var(--line); padding: 8px 6px 22px; display: flex; justify-content: space-around;
+  border-top: 1px solid var(--line); padding: 8px 6px max(12px, env(safe-area-inset-bottom)); display: flex; justify-content: space-around;
 }
-.tab { flex: 1; background: none; border: none; cursor: pointer; display: flex; flex-direction: column; align-items: center; gap: 3px; color: var(--ink-mute); }
+.tab { flex: 1; min-height: 44px; background: none; border: none; cursor: pointer; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; color: var(--ink-mute); }
 .tab.active { color: var(--sage); }
 .tab span { font-size: 9.5px; font-weight: 500; }
 
@@ -128,7 +138,7 @@ a:hover { color: var(--clay-hover); }
 .btn-go { height: 36px; padding: 0 14px; border: none; background: #3B6E4E; color: #fff; font-size: 12.5px; }
 .btn-go.tall { height: 40px; padding: 0 18px; font-size: 13px; }
 .btn-line { height: 36px; padding: 0 14px; border: 1px solid var(--line); background: #fff; color: var(--ink-soft); font-size: 12.5px; }
-.btn-link { background: none; border: none; color: var(--clay); font-family: 'Inter'; font-size: 13px; cursor: pointer; padding: 0; }
+.btn-link { background: none; border: none; color: var(--clay); font-family: 'Inter'; font-size: 13px; cursor: pointer; min-height: 44px; padding: 0 4px; display: inline-flex; align-items: center; }
 .btn-link.lg { font-size: 14px; }
 
 /* ---------------------------------------------------------------- FIELDS */
