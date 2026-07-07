@@ -254,6 +254,8 @@ function openMatrixForm(existing) {
     formField('Notes', 'notes', 'textarea', r.notes),
   ], async (form) => {
     if (form.severity) form.severity = Number(form.severity);
+    // '' would violate the FK to interviews(interview_id) — unlinked is NULL.
+    if (!form.interview_id) form.interview_id = null;
     try {
       let saved;
       if (existing) saved = await data.update('matrix', existing.id, form);

@@ -181,7 +181,7 @@ function openKillForm() {
   openModal('Kill a hypothesis', [
     formField('Hypothesis', 'hypothesis', 'textarea', ''),
     formField('Evidence that killed it', 'evidence', 'textarea', ''),
-    formField('Date', 'killed_date', 'input', new Date().toISOString().slice(0, 10), null, 'date'),
+    formField('Date', 'killed_date', 'input', new Date().toISOString().slice(0, 10), null, 'date', { required: true }),
   ], async (form) => {
     if (!form.hypothesis || !form.evidence) { alert('Hypothesis and evidence are both required.'); return; }
     try {

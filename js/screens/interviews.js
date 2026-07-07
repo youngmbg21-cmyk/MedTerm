@@ -284,7 +284,7 @@ function renderInterviews(page) {
 function openInterviewForm(existing) {
   const r = existing || {};
   const fields = [
-    formField('Date', 'date', 'input', r.date || new Date().toISOString().slice(0, 10), null, 'date'),
+    formField('Date', 'date', 'input', r.date || new Date().toISOString().slice(0, 10), null, 'date', { required: true }),
     formField('Interviewer', 'interviewer', 'select', r.interviewer, interviewerOptions()),
     formField('Segment', 'segment', 'select', r.segment, SEGMENT_NAMES),
     formField('Initials', 'initials', 'input', r.initials),
