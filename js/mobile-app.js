@@ -1486,7 +1486,12 @@ function renderAssistant() {
         h('div', { class: 'serif', style: 'font-size:19px;line-height:24px;', text: 'Research assistant' }),
         h('div', { style: 'font-size:11.5px;color:#6E6A5E;margin-top:2px;', text: 'Reasons from your research · strategy analyst' }),
       ]),
-      h('button', { class: 'icon-btn', style: 'width:34px;height:34px;color:#4A5651;font-size:15px;', onclick: () => setState({ assistantOpen: false }), text: '✕' }),
+      h('div', { style: 'display:flex;align-items:center;gap:8px;flex-shrink:0;' }, [
+        UI.messages.some(m => m.role === 'user')
+          ? h('button', { class: 'btn-link', style: 'font-size:12.5px;', onclick: () => clearChat(), text: 'Clear' })
+          : null,
+        h('button', { class: 'icon-btn', style: 'width:34px;height:34px;color:#4A5651;font-size:15px;', onclick: () => setState({ assistantOpen: false }), text: '✕' }),
+      ]),
     ]),
     msgs, quick,
     h('div', { style: 'padding:10px 16px 22px;border-top:1px solid #EFE9DD;display:flex;gap:8px;align-items:center;background:#F5F1EA;' }, [
@@ -1494,6 +1499,14 @@ function renderAssistant() {
     ]),
   ]);
 }
+/* Wipe the conversation. Next render re-seeds the opening message, so the
+   panel returns to its fresh state rather than going blank. */
+function clearChat() {
+  UI.messages = [];
+  UI.chatInput = '';
+  render();
+}
+
 async function sendChat(text) {
   const msg = (text || '').trim();
   if (!msg) return;
