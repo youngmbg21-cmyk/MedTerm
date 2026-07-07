@@ -27,6 +27,13 @@ export function initChat() {
   input.addEventListener('keydown', (e) => {
     if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendChat(); }
   });
+  // Crossing the mobile/desktop breakpoint changes whether the open chat panel
+  // is a full-screen overlay (locks the page) or a docked side panel (does not).
+  // Re-sync on that change so a rotate-to-desktop can't leave the page pinned.
+  window.matchMedia('(max-width: 1024px)').addEventListener('change', () => {
+    const panel = document.getElementById('chat-panel');
+    syncChatScrollLock(!panel.classList.contains('closed'));
+  });
 
   const quick = document.getElementById('chat-quick');
   QUICK_PROMPTS.forEach(([label, prompt]) => {

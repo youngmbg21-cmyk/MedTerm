@@ -723,7 +723,7 @@ Draft "${body.section_label}" now.`;
   const EMPTY_AS_NULL = {
     outreach: ['first_contact'],
     interviews: ['date'],
-    matrix: ['severity', 'interview_id'],
+    matrix: ['severity', 'interview_id', 'wtp'],
     kill_list: ['killed_date'],
     field_checks: ['confirmed_date'],
   };

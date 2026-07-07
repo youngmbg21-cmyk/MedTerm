@@ -248,13 +248,19 @@ function openMatrixForm(existing) {
   openModal(existing ? 'Edit quote' : 'Add quote', [
     formField('Interview', 'interview_id', 'select', r.interview_id, ['', ...interviewIds]),
     formField('Quote / observation', 'quote', 'textarea', r.quote),
-    formField('Theme tag', 'theme_tag', 'select', r.theme_tag, THEMES),
-    formField('Segment', 'segment', 'select', r.segment, SEGMENT_NAMES),
-    formField('Severity (1–5)', 'severity', 'select', String(r.severity || ''), ['1', '2', '3', '4', '5']),
-    formField('Willingness to pay', 'wtp', 'select', r.wtp, ['Y', 'Maybe', 'N']),
+    // Blank-first: a select with no blank option and no prior value reports its
+    // FIRST option, so an untouched field would silently save fabricated data
+    // (theme, segment, severity=1, wtp=Y) straight into the decision analytics.
+    formField('Theme tag', 'theme_tag', 'select', r.theme_tag, ['', ...THEMES]),
+    formField('Segment', 'segment', 'select', r.segment, ['', ...SEGMENT_NAMES]),
+    formField('Severity (1–5)', 'severity', 'select', String(r.severity || ''), ['', '1', '2', '3', '4', '5']),
+    formField('Willingness to pay', 'wtp', 'select', r.wtp, ['', 'Y', 'Maybe', 'N']),
     formField('Notes', 'notes', 'textarea', r.notes),
   ], async (form) => {
-    if (form.severity) form.severity = Number(form.severity);
+    // Empty severity/wtp must be NULL, not '' — both have CHECK constraints
+    // (severity 1–5, wtp Y/Maybe/N) that reject the empty string.
+    form.severity = form.severity ? Number(form.severity) : null;
+    if (!form.wtp) form.wtp = null;
     // '' would violate the FK to interviews(interview_id) — unlinked is NULL.
     if (!form.interview_id) form.interview_id = null;
     try {

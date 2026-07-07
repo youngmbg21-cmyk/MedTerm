@@ -18,10 +18,16 @@ function renderTemplates(page) {
   page.appendChild(intro);
 
   TEMPLATES.forEach(t => {
-    const copyBtn = h('button', { class: 'btn btn-line text-xs', onclick: () => {
+    const copyBtn = h('button', { class: 'btn btn-line text-xs', onclick: async () => {
       const full = (t.subject ? `Subject: ${t.subject}\n\n` : '') + t.body + `\n\nSpecific ask: ${t.ask}`;
-      navigator.clipboard.writeText(full);
-      copyBtn.textContent = 'Copied!';
+      // Only claim success if the write actually resolved — the clipboard API
+      // rejects in insecure contexts / when permission is denied.
+      try {
+        await navigator.clipboard.writeText(full);
+        copyBtn.textContent = 'Copied!';
+      } catch {
+        copyBtn.textContent = 'Copy failed';
+      }
       setTimeout(() => { copyBtn.textContent = 'Copy'; }, 1500);
     }}, 'Copy');
 

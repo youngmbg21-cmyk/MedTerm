@@ -277,13 +277,15 @@ const localAdapter = {
       db[table] = [];
       for (const row of rows) {
         const clean = { ...row };
+        // Assign the id ONCE up front: a document blob must be stored under the
+        // same id the record carries, or getFile() later can't find it.
+        if (!clean.id) clean.id = makeId();
         if (table === 'documents' && clean.file_base64) {
           const blob = base64ToBlob(clean.file_base64, clean.file_mime || clean.mime_type);
-          await idbPut(clean.id || makeId(), blob).catch(() => {});
+          await idbPut(clean.id, blob).catch(() => {});
           delete clean.file_base64;
           delete clean.file_mime;
         }
-        if (!clean.id) clean.id = makeId();
         db[table].push(clean);
       }
     }

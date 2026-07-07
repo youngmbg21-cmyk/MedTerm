@@ -55,7 +55,10 @@ export function derive(a) {
 }
 
 function renderEconomics(page) {
-  const saved = STATE.economics.find(m => m.model_name === 'base');
+  // `let`, not `const`: the Save handler reassigns this after the first create
+  // so a second save updates the same row instead of inserting a duplicate
+  // 'base' model (downstream .find() reads only the first, orphaning edits).
+  let saved = STATE.economics.find(m => m.model_name === 'base');
   const assumptions = { ...DEFAULT_ASSUMPTIONS, ...(saved?.assumptions || {}) };
 
   const grid = h('div', { class: 'grid md:grid-cols-2 gap-5 mb-5' });
@@ -83,14 +86,19 @@ function renderEconomics(page) {
   });
   const saveBtn = h('button', { class: 'btn btn-primary mt-2', onclick: async () => {
     try {
+      const wasNew = !saved;
       let record;
       if (saved) record = await data.update('economics', saved.id, { assumptions });
       else record = await data.create('economics', { model_name: 'base', assumptions });
+      saved = record; // so a second save updates this row, not inserts another
       STATE.economics = await data.list('economics');
-      saveBtn.textContent = 'Saved';
-      setTimeout(() => { saveBtn.textContent = 'Save assumptions'; }, 1500);
       // Changed inputs may bear on K1–K3 — quiet, skippable proposal (AI mode).
       maybeProposeLinks('economics', record);
+      // First-ever save: re-render so the "Link to kill criterion" affordance
+      // (gated on a persisted row) appears without navigating away and back.
+      if (wasNew) { renderCurrentRoute(); return; }
+      saveBtn.textContent = 'Saved';
+      setTimeout(() => { saveBtn.textContent = 'Save assumptions'; }, 1500);
     } catch (e) { alert('Save failed: ' + e.message); }
   } }, 'Save assumptions');
   assumptionsCard.appendChild(saveBtn);
