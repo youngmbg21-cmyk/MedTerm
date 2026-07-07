@@ -2,19 +2,21 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>MedTerminal — Research Workspace</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <!-- Exactly two weights per family (design system): Fraunces 400/600 + italic, Inter 400/500 -->
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,600;1,9..144,400&family=Inter:wght@400;500&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="./css/mobile.css">
 </head>
 <body>
-<div class="frame" id="frame" aria-label="MedTerminal"></div>
 <script type="module">
-  import { boot } from './js/mobile-app.js';
-  boot();
+  /* Two experiences, one URL. Phones get the native-concept mobile redesign;
+     larger screens keep the original desktop workspace, unchanged. The choice
+     is made once at load by viewport width — each entry loads only its own
+     stylesheet, shell, and app code. */
+  const isPhone = window.matchMedia('(max-width: 767px)').matches;
+  await import(isPhone ? './js/boot-mobile.js' : './js/boot-desktop.js');
 </script>
 </body>
 </html>
