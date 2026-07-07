@@ -1248,34 +1248,178 @@ const MANUAL_FALLBACK = [
 ];
 
 /* ------------------------------------------------------------ MORE: REPORTS */
+/* Report templates — deterministic generators that pull live numbers from the
+   workspace (the AI never invents figures). Each returns the canonical report
+   shape { title, sections:[{ title, body }] } so a report is viewable on either
+   front end. */
+function todayLong() { const d = new Date(); return `${d.getDate()} ${MONTHS[d.getMonth()]} ${d.getFullYear()}`; }
+function todayISO() { return new Date().toISOString().slice(0, 10); }
+function topThemesByCount(n = 5) { return rankThemes(STATE.matrix).slice().sort((a, b) => b.count - a.count).slice(0, n); }
+
+function buildWeekly() {
+  const recent = STATE.interviews.filter(r => (daysSince(r.date) ?? 99) <= 7);
+  const overdue = STATE.interviews.filter(isOverdue);
+  const stalled = STATE.outreach.filter(isStalled);
+  const booked = STATE.outreach.filter(r => r.status === 'Booked');
+  const phase = PHASES.find(p => p.n === CURRENT_PHASE);
+  const tagged = STATE.interviews.length ? Math.round(STATE.interviews.filter(isTagged).length / STATE.interviews.length * 100) : 100;
+  return { title: `Weekly field update — ${todayLong()}`, sections: [
+    { title: 'Where we are', body: `Phase ${CURRENT_PHASE} — ${phase?.long || ''}. ${STATE.interviews.length} interviews logged, ${STATE.matrix.length} quotes tagged, ${STATE.outreach.length} contacts in outreach. Same-day tagging: ${tagged}% (the hard rule is 100%).` },
+    { title: "This week's interviews", body: recent.length ? recent.map(r => `- ${r.interview_id} · ${r.segment} · ${fmtDay(r.date)} — ${r.brief_topic || 'no topic recorded'}`).join('\n') : 'No interviews in the last 7 days.' },
+    { title: 'Top themes so far', body: topThemesByCount().map((t, i) => `${i + 1}. ${t.tag} (${t.count} mentions, ${t.wtpRate}% WTP)`).join('\n') || 'No themes tagged yet.' },
+    { title: 'Blockers', body: [
+      overdue.length ? `Same-day-tag rule breached: ${overdue.map(r => r.interview_id).join(', ')} untagged past 24h.` : null,
+      stalled.length ? `${stalled.length} outreach contact(s) stalled: ${stalled.map(r => r.name).join(', ')}.` : null,
+    ].filter(Boolean).join('\n') || 'No blockers.' },
+    { title: 'Next week', body: booked.length ? `Booked interviews to run: ${booked.map(r => `${r.name} (${r.segment})`).join(', ')}.` : 'No interviews booked — priority is converting replied contacts to bookings.' },
+  ] };
+}
+
+function buildPhaseExit() {
+  const phase = PHASES.find(p => p.n === CURRENT_PHASE);
+  const criteria = STATE.deliverables.filter(d => d.phase === CURRENT_PHASE);
+  const done = criteria.filter(d => d.status === 'Complete' || d.status === 'Done');
+  const blocked = criteria.filter(d => d.status === 'Blocked');
+  const verdict = blocked.length ? 'HOLD — blocked criteria must clear first'
+    : (criteria.length && done.length === criteria.length) ? 'READY to exit'
+    : 'EXTEND — criteria still open';
+  return { title: `Phase ${CURRENT_PHASE} exit brief — ${phase?.long || ''}`, sections: [
+    { title: 'Recommendation', body: verdict },
+    { title: 'Exit criteria', body: criteria.map(d => `- [${d.status}] ${d.deliverable}${d.evidence ? ` — ${d.evidence}` : ''}`).join('\n') || 'No criteria defined for this phase.' },
+    { title: 'Segment coverage', body: SEGMENTS.map(s => `- ${s.name}: ${STATE.interviews.filter(r => r.segment === s.name).length}/${s.target} interviews`).join('\n') },
+    { title: 'What remains uncertain', body: STATE.field_checks.filter(r => !r.confirmed).map(r => `- ${r.assumption}`).join('\n') || 'No open field checks.' },
+  ] };
+}
+
+function buildInvestorMemo() {
+  const phase = PHASES.find(p => p.n === CURRENT_PHASE);
+  const wtp = STATE.matrix.filter(r => r.wtp === 'Y' && +r.severity >= 4);
+  const killed = STATE.kill_list;
+  return { title: `MedTerminal — research memo, ${todayLong()}`, sections: [
+    { title: 'Executive summary', body: `A six-phase discovery programme testing whether a patient-side medical-travel service for the Kenya→India corridor is worth building. Currently Phase ${CURRENT_PHASE} (${phase?.long || ''}) with ${STATE.interviews.length} interviews across ${new Set(STATE.interviews.map(r => r.segment)).size} segments.` },
+    { title: 'The wedge being tested', body: 'Patient-side coordination for Kenyan families seeking treatment in India: discovery, trustworthy quotes, document handling, and money movement — the work currently done informally by brokers with opaque commissions.' },
+    { title: 'Strongest willingness-to-pay evidence', body: wtp.slice(0, 5).map(r => `"${(r.quote || '').slice(0, 200)}" — ${r.segment}, ${r.interview_id}`).join('\n\n') || 'Evidence still accumulating.' },
+    { title: 'What we have ruled out', body: killed.length ? killed.map(k => `- ${k.hypothesis || '—'}${k.killed_date ? ` (killed ${fmtDay(k.killed_date)})` : ''}`).join('\n') : 'Nothing killed yet.' },
+    { title: 'Honest caveats', body: 'Sample sizes are small and skewed to accessible contacts. Willingness-to-pay statements are unvalidated by actual payment. Economics are modelled, not observed.' },
+  ] };
+}
+
+function buildDossier() {
+  const hyps = [...STATE.hypotheses].sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
+  const line = (hy) => {
+    const ls = STATE.evidence_links.filter(l => l.hypothesis_id === hy.id);
+    const s = ls.filter(l => l.direction === 'supports').length;
+    const c = ls.filter(l => l.direction === 'contradicts').length;
+    return `${hy.code} · ${hy.title} [${hy.status || 'open'}] — ${s} supporting, ${c} contradicting\n${hy.description || ''}`;
+  };
+  const a = latestAssessment();
+  return { title: `Evidence dossier — ${todayLong()}`, sections: [
+    { title: 'Current leaning', body: a ? `${a.leaning} (assessed ${fmtDay(a.created_at)}). Advisory — the humans hold the verdict.` : 'No AI assessment has been run yet.' },
+    { title: 'Buyer hypotheses', body: hyps.filter(x => x.kind === 'buyer_hypothesis').map(line).join('\n\n') || 'No hypotheses defined.' },
+    { title: 'Kill criteria', body: hyps.filter(x => x.kind === 'kill_criterion').map(line).join('\n\n') || 'No kill criteria defined.' },
+    { title: 'Evidence base', body: `${STATE.evidence_links.length} evidence link(s) across ${STATE.matrix.length} tagged quotes and ${STATE.interviews.length} interviews.` },
+  ] };
+}
+
+const REPORT_DEFS = [
+  { type: 'weekly_status', name: 'Weekly field update', description: 'What moved this week — interviews, themes, and what needs attention.', build: buildWeekly },
+  { type: 'phase_exit', name: 'Phase-exit brief', description: 'Did we meet the exit criteria for the current phase? Evidence attached.', build: buildPhaseExit },
+  { type: 'investor_briefing', name: 'Investor / partner memo', description: 'The decision so far, framed for someone who was not in the room.', build: buildInvestorMemo },
+  { type: 'evidence_dossier', name: 'Full evidence dossier', description: 'Every hypothesis, kill criterion, and the evidence behind them.', build: buildDossier },
+];
+
+/* Render a saved or draft report as a read sheet body (numbers preserved
+   verbatim via pre-line text — model output never touches innerHTML). */
+function reportReader(report) {
+  const content = report.content || {};
+  const wrap = h('div', {});
+  wrap.appendChild(h('div', { style: 'font-size:11px;color:#6E6A5E;margin-bottom:6px;', text: `Generated ${fmtDay(report.created_at)}${content.assistant_drafted ? ' · assistant-drafted, human-reviewed' : ' · from live data'}` }));
+  (content.sections || []).forEach(s => {
+    wrap.appendChild(h('div', { class: 'micro', style: 'color:#96501F;margin:16px 0 6px;', text: s.title || '' }));
+    if (s.body) wrap.appendChild(h('div', { style: 'font-size:13px;line-height:20px;color:#1F2A28;white-space:pre-line;', text: s.body }));
+  });
+  return wrap;
+}
+
+async function generateFromTemplate(def) {
+  if (UI.busy) return;
+  setState({ busy: 'report' });
+  try {
+    const content = def.build();
+    await data.create('reports', { report_type: def.type, title: content.title, content, version: 1 });
+    STATE.reports = await data.list('reports');
+    UI.busy = null;
+    openReader(content.title, () => reportReader({ content, created_at: todayISO() }));
+  } catch (e) { UI.busy = null; render(); alert('Generate failed: ' + e.message); }
+}
+
+/* Assistant draft: narrative from the drafting endpoint, every data section from
+   the deterministic template. Lands in a preview — nothing is saved until the
+   human taps Save (per the AI-write rule). */
+async function draftReportWithAssistant(def) {
+  if (!aiAvailable || UI.busy) return;
+  setState({ busy: 'report' });
+  try {
+    const content = def.build();
+    const { text } = await draftSectionRequest({
+      section_label: def.name,
+      placeholder: def.description,
+      doc_kind: `the narrative summary of a "${def.name}" for someone who wasn't in the room`,
+      phase: CURRENT_PHASE, segments: SEGMENTS, localData: aiDataSlices(STATE),
+    });
+    content.sections = [{ title: 'Narrative — assistant-drafted, human-reviewed', body: (text || '').trim() }, ...content.sections];
+    content.assistant_drafted = true;
+    UI.busy = null;
+    openReportPreview(def, content);
+  } catch (e) { UI.busy = null; render(); alert('Draft failed: ' + e.message); }
+}
+
+function openReportPreview(def, content) {
+  openReader(content.title, () => h('div', {}, [
+    h('div', { class: 'banner honey', style: 'margin-bottom:12px;', text: 'Assistant draft — review, then save. Nothing is stored until you save.' }),
+    reportReader({ content, created_at: todayISO() }),
+    h('div', { style: 'display:flex;gap:8px;margin-top:18px;padding-top:14px;border-top:1px solid #EFE9DD;' }, [
+      h('button', { class: 'btn btn-primary tall', style: 'flex:1;', onclick: async () => {
+        try {
+          await data.create('reports', { report_type: def.type, title: content.title, content, version: 1 });
+          STATE.reports = await data.list('reports');
+          closeReader();
+        } catch (e) { alert('Save failed: ' + e.message); }
+      }, text: 'Save report' }),
+      h('button', { class: 'btn btn-line tall', style: 'flex:0 0 auto;', onclick: closeReader, text: 'Discard' }),
+    ]),
+  ]));
+}
+
 function renderReports() {
-  const types = [
-    { name: 'Weekly field update', description: 'What moved this week — interviews, themes, and what needs attention.' },
-    { name: 'Phase-exit brief', description: 'Did we meet the exit criteria for the current phase? Evidence attached.' },
-    { name: 'Investor / partner memo', description: 'The decision so far, framed for someone who was not in the room.' },
-    { name: 'Full evidence dossier', description: 'Every hypothesis, kill criterion, and the evidence links behind them.' },
-  ];
-  const gen = h('div', { style: 'display:flex;flex-direction:column;gap:10px;margin-bottom:20px;' }, types.map(r => h('div', { class: 'card', style: 'padding:15px;' }, [
-    h('div', { class: 'serif', style: 'font-size:15px;margin-bottom:4px;', text: r.name }),
-    h('div', { style: 'font-size:12px;line-height:17px;color:#4A5651;margin-bottom:11px;', text: r.description }),
+  const busy = UI.busy === 'report';
+  const gen = h('div', { style: 'display:flex;flex-direction:column;gap:10px;margin-bottom:20px;' }, REPORT_DEFS.map(def => h('div', { class: 'card', style: 'padding:15px;' }, [
+    h('div', { class: 'serif', style: 'font-size:15px;margin-bottom:4px;', text: def.name }),
+    h('div', { style: 'font-size:12px;line-height:17px;color:#4A5651;margin-bottom:11px;', text: def.description }),
     h('div', { style: 'display:flex;gap:8px;' }, [
-      h('button', { class: 'btn btn-primary', style: 'height:36px;', onclick: () => setState({ assistantOpen: true }), text: 'Draft with assistant' }),
-      h('button', { class: 'btn btn-line', style: 'height:36px;', onclick: () => {}, text: 'From template' }),
+      aiAvailable
+        ? h('button', { class: 'btn btn-primary', style: `height:36px;${busy ? 'opacity:.6;' : ''}`, disabled: busy ? '' : null, onclick: () => draftReportWithAssistant(def), text: busy ? 'Working…' : 'Draft with assistant' })
+        : null,
+      h('button', { class: `btn ${aiAvailable ? 'btn-line' : 'btn-primary'}`, style: `height:36px;${busy ? 'opacity:.6;' : ''}`, disabled: busy ? '' : null, onclick: () => generateFromTemplate(def), text: 'From template' }),
     ]),
   ])));
   const generated = STATE.reports;
   return screenWrap([
+    aiAvailable ? null : h('div', { class: 'banner info', style: 'margin-bottom:14px;', text: 'Reports generate from live data using structured templates. Assistant-drafted narrative becomes available when the assistant is connected.' }),
     h('div', { class: 'micro', style: 'color:#6E6A5E;margin-bottom:8px;', text: 'Generate a report' }),
     gen,
     h('div', { class: 'micro', style: 'color:#6E6A5E;margin-bottom:8px;', text: 'Generated reports' }),
     generated.length
-      ? h('div', { class: 'listcard' }, generated.map(r => h('div', { class: 'row' }, [
-          h('div', { style: 'font-size:13.5px;font-weight:500;color:#1F2A28;', text: (r.content && r.content.title) || r.title || r.report_type }),
-          h('div', { style: 'font-size:11px;color:#6E6A5E;margin-top:3px;', text: fmtDay(r.created_at) }),
+      ? h('div', { class: 'listcard' }, [...generated].reverse().map(r => h('div', { class: 'row', style: 'display:flex;align-items:center;justify-content:space-between;gap:10px;' }, [
+          h('div', { style: 'min-width:0;' }, [
+            h('div', { style: 'font-size:13.5px;font-weight:500;color:#1F2A28;', text: (r.content && r.content.title) || r.title || r.report_type }),
+            h('div', { style: 'font-size:11px;color:#6E6A5E;margin-top:3px;', text: fmtDay(r.created_at) }),
+          ]),
+          h('button', { class: 'btn btn-line', style: 'height:30px;padding:0 12px;font-size:11.5px;border-radius:9px;flex-shrink:0;', onclick: () => openReader((r.content && r.content.title) || r.title || 'Report', () => reportReader(r)), text: 'View' }),
         ])))
       : h('div', { class: 'card', style: 'padding:40px 24px;text-align:center;' }, [
           h('div', { class: 'serif', style: 'font-size:16px;color:#4A5651;', text: 'No reports generated yet' }),
-          h('div', { style: 'font-size:12.5px;color:#6E6A5E;margin-top:4px;', text: 'Draft one above — it pulls live numbers from the workspace.' }),
+          h('div', { style: 'font-size:12.5px;color:#6E6A5E;margin-top:4px;', text: 'Generate one above — it pulls live numbers from the workspace.' }),
         ]),
   ], '16px 16px 28px');
 }
