@@ -221,12 +221,26 @@ export async function boot() {
       await requireLogin();
     } catch (e) { console.error('login failed', e); }
   }
-  try {
-    const results = await Promise.all(TABLES.map(t => data.list(t).catch(() => [])));
-    TABLES.forEach((t, i) => { STATE[t] = results[i]; });
-  } catch (e) { console.error(e); }
+  await loadTables();
   render();
 }
+
+/* Load every table, distinguishing a genuine empty result from a failed fetch.
+   A per-table swallow (`.catch(()=>[])`) would render a network/401 failure as
+   an empty-but-healthy-looking workspace — so we track failures and surface a
+   retry banner instead. */
+async function loadTables() {
+  UI.loading = true;
+  try {
+    const results = await Promise.all(TABLES.map(t =>
+      data.list(t).then(rows => ({ rows })).catch(err => ({ err }))));
+    let failed = false;
+    TABLES.forEach((t, i) => { if (results[i].err) failed = true; else STATE[t] = results[i].rows; });
+    UI.loadError = failed;
+  } catch (e) { console.error(e); UI.loadError = true; }
+  UI.loading = false;
+}
+async function retryLoad() { UI.loadError = false; render(); await loadTables(); render(); }
 
 /* ----------------------------------------------------------------- render */
 let lastView = null, lastOverlayKey = '';
@@ -254,6 +268,10 @@ function render() {
   const [title, question] = TITLES[view] || TITLES.today;
   frame.appendChild(renderHeader(view, title, question));
   const scroll = h('div', { class: 'scroll mtscroll', id: 'scroll' });
+  if (UI.loadError) scroll.appendChild(h('button', {
+    class: 'banner rose', style: 'margin:12px 16px 0;width:calc(100% - 32px);text-align:left;cursor:pointer;',
+    onclick: () => retryLoad(),
+  }, [h('span', { class: 'dot' }), h('span', { text: 'Couldn’t load the workspace — check your connection and tap to retry.' })]));
   scroll.appendChild(renderScreen(view));
   frame.appendChild(scroll);
   frame.appendChild(renderTabBar());
@@ -1051,7 +1069,9 @@ const ECON_FIELDS = [
   ['cases_per_month', 'Cases per month'], ['monthly_fixed_costs_usd', 'Monthly fixed costs (USD)'],
 ];
 function openEconForm(current) {
-  const form = {}; ECON_FIELDS.forEach(([k]) => { form[k] = String(current[k]); });
+  // Blank (not the literal "undefined") for a missing assumption, so an absent
+  // key doesn't display "undefined" and then silently save as 0.
+  const form = {}; ECON_FIELDS.forEach(([k]) => { form[k] = current[k] == null ? '' : String(current[k]); });
   UI.econForm = form;
   setState({ formType: 'econ', editId: null, saving: false });
 }
@@ -2025,17 +2045,28 @@ function formBody(type) {
     fieldWrap('Confirmed by', segControl('confirmed_by', owners)),
     fieldWrap('Notes', areaField('notes', 'How it was verified, or what is still needed', 4)),
   ]);
-  if (type === 'upload') return col([
-    h('div', { class: 'banner info', text: 'De-identify first (initials, not names). PDF, text, CSV or image, up to 10 MB. Never upload consent forms or identity documents.' }),
-    h('div', { style: 'border:1.5px dashed #D4C7B4;border-radius:14px;background:#FAF7F1;padding:28px 16px;text-align:center;' }, [
-      h('div', { style: 'width:44px;height:44px;border-radius:12px;background:#fff;border:1px solid #E5DDD0;display:inline-flex;align-items:center;justify-content:center;color:#3F5A4D;margin-bottom:10px;', text: '↑' }),
-      h('div', { style: 'font-size:13.5px;font-weight:500;color:#1F2A28;', text: 'Tap to choose a file' }),
-      h('div', { style: 'font-size:11.5px;color:#6E6A5E;margin-top:3px;', text: 'or drop it here' }),
-    ]),
-    fieldWrap('Segment', pillControl('segment', SEGMENT_NAMES)),
-    fieldWrap('Linked interview (optional)', pillControl('interview_id', interviewIds)),
-    fieldWrap('Short description (searchable)', areaField('description', 'Say what this is', 3)),
-  ]);
+  if (type === 'upload') {
+    const chosen = UI.form._filename;
+    const fileInput = h('input', { type: 'file', accept: 'image/*,application/pdf,text/plain,text/csv,text/markdown,.txt,.csv,.md,.json', style: 'display:none;' });
+    fileInput.addEventListener('change', (e) => {
+      const file = e.target.files && e.target.files[0];
+      if (!file) return;
+      if (file.size > 10 * 1024 * 1024) { alert('That file is larger than 10 MB. Choose a smaller one.'); e.target.value = ''; return; }
+      UI.form._file = file; UI.form._filename = file.name; render();
+    });
+    return col([
+      h('div', { class: 'banner info', text: 'De-identify first (initials, not names). PDF, text, CSV or image, up to 10 MB. Never upload consent forms or identity documents.' }),
+      h('label', { style: `display:block;border:1.5px dashed ${chosen ? '#B7C9B4' : '#D4C7B4'};border-radius:14px;background:${chosen ? '#EEF4EC' : '#FAF7F1'};padding:24px 16px;text-align:center;cursor:pointer;` }, [
+        h('div', { style: `width:44px;height:44px;border-radius:12px;background:#fff;border:1px solid #E5DDD0;display:inline-flex;align-items:center;justify-content:center;color:#3F5A4D;margin-bottom:10px;font-size:18px;`, text: chosen ? '✓' : '↑' }),
+        h('div', { style: 'font-size:13.5px;font-weight:500;color:#1F2A28;word-break:break-word;', text: chosen || 'Tap to choose a file' }),
+        h('div', { style: 'font-size:11.5px;color:#6E6A5E;margin-top:3px;', text: chosen ? 'Tap to replace' : 'PDF, text, CSV or image · up to 10 MB' }),
+        fileInput,
+      ]),
+      fieldWrap('Segment', pillControl('segment', SEGMENT_NAMES)),
+      fieldWrap('Linked interview (optional)', pillControl('interview_id', interviewIds)),
+      fieldWrap('Short description (searchable)', areaField('description', 'Say what this is', 3)),
+    ]);
+  }
   return h('div');
 }
 
@@ -2043,12 +2074,19 @@ async function saveForm(type) {
   if (UI.saving) return; // already in flight — ignore repeat taps (no double-save)
   const f = UI.form;
   let table, record;
-  if (type === 'interview') { table = 'interviews'; record = pick(f, ['date', 'interviewer', 'segment', 'initials', 'format', 'recorded', 'tagged_same_day', 'brief_topic', 'notes_markdown']); }
-  else if (type === 'contact') { table = 'outreach'; record = pick(f, ['name', 'segment', 'organisation', 'country', 'channel', 'status', 'owner', 'first_contact', 'notes']); }
-  else if (type === 'quote') { table = 'matrix'; record = pick(f, ['interview_id', 'quote', 'theme_tag', 'segment', 'severity', 'wtp']); record.severity = record.severity ? Number(record.severity) : null; if (!record.wtp) record.wtp = null; }
+  if (type === 'interview') { table = 'interviews'; record = pick(f, ['date', 'interviewer', 'segment', 'initials', 'format', 'recorded', 'tagged_same_day', 'brief_topic', 'notes_markdown']); if (!record.segment) { alert('Choose a segment for this interview.'); return; } }
+  else if (type === 'contact') { table = 'outreach'; record = pick(f, ['name', 'segment', 'organisation', 'country', 'channel', 'status', 'owner', 'first_contact', 'notes']); if (!(record.name || '').trim()) { alert('A contact needs a name.'); return; } }
+  else if (type === 'quote') { table = 'matrix'; record = pick(f, ['interview_id', 'quote', 'theme_tag', 'segment', 'severity', 'wtp']); if (!(record.quote || '').trim()) { alert('A quote needs its text.'); return; } if (!record.interview_id) { alert('Link this quote to an interview.'); return; } record.severity = record.severity ? Number(record.severity) : null; if (!record.wtp) record.wtp = null; }
   else if (type === 'kill') { table = 'kill_list'; record = pick(f, ['hypothesis', 'evidence', 'killed_date']); if (!record.hypothesis || !record.evidence) { alert('Hypothesis and evidence are both required.'); return; } }
   else if (type === 'check') { table = 'field_checks'; record = { assumption: f.assumption || '', confirmed: f.confirmed === 'Yes', confirmed_by: f.confirmed_by || null, notes: f.notes || '' }; }
-  else if (type === 'upload') { table = 'documents'; record = { filename: f.description ? f.description.slice(0, 40) : 'Document', segment: f.segment || null, interview_id: f.interview_id || null, description: f.description || '' }; }
+  else if (type === 'upload') {
+    const file = f._file;
+    if (!file && !UI.editId) { alert('Choose a file to upload first.'); return; }
+    table = 'documents';
+    record = { filename: file ? file.name : (f.description ? f.description.slice(0, 40) : 'Document'),
+      mime_type: file ? (file.type || null) : null, size_bytes: file ? file.size : null,
+      segment: f.segment || null, interview_id: f.interview_id || null, description: f.description || '' };
+  }
   else return;
   // normalise blank date/enum fields to null
   ['date', 'first_contact', 'killed_date'].forEach(k => { if (record[k] === '') record[k] = null; });
@@ -2056,8 +2094,19 @@ async function saveForm(type) {
 
   UI.saving = true; render(); // disable the button + show "Saving…" while the write is in flight
   try {
+    let created = null;
     if (UI.editId) await data.update(table, UI.editId, record);
-    else await data.create(table, record);
+    else created = await data.create(table, record);
+    // Upload: persist the actual file bytes (and searchable text for text files)
+    // — without this the document record would exist but the file would be lost.
+    if (type === 'upload' && f._file && created && created.id) {
+      const file = f._file;
+      const isText = /^text\//.test(file.type) || /\.(txt|csv|md|json)$/i.test(file.name);
+      if (isText) {
+        try { const text = await file.text(); await data.update('documents', created.id, { text_content: text.slice(0, 200000) }); } catch { /* keep the blob even if text extraction fails */ }
+      }
+      await data.putFile(created.id, file);
+    }
     const refresh = { interview: 'interviews', contact: 'outreach', quote: 'matrix', kill: 'kill_list', check: 'field_checks', upload: 'documents' }[type];
     STATE[refresh] = await data.list(refresh);
     UI.saving = false; UI.formType = null; UI.editId = null; render(); // close as soon as the write lands
@@ -2109,5 +2158,16 @@ async function deleteEntry(type, id) {
     } else return;
     UI.formType = null; UI.editId = null; UI.selectedId = null;
     render();
-  } catch (e) { alert('Delete failed: ' + e.message); }
+  } catch (e) {
+    // A multi-step delete may have committed some removes before failing — resync
+    // the affected tables so the UI reflects what actually persisted, not a stale
+    // half-deleted list.
+    try {
+      [STATE.interviews, STATE.matrix, STATE.evidence_links, STATE.outreach, STATE.field_checks] =
+        await Promise.all(['interviews', 'matrix', 'evidence_links', 'outreach', 'field_checks'].map(t => data.list(t)));
+    } catch { /* ignore — best effort */ }
+    UI.formType = null; UI.editId = null; UI.selectedId = null;
+    render();
+    alert('Delete failed: ' + e.message);
+  }
 }

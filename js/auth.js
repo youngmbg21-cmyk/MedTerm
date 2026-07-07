@@ -59,10 +59,17 @@ export async function requireLogin() {
       style: 'width:100%;max-width:340px;padding:24px;',
       onsubmit: async (e) => {
         e.preventDefault();
-        const { error } = await supabase.auth.signInWithOtp({ email: email.value.trim() });
         msg.style.display = 'block';
-        if (error) { msg.style.color = '#9A3F3F'; msg.textContent = error.message; }
-        else { msg.style.color = '#3F5A4D'; msg.textContent = 'Check your email for the sign-in link.'; }
+        try {
+          const { error } = await supabase.auth.signInWithOtp({ email: email.value.trim() });
+          if (error) { msg.style.color = '#9A3F3F'; msg.textContent = error.message; }
+          else { msg.style.color = '#3F5A4D'; msg.textContent = 'Check your email for the sign-in link.'; }
+        } catch (err) {
+          // Network failure (offline) rejects the call — surface it instead of
+          // leaving the button looking inert with an unhandled rejection.
+          msg.style.color = '#9A3F3F';
+          msg.textContent = 'Couldn’t reach sign-in. Check your connection and try again.';
+        }
       },
     }, [
       el('div', { class: 'serif', style: 'font-size:22px;margin-bottom:4px;', text: 'MedTerminal' }),
