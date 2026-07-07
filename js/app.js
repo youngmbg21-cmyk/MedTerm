@@ -454,7 +454,7 @@ export function openModal(title, fields, onSubmit, submitLabel = 'Save', { dange
   root.appendChild(h('div', {
     class: 'modal-bg fade-in',
     onclick: (e) => { if (e.target.classList.contains('modal-bg')) closeModal(); },
-  }, [h('div', { class: 'modal p-6' }, [form])]));
+  }, [h('div', { class: 'modal' }, [form])]));
 }
 
 export function closeModal() {

@@ -140,7 +140,7 @@ function openUploadForm() {
   ]);
 
   root.appendChild(h('div', { class: 'modal-bg fade-in', onclick: (e) => { if (e.target.classList.contains('modal-bg')) closeModal(); } }, [
-    h('div', { class: 'modal p-6' }, [form]),
+    h('div', { class: 'modal' }, [form]),
   ]));
 }
 
@@ -169,7 +169,7 @@ async function viewDocument(d) {
   }
 
   root.appendChild(h('div', { class: 'modal-bg fade-in', onclick: (e) => { if (e.target.classList.contains('modal-bg')) root.innerHTML = ''; } }, [
-    h('div', { class: 'modal p-6', style: 'max-width:720px;' }, [
+    h('div', { class: 'modal', style: 'max-width:720px;' }, [
       h('div', { class: 'flex items-start justify-between gap-3 mb-1' }, [
         h('div', { class: 'serif text-xl', text: d.filename }),
         h('button', { class: 'btn btn-ghost text-xs', onclick: () => { root.innerHTML = ''; } }, 'Close'),

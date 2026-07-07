@@ -138,7 +138,7 @@ function killStrip(latest) {
 function viewAssessmentModal(a) {
   const root = document.getElementById('modal-root');
   root.innerHTML = '';
-  const body = h('div', { class: 'modal p-6' }, [
+  const body = h('div', { class: 'modal' }, [
     h('div', { class: 'flex flex-wrap items-center justify-between gap-2 mb-1' }, [
       h('div', { class: 'serif text-xl', text: `Assessment · ${fmtDate(a.created_at)}` }),
       chip(a.leaning, LEANING_TONE[a.leaning] || 'line'),

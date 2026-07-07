@@ -389,7 +389,7 @@ function previewDraftReport(rt, content) {
   root.innerHTML = '';
   const draft = { content, title: content.title, report_type: rt.type, created_at: new Date().toISOString().slice(0, 10) };
   root.appendChild(h('div', { class: 'modal-bg fade-in', onclick: (e) => { if (e.target.classList.contains('modal-bg')) root.innerHTML = ''; } }, [
-    h('div', { class: 'modal p-8', style: 'max-width:800px;' }, [
+    h('div', { class: 'modal', style: 'max-width:800px;' }, [
       h('div', { class: 'banner banner-info mb-4' }, [
         h('span', { text: 'Assistant draft — review before saving. Nothing is stored until you save.' }),
       ]),
@@ -437,7 +437,7 @@ function viewReport(report) {
   const root = document.getElementById('modal-root');
   root.innerHTML = '';
   root.appendChild(h('div', { class: 'modal-bg fade-in', onclick: (e) => { if (e.target.classList.contains('modal-bg')) root.innerHTML = ''; } }, [
-    h('div', { class: 'modal p-8', style: 'max-width:800px;' }, [
+    h('div', { class: 'modal', style: 'max-width:800px;' }, [
       h('div', { class: 'flex justify-end mb-4 gap-2' }, [
         h('button', { class: 'btn btn-line text-xs', onclick: () => printReport(report) }, 'Print'),
         h('button', { class: 'btn btn-ghost text-xs', onclick: () => { root.innerHTML = ''; } }, 'Close'),
