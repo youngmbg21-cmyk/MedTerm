@@ -344,25 +344,29 @@ function readStoredSession() {
       }
     }
     if (!raw) return null;
+    // supabase-js v2 may store the session base64-encoded behind a `base64-`
+    // prefix; decode that before parsing so we don't silently miss the token.
+    if (raw.startsWith('base64-')) {
+      try { raw = atob(raw.slice(7)); } catch { /* fall through to JSON.parse */ }
+    }
     const p = JSON.parse(raw);
     return p && p.access_token ? p : (p?.currentSession || p?.session || null);
   } catch { return null; }
 }
 
 async function getAccessToken() {
-  // Fast path: a valid cached token (60s expiry guard) — no CDN import needed.
-  const session = readStoredSession();
-  const exp = session?.expires_at; // seconds since epoch
-  if (session?.access_token && (!exp || exp * 1000 - 60000 > Date.now())) {
-    return session.access_token;
-  }
-  // Slow path: token missing/expired — load supabase-js to refresh or prompt
-  // login. Only here do we depend on the CDN client.
+  // Primary path: ask supabase-js for the session. getSession() returns a
+  // currently-valid token and transparently refreshes an expired one, so this
+  // is what avoids the 401 UNAUTHORIZED_ASYMMETRIC_JWT that a stale cached
+  // token produces. Only if the CDN client fails to load do we fall back to
+  // whatever token is cached in localStorage.
   try {
     const { getSession } = await import('./auth.js');
     const fresh = await getSession();
-    return fresh?.access_token || null;
-  } catch { return session?.access_token || null; }
+    if (fresh?.access_token) return fresh.access_token;
+  } catch { /* CDN import failed — fall back to the cached token below */ }
+  const cached = readStoredSession();
+  return cached?.access_token || null;
 }
 
 async function workerFetch(path, opts = {}) {
