@@ -47,15 +47,20 @@ a:hover { color: var(--clay-hover); }
 @media (prefers-reduced-motion: reduce) { * { animation: none !important; } }
 
 /* ---------------------------------------------------------------- SHELL */
-/* On a phone the frame fills the screen; on desktop it centres as a device. */
+/* On a phone the frame fills the screen; on a large desktop screen it centres
+   as a device for design preview. */
 .frame {
-  position: relative; width: 100%; max-width: 402px; margin: 0 auto;
+  position: relative; width: 100%; margin: 0 auto;
   height: 100dvh; background: var(--surface-page);
   display: flex; flex-direction: column; overflow: hidden;
 }
-@media (min-width: 440px) {
+/* The centred phone-device treatment needs a genuinely large screen — BOTH wide
+   and tall. Requiring height keeps a landscape PHONE (wide but short) full-bleed
+   instead of shrinking it to a clipped floating card. */
+@media (min-width: 768px) and (min-height: 720px) {
   body { display: flex; align-items: center; justify-content: center; min-height: 100dvh; padding: 24px 0; }
   .frame {
+    max-width: 402px;
     height: 846px; max-height: calc(100dvh - 48px); border-radius: 40px;
     box-shadow: 0 30px 70px rgba(31,42,40,0.34), 0 8px 22px rgba(31,42,40,0.2);
   }

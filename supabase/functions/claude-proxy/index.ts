@@ -105,6 +105,16 @@ const OUTPUT_SHAPE_RULES = `Non-negotiable output-shape rules:
 - "What would change this" is mandatory. Every hypothesis assessment must name the concrete evidence that would flip it.
 - The AI argues; it never decides. The AI's leaning is advisory. Humans hold the verdict and co-sign. Divergence from the AI is allowed but must be written down.`;
 
+/* Anti-fabrication rules. This is the load-bearing guarantee of the whole app:
+   a decision tool that invents evidence is worse than none. Injected into every
+   structured drafting/analysis surface. */
+const GROUNDING_RULES = `GROUNDING — the most important rule (a fabricated fact makes this tool worthless):
+- Use ONLY facts present in the workspace context you are given. Do NOT invent, estimate, or "reasonably assume" anything that is not written there.
+- Never state how long the programme has been running (weeks, months, "nine weeks in") — elapsed time is not tracked, so any such phrase is a fabrication.
+- Never invent interview counts, participant names or codes, quotes, dates, prices, percentages, segments, or events. Every specific must be traceable to a record in the context.
+- If a number, quote, or fact is not in the context, either omit it or write "not yet recorded" — never fill the gap with a plausible-sounding invention.
+- If the workspace is empty or thin on the topic, the correct output is a short, honest statement that there is not enough evidence yet — NOT a fluent narrative built on assumptions. An empty ledger means say so, briefly.`;
+
 /* ------------------------------------------------------------ CORS + JSON */
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -586,6 +596,8 @@ async function handleAssessment(body: any, env: Env, member: Member | null) {
 
 ${OUTPUT_SHAPE_RULES}
 
+${GROUNDING_RULES}
+
 If the evidence is thin, say INSUFFICIENT. An honest INSUFFICIENT is more valuable than a premature leaning. Steelman the opposite of your leaning in summary_markdown — one paragraph titled 'The case against this leaning.'
 
 You are producing a structured assessment, not a chat reply. Respond with ONLY a JSON object, no prose around it, in exactly this shape:
@@ -749,13 +761,15 @@ Each field: 1–3 sentences of plain prose. Cite inline — interview IDs (INT-0
 
 ${OUTPUT_SHAPE_RULES}
 
+${GROUNDING_RULES}
+
 You are drafting ${docKind}: "${body.section_label}"${body.placeholder ? ` (${body.placeholder})` : ''}.
 ${shapeInstruction}
 This is a draft the humans will edit; argue from the ledger, do not decide for them.`;
 
   const userMsg = `${workspaceContextText(ws, { phase, segments: body.segments })}
 
-Draft "${body.section_label}" now.`;
+Draft "${body.section_label}" now. Use ONLY the workspace facts above. If the workspace is empty or thin, say so plainly in one or two sentences and stop — do not manufacture a narrative.`;
 
   const claudeBase = { model: CLAUDE_MODEL, max_tokens: 2000, system };
   let result = await callClaude(env, { ...claudeBase, messages: [{ role: 'user', content: userMsg }] });
@@ -802,7 +816,7 @@ async function handleChat(body: any, env: Env, userId: string) {
   } catch { /* persistence is optional in this setup */ }
 
   const chatHypotheses = await fetchRows(env, localData || null, 'hypotheses');
-  const systemMessage = `${SYSTEM_PROMPT}\n\n--- HYPOTHESIS BOARD (live records — the single source of truth) ---\n${hypothesesPromptSection(chatHypotheses)}\n\n--- LIVE PROJECT DATA ---\n${dataContext || '(none provided)'}`;
+  const systemMessage = `${SYSTEM_PROMPT}\n\n${GROUNDING_RULES}\n\n--- HYPOTHESIS BOARD (live records — the single source of truth) ---\n${hypothesesPromptSection(chatHypotheses)}\n\n--- LIVE PROJECT DATA ---\n${dataContext || '(none provided)'}`;
 
   const claudeMessages = (messages || []).map((m: any) => ({
     role: m.role === 'assistant' ? 'assistant' : 'user',

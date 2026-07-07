@@ -1328,22 +1328,26 @@ const REPORT_DEFS = [
   { type: 'evidence_dossier', name: 'Full evidence dossier', description: 'Every hypothesis, kill criterion, and the evidence behind them.', build: buildDossier },
 ];
 
-/* Render a saved or draft report as a read sheet body (numbers preserved
-   verbatim via pre-line text — model output never touches innerHTML). */
+/* Render a saved or draft report as a read sheet body. Deterministic template
+   sections keep their exact layout via pre-line text; the assistant-drafted
+   narrative goes through the markdown renderer so headings/bullets render
+   instead of leaking "#". Model output never touches innerHTML. */
 function reportReader(report) {
   const content = report.content || {};
   const wrap = h('div', {});
   wrap.appendChild(h('div', { style: 'font-size:11px;color:#6E6A5E;margin-bottom:6px;', text: `Generated ${fmtDay(report.created_at)}${content.assistant_drafted ? ' · assistant-drafted, human-reviewed' : ' · from live data'}` }));
   (content.sections || []).forEach(s => {
     wrap.appendChild(h('div', { class: 'micro', style: 'color:#96501F;margin:16px 0 6px;', text: s.title || '' }));
-    if (s.body) wrap.appendChild(h('div', { style: 'font-size:13px;line-height:20px;color:#1F2A28;white-space:pre-line;', text: s.body }));
+    if (!s.body) return;
+    if (/^Narrative/.test(s.title || '')) wrap.appendChild(renderRich(s.body));
+    else wrap.appendChild(h('div', { style: 'font-size:13px;line-height:20px;color:#1F2A28;white-space:pre-line;', text: s.body }));
   });
   return wrap;
 }
 
 async function generateFromTemplate(def) {
   if (UI.busy) return;
-  setState({ busy: 'report' });
+  setState({ busy: `report:tpl:${def.type}` });
   try {
     const content = def.build();
     await data.create('reports', { report_type: def.type, title: content.title, content, version: 1 });
@@ -1355,10 +1359,17 @@ async function generateFromTemplate(def) {
 
 /* Assistant draft: narrative from the drafting endpoint, every data section from
    the deterministic template. Lands in a preview — nothing is saved until the
-   human taps Save (per the AI-write rule). */
+   human taps Save (per the AI-write rule).
+   Guard: with no interviews logged, a "narrative" can only be invented, so we
+   refuse rather than let the assistant fabricate. The template path (which
+   honestly reports the emptiness) stays available. */
 async function draftReportWithAssistant(def) {
   if (!aiAvailable || UI.busy) return;
-  setState({ busy: 'report' });
+  if (!STATE.interviews.length) {
+    alert('Not enough field data yet.\n\nThere are no interviews logged, so the assistant would have to invent a narrative. Log interviews and tag quotes first, or use “From template” for an honest data-only report.');
+    return;
+  }
+  setState({ busy: `report:draft:${def.type}` });
   try {
     const content = def.build();
     const { text } = await draftSectionRequest({
@@ -1392,17 +1403,26 @@ function openReportPreview(def, content) {
 }
 
 function renderReports() {
-  const busy = UI.busy === 'report';
-  const gen = h('div', { style: 'display:flex;flex-direction:column;gap:10px;margin-bottom:20px;' }, REPORT_DEFS.map(def => h('div', { class: 'card', style: 'padding:15px;' }, [
-    h('div', { class: 'serif', style: 'font-size:15px;margin-bottom:4px;', text: def.name }),
-    h('div', { style: 'font-size:12px;line-height:17px;color:#4A5651;margin-bottom:11px;', text: def.description }),
-    h('div', { style: 'display:flex;gap:8px;' }, [
-      aiAvailable
-        ? h('button', { class: 'btn btn-primary', style: `height:36px;${busy ? 'opacity:.6;' : ''}`, disabled: busy ? '' : null, onclick: () => draftReportWithAssistant(def), text: busy ? 'Working…' : 'Draft with assistant' })
-        : null,
-      h('button', { class: `btn ${aiAvailable ? 'btn-line' : 'btn-primary'}`, style: `height:36px;${busy ? 'opacity:.6;' : ''}`, disabled: busy ? '' : null, onclick: () => generateFromTemplate(def), text: 'From template' }),
-    ]),
-  ])));
+  // Busy is encoded "report:<action>:<type>" so only the button that was
+  // actually tapped shows "Working…" — not every card.
+  const rb = String(UI.busy || '').split(':');
+  const anyBusy = rb[0] === 'report';
+  const busyAction = anyBusy ? rb[1] : null;
+  const busyType = anyBusy ? rb[2] : null;
+  const gen = h('div', { style: 'display:flex;flex-direction:column;gap:10px;margin-bottom:20px;' }, REPORT_DEFS.map(def => {
+    const draftWorking = anyBusy && busyAction === 'draft' && busyType === def.type;
+    const tplWorking = anyBusy && busyAction === 'tpl' && busyType === def.type;
+    return h('div', { class: 'card', style: 'padding:15px;' }, [
+      h('div', { class: 'serif', style: 'font-size:15px;margin-bottom:4px;', text: def.name }),
+      h('div', { style: 'font-size:12px;line-height:17px;color:#4A5651;margin-bottom:11px;', text: def.description }),
+      h('div', { style: 'display:flex;gap:8px;' }, [
+        aiAvailable
+          ? h('button', { class: 'btn btn-primary', style: `height:36px;${anyBusy ? 'opacity:.6;' : ''}`, disabled: anyBusy ? '' : null, onclick: () => draftReportWithAssistant(def), text: draftWorking ? 'Working…' : 'Draft with assistant' })
+          : null,
+        h('button', { class: `btn ${aiAvailable ? 'btn-line' : 'btn-primary'}`, style: `height:36px;${anyBusy ? 'opacity:.6;' : ''}`, disabled: anyBusy ? '' : null, onclick: () => generateFromTemplate(def), text: tplWorking ? 'Working…' : 'From template' }),
+      ]),
+    ]);
+  }));
   const generated = STATE.reports;
   return screenWrap([
     aiAvailable ? null : h('div', { class: 'banner info', style: 'margin-bottom:14px;', text: 'Reports generate from live data using structured templates. Assistant-drafted narrative becomes available when the assistant is connected.' }),

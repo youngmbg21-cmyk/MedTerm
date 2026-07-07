@@ -13,9 +13,11 @@
 <script type="module">
   /* Two experiences, one URL. Phones get the native-concept mobile redesign;
      larger screens keep the original desktop workspace, unchanged. The choice
-     is made once at load by viewport width — each entry loads only its own
-     stylesheet, shell, and app code. */
-  const isPhone = window.matchMedia('(max-width: 767px)').matches;
+     is made once at load. Decide by the SHORTER viewport side, not the width,
+     so a phone in landscape (wide but short) still loads the mobile app rather
+     than the desktop shell. A phone's short side is well under 768px in either
+     orientation; a tablet/desktop's is not. */
+  const isPhone = Math.min(window.innerWidth, window.innerHeight) <= 767;
   await import(isPhone ? './js/boot-mobile.js' : './js/boot-desktop.js');
 </script>
 </body>
