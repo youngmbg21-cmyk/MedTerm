@@ -304,14 +304,25 @@ function renderHeader(view, title, question) {
   const subs = subnavFor(UI.tab);
   if (subs) {
     const row = h('div', { class: 'subnav mtscroll' });
+    let activeBtn = null;
     subs.items.forEach(it => {
-      row.appendChild(h('button', {
-        class: `pill ${it.v === subs.current ? 'active' : ''}`,
+      const active = it.v === subs.current;
+      const btn = h('button', {
+        class: `pill ${active ? 'active' : ''}`,
         onclick: () => setState({ [subs.key]: it.v, selectedId: null }),
         text: it.l,
-      }));
+      });
+      if (active) activeBtn = btn;
+      row.appendChild(btn);
     });
     hdr.appendChild(row);
+    // The row scrolls horizontally and rebuilds (scrollLeft 0) on every render,
+    // which would hide a selected right-side pill (MVP, Tests) off-frame. After
+    // layout, centre the active pill so the current selection is always visible.
+    if (activeBtn) requestAnimationFrame(() => {
+      const r = row.getBoundingClientRect(), b = activeBtn.getBoundingClientRect();
+      if (b.width) row.scrollLeft += (b.left + b.width / 2) - (r.left + r.width / 2);
+    });
   }
   return hdr;
 }
