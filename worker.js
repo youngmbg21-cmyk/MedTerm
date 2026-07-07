@@ -793,9 +793,13 @@ Draft "${body.section_label}" now.`;
       return jsonResponse(updated, status, origin, env);
     }
 
-    // Leads can delete anywhere; partners can delete their own documents.
+    // Leads delete anywhere. Write-role members (partners) may delete the
+    // fieldwork records they capture and edit — mirroring their update
+    // capability — plus their own documents. Append-only and decision-spine
+    // tables (ai_assessments, kill_list, hypotheses, …) stay lead-only.
+    const PARTNER_DELETABLE = ['outreach', 'interviews', 'matrix', 'field_checks', 'evidence_links', 'documents'];
     if (request.method === 'DELETE' && recordId &&
-        (member.role === 'lead' || (table === 'documents' && isWriteRole))) {
+        (member.role === 'lead' || (isWriteRole && PARTNER_DELETABLE.includes(table)))) {
       const { data, status } = await supabaseRequest(
         'DELETE', `${table}?id=eq.${recordId}`, null, env
       );
