@@ -4,7 +4,7 @@
    configuration through js/config.js. Reproduces the spec's shell, screens,
    forms, and overlays exactly. No framework, no build step.
    ============================================================================ */
-import { data, isLocalMode, aiAvailable, chatRequest, aiDataSlices } from './data.js';
+import { data, isLocalMode, aiAvailable, chatRequest, assessmentRequest, draftSectionRequest, aiDataSlices } from './data.js';
 import {
   CURRENT_PHASE, PHASES, SEGMENTS, SEGMENT_NAMES, THEMES, OUTREACH_STATUSES,
   CHANNELS, STALL_DAYS, getTeam, interviewerOptions, ownerOptions,
@@ -98,6 +98,9 @@ const UI = {
   subFieldwork: 'outreach', subInsights: 'pains', subDecision: 'brief',
   moreScreen: null, selectedId: null, scriptSeg: 'Patient',
   assistantOpen: false, formType: null, editId: null, form: {}, saving: false,
+  reader: null, // { title, build } — a read-only "tap a card to read it" sheet
+  busy: null,   // label of an in-flight action (e.g. 'assessment') for button states
+  econForm: {}, // working copy for the editable economics assumptions sheet
   messages: [], // seeded from live data the first time the assistant opens
   chatInput: '',
 };
@@ -159,6 +162,7 @@ export async function boot() {
 /* ----------------------------------------------------------------- render */
 let lastView = null, lastOverlayKey = '';
 function overlayKey() {
+  if (UI.reader) return `reader:${UI.reader.title}`;
   if (UI.formType) return `form:${UI.formType}:${UI.editId || ''}`;
   if (UI.selectedId) return `detail:${UI.selectedId}`;
   if (UI.assistantOpen) return 'assistant';
@@ -187,6 +191,7 @@ function render() {
   if (UI.selectedId) frame.appendChild(renderDetail());
   if (UI.assistantOpen) frame.appendChild(renderAssistant());
   if (UI.formType) frame.appendChild(renderForm());
+  if (UI.reader) frame.appendChild(renderReader());
 
   // Restore scroll after the new DOM is in place.
   const ns = document.getElementById('scroll'); if (ns && prevMain) ns.scrollTop = prevMain;
@@ -648,55 +653,180 @@ function renderBrief() {
 
   const assessment = latestAssessment();
   const leaningLabel = assessment?.leaning || 'INSUFFICIENT';
+  const snap = assessment?.data_snapshot || {};
+  const perHyp = (code) => (assessment?.per_hypothesis || []).find(p => p.hypothesis_code === code);
+
+  // Leaning card — tappable to read the full assessment; carries Regenerate.
   const rationale = (assessment && (assessment.summary_markdown || '').trim())
     ? String(assessment.summary_markdown).split(/\n\s*\n/)[0].replace(/[#*]/g, '').trim()
-    : `No AI assessment has been run yet, and the kill criteria still have no numbers under them (no CAC, no conversion, no cost-to-serve) — so the honest current leaning is ${leaningLabel}. Run the assistant to draft one from the evidence.`;
+    : `No AI assessment has been run yet, and the kill criteria still have no numbers under them — so the honest current leaning is ${leaningLabel}. Regenerate to draft one from the evidence.`;
   const leaning = h('div', { class: 'card', style: 'padding:17px;' }, [
-    h('div', { class: 'micro', style: 'color:#6E6A5E;', text: 'Current leaning · advisory, not a verdict' }),
-    h('div', { style: 'margin-top:10px;' }, [chip(leaningLabel, LEANING_TONE[leaningLabel] || 'honey', 'lg')]),
-    h('div', { style: 'font-size:13px;line-height:20px;color:#4A5651;margin-top:12px;', text: rationale }),
-    h('div', { class: 'num', style: 'font-size:11px;color:#6E6A5E;margin-top:12px;padding-top:11px;border-top:1px solid #EFE9DD;', text: `Based on ${STATE.interviews.length} interviews · ${STATE.matrix.length} matrix entries · phase ${CURRENT_PHASE}` }),
+    h('button', { style: 'display:block;width:100%;text-align:left;background:none;border:none;padding:0;cursor:pointer;', onclick: assessment ? () => openReader(`Assessment · ${fmtDay(assessment.created_at)}`, () => assessmentReader(assessment)) : () => {} }, [
+      h('div', { style: 'display:flex;align-items:flex-start;justify-content:space-between;gap:8px;' }, [
+        h('div', { class: 'micro', style: 'color:#6E6A5E;', text: 'Current leaning · advisory, not a verdict' }),
+        assessment ? h('span', { style: 'color:#96501F;font-size:16px;', text: '›' }) : null,
+      ]),
+      h('div', { style: 'margin-top:10px;' }, [chip(leaningLabel, LEANING_TONE[leaningLabel] || 'honey', 'lg')]),
+      h('div', { style: 'font-size:13px;line-height:20px;color:#4A5651;margin-top:12px;', text: rationale }),
+    ]),
+    h('div', { class: 'num', style: 'font-size:11px;color:#6E6A5E;margin-top:12px;padding-top:11px;border-top:1px solid #EFE9DD;', text: `Based on ${snap.interviews ?? STATE.interviews.length} interviews · ${snap.matrix_entries ?? STATE.matrix.length} matrix entries · phase ${CURRENT_PHASE}` }),
+    regenControl(),
   ]);
 
   const hypBlock = h('div', {}, [
-    h('div', { class: 'micro', style: 'color:#6E6A5E;margin-bottom:8px;', text: 'Buyer hypotheses · who pays?' }),
+    h('div', { class: 'micro', style: 'color:#6E6A5E;margin-bottom:8px;', text: 'Buyer hypotheses · who pays? · tap to read' }),
     h('div', { style: 'display:flex;flex-direction:column;gap:11px;' }, hyps.map(hy => {
       const ls = linksFor(hy.id);
       const supp = ls.filter(l => l.direction === 'supports').length;
       const contra = ls.filter(l => l.direction === 'contradicts').length;
-      return h('div', { class: 'card', style: 'padding:15px;' }, [
+      const a = perHyp(hy.code);
+      return h('button', { class: 'card', style: 'padding:15px;text-align:left;width:100%;display:block;cursor:pointer;', onclick: () => openReader(`${hy.code} · ${hy.title}`, () => hypothesisReader(hy, a, ls)) }, [
         h('div', { style: 'display:flex;align-items:flex-start;justify-content:space-between;gap:10px;' }, [
           h('div', { class: 'serif', style: 'font-size:15.5px;line-height:20px;', text: `${hy.code} · ${hy.title}` }),
           chip(hy.status || 'open', dirTone(hy.status)),
         ]),
         h('div', { style: 'font-size:12px;line-height:17px;color:#4A5651;margin-top:5px;', text: hy.description || '' }),
-        h('div', { class: 'num', style: 'font-size:11.5px;color:#6E6A5E;margin-top:9px;', text: `${supp} supporting · ${contra} contradicting` }),
+        h('div', { style: 'display:flex;align-items:center;justify-content:space-between;gap:8px;margin-top:9px;' }, [
+          h('span', { class: 'num', style: 'font-size:11.5px;color:#6E6A5E;', text: `${supp} supporting · ${contra} contradicting` }),
+          h('span', { style: 'color:#96501F;font-size:15px;', text: '›' }),
+        ]),
       ]);
     })),
   ]);
 
   const killCard = h('div', { class: 'card', style: 'padding:15px;' }, [
     h('div', { class: 'micro', style: 'color:#6E6A5E;margin-bottom:10px;', text: 'Kill criteria · any breach kills patient-pays' }),
-    ...kills.map((k, i) => h('div', { style: `display:flex;align-items:flex-start;gap:9px;padding:9px 0;${i < kills.length - 1 ? 'border-bottom:1px solid #EFE9DD;' : ''}` }, [
-      chip(k.status || 'unknown', 'inset', 'sm'),
-      h('div', { style: 'min-width:0;' }, [
-        h('div', { style: 'font-size:12.5px;font-weight:500;color:#1F2A28;', text: `${k.code} · ${k.title}` }),
-        h('div', { style: 'font-size:11.5px;line-height:16px;color:#6E6A5E;margin-top:2px;', text: k.description || '' }),
-      ]),
-    ])),
+    ...kills.map((k, i) => {
+      const bp = (assessment?.breakpoints || []).find(b => b.code === k.code);
+      return h('div', { style: `display:flex;align-items:flex-start;gap:9px;padding:9px 0;${i < kills.length - 1 ? 'border-bottom:1px solid #EFE9DD;' : ''}` }, [
+        chip(k.status || 'unknown', 'inset', 'sm'),
+        h('div', { style: 'min-width:0;' }, [
+          h('div', { style: 'font-size:12.5px;font-weight:500;color:#1F2A28;', text: `${k.code} · ${k.title}` }),
+          h('div', { style: 'font-size:11.5px;line-height:16px;color:#6E6A5E;margin-top:2px;', text: bp?.note || k.description || '' }),
+        ]),
+      ]);
+    }),
   ]);
 
-  return screenWrap([leaning, hypBlock, killCard], '16px 16px 28px', '16px');
+  return screenWrap([leaning, hypBlock, killCard, trajectoryStrip()], '16px 16px 28px', '16px');
+}
+
+/* Regenerate-brief control (mobile mirror of desktop). */
+function regenControl() {
+  if (!aiAvailable) {
+    return h('div', { style: 'margin-top:14px;padding-top:12px;border-top:1px solid #EFE9DD;font-size:11.5px;color:#6E6A5E;', text: 'Connect the assistant to regenerate the brief.' });
+  }
+  const busy = UI.busy === 'assessment';
+  return h('div', { style: 'margin-top:14px;padding-top:12px;border-top:1px solid #EFE9DD;' }, [
+    h('button', { class: 'btn btn-primary tall', style: `width:100%;${busy ? 'opacity:.6;' : ''}`, disabled: busy ? '' : null,
+      onclick: async () => {
+        if (UI.busy) return;
+        setState({ busy: 'assessment' });
+        try { await runAssessment(); UI.busy = null; render(); }
+        catch (e) { UI.busy = null; render(); alert('Assessment failed: ' + e.message); }
+      }, text: busy ? 'Generating…' : 'Regenerate brief' }),
+    h('div', { style: 'font-size:11px;color:#6E6A5E;margin-top:7px;text-align:center;', text: 'Appends a new assessment — the trajectory below is never rewritten.' }),
+  ]);
+}
+
+/* Full-assessment reader body. */
+function assessmentReader(a) {
+  const dir = (d) => (d === 'strengthening' ? 'sage' : d === 'weakening' ? 'honey' : 'line');
+  return h('div', { style: 'display:flex;flex-direction:column;gap:14px;' }, [
+    h('div', { style: 'display:flex;align-items:center;gap:8px;' }, [
+      chip(a.leaning, LEANING_TONE[a.leaning] || 'line'),
+      h('span', { style: 'font-size:11px;color:#6E6A5E;', text: `trigger ${a.trigger} · phase ${a.phase}${a.model ? ` · ${a.model}` : ''}` }),
+    ]),
+    renderMarkdown(a.summary_markdown),
+    ...(a.per_hypothesis || []).length ? [h('div', { class: 'micro', style: 'color:#6E6A5E;margin-top:4px;', text: 'Per hypothesis' })] : [],
+    ...(a.per_hypothesis || []).map(p => h('div', { style: 'border-top:1px solid #EFE9DD;padding-top:10px;' }, [
+      h('div', { style: 'display:flex;align-items:center;gap:8px;margin-bottom:4px;' }, [
+        h('span', { style: 'font-size:12.5px;font-weight:500;', text: p.hypothesis_code }),
+        chip(`${p.direction} · ${p.strength}`, dir(p.direction), 'sm'),
+      ]),
+      p.gaps ? h('div', { style: 'font-size:12px;line-height:17px;color:#4A5651;', text: `Gaps: ${p.gaps}` }) : null,
+      p.what_would_change ? h('div', { style: 'font-size:12px;line-height:17px;color:#6E6A5E;margin-top:2px;', text: `Would change it: ${p.what_would_change}` }) : null,
+    ])),
+  ]);
+}
+
+/* Single-hypothesis reader body: assessment view + linked quotes. */
+function hypothesisReader(hy, assessed, links) {
+  const dirTone = (s) => ({ strengthening: 'sage', weakening: 'honey', dead: 'rose', open: 'line', unknown: 'line' }[s] || 'line');
+  const quotes = links.filter(l => l.evidence_type === 'matrix')
+    .map(l => STATE.matrix.find(m => m.id === l.evidence_id)).filter(Boolean).slice(0, 4);
+  return h('div', { style: 'display:flex;flex-direction:column;gap:12px;' }, [
+    h('div', { style: 'display:flex;gap:6px;flex-wrap:wrap;' }, [
+      chip(hy.status || 'open', dirTone(hy.status)),
+      assessed ? chip(`${assessed.direction} · ${assessed.strength}`, dirTone(assessed.direction), 'sm') : chip('not yet assessed', 'line', 'sm'),
+    ]),
+    h('div', { style: 'font-size:13px;line-height:20px;color:#1F2A28;', text: hy.description || '' }),
+    assessed?.gaps ? h('div', {}, [h('div', { class: 'micro', style: 'color:#6E6A5E;margin-bottom:3px;', text: 'Gaps' }), h('div', { style: 'font-size:12.5px;line-height:18px;color:#4A5651;', text: assessed.gaps })]) : null,
+    assessed?.what_would_change ? h('div', { class: 'banner info', style: 'flex-direction:column;align-items:flex-start;gap:3px;' }, [h('span', { class: 'micro', text: 'What would change this' }), h('span', { style: 'font-weight:400;', text: assessed.what_would_change })]) : null,
+    h('div', { class: 'micro', style: 'color:#6E6A5E;margin-top:2px;', text: `Linked quotes (${quotes.length})` }),
+    quotes.length
+      ? h('div', { style: 'display:flex;flex-direction:column;gap:10px;' }, quotes.map(q => h('div', {}, [
+          h('div', { class: 'quote', text: `“${q.quote || ''}”` }),
+          h('div', { style: 'font-size:11px;color:#6E6A5E;margin-top:4px;', text: q.interview_id || '' }),
+        ])))
+      : h('div', { style: 'font-size:12px;color:#6E6A5E;', text: 'No linked quotes yet — link matrix evidence to this hypothesis on desktop.' }),
+  ]);
+}
+
+/* Trajectory — every assessment, oldest first; tap one to read it. */
+function trajectoryStrip() {
+  const all = [...STATE.ai_assessments].sort((a, b) => String(a.created_at || '').localeCompare(String(b.created_at || '')));
+  const card = h('div', { class: 'card', style: 'padding:15px;' }, [
+    h('div', { class: 'micro', style: 'color:#6E6A5E;margin-bottom:10px;', text: 'Trajectory · every assessment, oldest first — the sequence is evidence' }),
+  ]);
+  if (!all.length) {
+    card.appendChild(h('div', { style: 'font-size:12px;color:#6E6A5E;', text: 'No assessments yet. The first one starts the trajectory.' }));
+    return card;
+  }
+  const strip = h('div', { style: 'display:flex;flex-wrap:wrap;gap:8px;align-items:center;' });
+  all.forEach((a, i) => {
+    const c = chip(`${a.leaning} · ${fmtDay(a.created_at)}`, LEANING_TONE[a.leaning] || 'line');
+    c.style.cursor = 'pointer';
+    if (i === all.length - 1) c.style.boxShadow = '0 0 0 2px var(--sage)';
+    c.addEventListener('click', () => openReader(`Assessment · ${fmtDay(a.created_at)}`, () => assessmentReader(a)));
+    strip.appendChild(c);
+    if (i < all.length - 1) strip.appendChild(h('span', { style: 'font-size:11px;color:#6E6A5E;', text: '→' }));
+  });
+  card.appendChild(strip);
+  return card;
 }
 
 /* ------------------------------------------------------------ DECISION: MEMO */
+const VERDICTS = ['Undecided', 'GO', 'PIVOT', 'NO-GO'];
+const VERDICT_TONE = { GO: 'sage', PIVOT: 'honey', 'NO-GO': 'rose', Undecided: 'line' };
+function memoContent() { return (STATE.decision_memos[0]?.content) || {}; }
+function agreedVerdict(c) {
+  const a = c.verdict_lead || 'Undecided', b = c.verdict_field || 'Undecided';
+  return a !== 'Undecided' && a === b ? a : 'Undecided';
+}
+async function saveMemo(patch) {
+  const memo = STATE.decision_memos[0];
+  if (memo) await data.update('decision_memos', memo.id, patch);
+  else await data.create('decision_memos', { version: 1, content: {}, ...patch });
+  STATE.decision_memos = await data.list('decision_memos');
+  render();
+}
+async function pickVerdict(key, v) {
+  const next = { ...memoContent(), [key]: v };
+  next.verdict = agreedVerdict(next);
+  try { await saveMemo({ content: next }); }
+  catch (e) { alert('Save failed: ' + e.message); }
+}
 function renderMemo() {
   const team = getTeam();
-  const seat = (who, role) => h('div', {}, [
+  const content = memoContent();
+  // Human verdict seat: tap a verdict to set it; persists to the memo.
+  const seat = (who, role, key) => h('div', {}, [
     h('div', { class: 'micro', style: 'color:#6E6A5E;margin-bottom:6px;', text: `${who} · ${role}` }),
-    h('div', { style: 'display:flex;gap:6px;flex-wrap:wrap;' }, ['Undecided', 'GO', 'PIVOT', 'NO-GO'].map((v, i) =>
-      h('span', { style: `display:inline-flex;align-items:center;height:30px;padding:0 12px;border-radius:8px;font-size:12px;font-weight:${i === 0 ? 500 : 400};${i === 0 ? 'background:#3F5A4D;color:#fff;' : 'background:#fff;border:1px solid #E5DDD0;color:#4A5651;'}`, text: v })),
-    ),
+    h('div', { style: 'display:flex;gap:6px;flex-wrap:wrap;' }, VERDICTS.map(v => {
+      const active = (content[key] || 'Undecided') === v;
+      return h('button', { style: `display:inline-flex;align-items:center;height:32px;padding:0 12px;border-radius:8px;font-size:12px;font-weight:500;cursor:pointer;${active ? 'background:#3F5A4D;color:#fff;border:1px solid #3F5A4D;' : 'background:#fff;border:1px solid #E5DDD0;color:#4A5651;'}`, onclick: () => pickVerdict(key, v), text: v });
+    })),
   ]);
   const sections = [
     'Recommendation', 'Evidence summary', 'Buyer & willingness to pay', 'Unit economics verdict',
@@ -707,25 +837,31 @@ function renderMemo() {
     h('div', { class: 'micro', style: 'color:#96501F;margin-bottom:5px;', text: label }),
     h('div', { style: 'font-size:12.5px;line-height:18px;color:#6E6A5E;', text: 'Not yet drafted — the assistant drafts from the evidence ledger; humans edit and sign.' }),
   ])));
-  memoCard.appendChild(h('div', { style: 'padding:14px 15px;' }, [
+  const agreed = agreedVerdict(content);
+  const leadV = content.verdict_lead || 'Undecided', fieldV = content.verdict_field || 'Undecided';
+  const cosign = h('div', { style: 'padding:14px 15px;' }, [
     h('div', { class: 'micro', style: 'color:#6E6A5E;margin-bottom:6px;', text: 'Co-signatures' }),
-    h('div', { style: 'font-size:12.5px;line-height:18px;color:#4A5651;', text: `Not yet co-signed. ${team.lead} and ${team.field} must each pick the same verdict above to enable signing.` }),
-  ]));
+    agreed !== 'Undecided'
+      ? h('div', { style: 'display:flex;align-items:center;gap:8px;' }, [chip(`Agreed verdict: ${agreed}`, VERDICT_TONE[agreed]), h('span', { style: 'font-size:11.5px;color:#6E6A5E;', text: '— ready to co-sign' })])
+      : h('div', { style: 'font-size:12.5px;line-height:18px;color:#4A5651;', text: (leadV !== 'Undecided' || fieldV !== 'Undecided') ? `The seats disagree (${team.lead}: ${leadV} · ${team.field}: ${fieldV}). Co-signing needs one shared verdict.` : `Not yet co-signed. ${team.lead} and ${team.field} must each pick the same verdict above.` }),
+  ]);
+
+  const aiSeat = (() => {
+    const a = latestAssessment();
+    const lean = a?.leaning || 'INSUFFICIENT';
+    return h('div', {}, [
+      h('div', { class: 'micro', style: 'color:#6E6A5E;margin-bottom:6px;', text: 'AI assessment · advisory' }),
+      h('div', { style: 'display:flex;align-items:center;gap:8px;' }, [chip(lean, LEANING_TONE[lean] || 'honey'), h('span', { style: 'font-size:11px;color:#6E6A5E;', text: a ? `assessed ${fmtDay(a.created_at)}` : 'no assessment yet' })]),
+      h('button', { class: 'btn-link', style: 'font-size:12px;margin-top:6px;', onclick: () => setState({ subDecision: 'brief' }), text: 'Open Decision Brief ›' }),
+    ]);
+  })();
+
+  memoCard.appendChild(cosign);
 
   return screenWrap([
     h('div', { class: 'card', style: 'padding:16px;margin-bottom:14px;' }, [
       h('div', { class: 'micro', style: 'color:#6E6A5E;margin-bottom:12px;', text: 'Verdict · three seats. Humans decide; the AI argues.' }),
-      h('div', { style: 'display:flex;flex-direction:column;gap:12px;' }, [
-        seat(team.lead, 'lead'), seat(team.field, 'field'),
-        (() => {
-          const a = latestAssessment();
-          const lean = a?.leaning || 'INSUFFICIENT';
-          return h('div', {}, [
-            h('div', { class: 'micro', style: 'color:#6E6A5E;margin-bottom:6px;', text: 'AI assessment · advisory' }),
-            h('div', { style: 'display:flex;align-items:center;gap:8px;' }, [chip(lean, LEANING_TONE[lean] || 'honey'), h('span', { style: 'font-size:11px;color:#6E6A5E;', text: a ? `assessed ${fmtDay(a.created_at)}` : 'no assessment yet' })]),
-          ]);
-        })(),
-      ]),
+      h('div', { style: 'display:flex;flex-direction:column;gap:14px;' }, [seat(team.lead, 'lead', 'verdict_lead'), seat(team.field, 'field', 'verdict_field'), aiSeat]),
     ]),
     h('div', { class: 'micro', style: 'color:#6E6A5E;margin-bottom:8px;', text: 'Seven sections · AI drafts, humans edit & sign' }),
     memoCard,
@@ -782,10 +918,47 @@ function renderEconomics() {
     ])),
   ]);
 
+  const editBtn = h('button', { class: 'btn btn-line', style: 'width:100%;height:42px;font-size:13px;', onclick: () => openEconForm(a), text: 'Edit assumptions' });
+
   return screenWrap([
     bpCard,
     h('div', { style: 'display:grid;grid-template-columns:1fr 1fr;gap:14px;' }, [kvCard('Assumptions', assumptions), kvCard('Derived outputs', outputs)]),
+    editBtn,
   ], '16px 16px 28px');
+}
+
+/* Editable assumptions — a form sheet of number fields; Save recomputes the
+   break-points and outputs (desktop parity). */
+const ECON_FIELDS = [
+  ['procedure_cost_usd', 'Procedure cost (USD)'], ['take_rate_pct', 'Take rate (%)'], ['cac_usd', 'CAC per lead (USD)'],
+  ['consult_to_travel_pct', 'Consult → travel (%)'], ['service_cost_per_case_usd', 'Service cost per case (USD)'],
+  ['cases_per_month', 'Cases per month'], ['monthly_fixed_costs_usd', 'Monthly fixed costs (USD)'],
+];
+function openEconForm(current) {
+  const form = {}; ECON_FIELDS.forEach(([k]) => { form[k] = String(current[k]); });
+  UI.econForm = form;
+  setState({ formType: 'econ', editId: null, saving: false });
+}
+function econFormBody() {
+  return h('div', { style: 'display:flex;flex-direction:column;gap:16px;' }, ECON_FIELDS.map(([k, label]) =>
+    fieldWrap(label, (() => {
+      const el = h('input', { class: 'field', type: 'number', value: UI.econForm[k] ?? '', inputmode: 'decimal' });
+      el.addEventListener('input', (e) => { UI.econForm[k] = e.target.value; });
+      return el;
+    })())));
+}
+async function saveEconForm() {
+  if (UI.saving) return;
+  const assumptions = {};
+  ECON_FIELDS.forEach(([k]) => { assumptions[k] = Number(UI.econForm[k]) || 0; });
+  UI.saving = true; render();
+  try {
+    const saved = STATE.economics.find(m => m.model_name === 'base');
+    if (saved) await data.update('economics', saved.id, { assumptions });
+    else await data.create('economics', { model_name: 'base', assumptions });
+    STATE.economics = await data.list('economics');
+    UI.saving = false; UI.formType = null; render();
+  } catch (e) { UI.saving = false; render(); alert('Save failed: ' + e.message); }
 }
 
 /* ------------------------------------------------------------ DECISION: ALT MODELS */
@@ -1103,6 +1276,64 @@ async function markTagged(r) {
 }
 
 /* =====================================================================
+   READER SHEET — the mobile way to "open a card and read its content".
+   A rise-up, read-only overlay built from a supplied render function.
+   ===================================================================== */
+function openReader(title, build) { setState({ reader: { title, build } }); }
+function closeReader() { setState({ reader: null }); }
+function renderReader() {
+  return h('div', { class: 'overlay rise' }, [
+    h('div', { class: 'overlay-head', style: 'display:flex;align-items:flex-start;justify-content:space-between;gap:10px;' }, [
+      h('div', { class: 'serif', style: 'font-size:19px;line-height:24px;flex:1;padding-right:8px;', text: UI.reader.title }),
+      h('button', { class: 'icon-btn', style: 'width:34px;height:34px;color:#4A5651;font-size:15px;', onclick: closeReader, text: '✕' }),
+    ]),
+    h('div', { class: 'overlay-body mtscroll' }, [UI.reader.build()]),
+  ]);
+}
+
+/* Tiny markdown → DOM (headings, bullets, **bold**, paragraphs). Text always
+   via textContent — model output never touches innerHTML. */
+function renderMarkdown(text) {
+  const root = h('div', { style: 'display:flex;flex-direction:column;gap:10px;' });
+  String(text || '').split(/\n\s*\n/).forEach(block => {
+    const lines = block.split('\n').map(s => s.trim()).filter(Boolean);
+    if (!lines.length) return;
+    if (lines.every(s => s.startsWith('- ') || s.startsWith('* '))) {
+      const ul = h('ul', { style: 'margin:0;padding-left:1.2em;display:flex;flex-direction:column;gap:4px;' });
+      lines.forEach(s => ul.appendChild(h('li', { style: 'font-size:13px;line-height:19px;color:#1F2A28;' }, boldParts(s.slice(2)))));
+      root.appendChild(ul); return;
+    }
+    const head = lines[0].match(/^(#{1,4})\s+(.*)$/);
+    if (head) {
+      root.appendChild(h('div', { class: 'serif', style: 'font-size:15px;margin-top:2px;', text: head[2] }));
+      const rest = lines.slice(1).join(' ');
+      if (rest) root.appendChild(h('p', { style: 'font-size:13px;line-height:20px;color:#1F2A28;margin:0;' }, boldParts(rest)));
+      return;
+    }
+    root.appendChild(h('p', { style: 'font-size:13px;line-height:20px;color:#1F2A28;margin:0;' }, boldParts(lines.join(' '))));
+  });
+  return root;
+}
+function boldParts(text) {
+  const out = [];
+  String(text).split(/\*\*(.+?)\*\*/g).forEach((part, i) => {
+    if (!part) return;
+    out.push(i % 2 ? h('strong', { text: part }) : document.createTextNode(part));
+  });
+  return out;
+}
+
+/* Run a fresh AI assessment (append-only) — mobile mirror of the desktop
+   "Regenerate brief". Appends to the trajectory; never rewrites history. */
+async function runAssessment() {
+  const res = await assessmentRequest({ trigger: 'manual', phase: CURRENT_PHASE, segments: SEGMENTS, localData: aiDataSlices(STATE) });
+  let record = res.assessment;
+  if (!res.persisted && record) record = await data.create('ai_assessments', record);
+  STATE.ai_assessments = await data.list('ai_assessments');
+  return record;
+}
+
+/* =====================================================================
    ASSISTANT OVERLAY
    ===================================================================== */
 /* First-open greeting, built from the live workspace (not hardcoded). */
@@ -1193,7 +1424,7 @@ function openForm(type, existing = null) {
 }
 function closeForm() { UI.editId = null; setState({ formType: null }); }
 
-const FORM_TITLES = { interview: 'Log interview', contact: 'Add contact', quote: 'Add quote', kill: 'Kill a hypothesis', check: 'Add field check', upload: 'Upload document' };
+const FORM_TITLES = { interview: 'Log interview', contact: 'Add contact', quote: 'Add quote', kill: 'Kill a hypothesis', check: 'Add field check', upload: 'Upload document', econ: 'Edit assumptions' };
 const EDIT_TITLES = { interview: 'Edit interview', contact: 'Edit contact', quote: 'Edit quote', check: 'Edit field check' };
 const ENTRY_NOUN = { interview: 'interview', contact: 'contact', quote: 'quote', check: 'field check' };
 
@@ -1237,7 +1468,7 @@ function renderForm() {
     h('div', { class: 'overlay-head', style: 'display:flex;align-items:center;justify-content:space-between;gap:10px;padding:14px 14px 12px;' }, [
       h('button', { class: 'btn-link lg', onclick: closeForm, text: 'Cancel' }),
       h('div', { class: 'serif', style: 'font-size:17px;flex:1;text-align:center;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;', text: (editing && EDIT_TITLES[type]) || FORM_TITLES[type] }),
-      h('button', { class: 'btn btn-primary', style: `height:36px;padding:0 15px;font-size:13px;${UI.saving ? 'opacity:.6;' : ''}`, disabled: UI.saving ? '' : null, onclick: () => saveForm(type), text: UI.saving ? 'Saving…' : 'Save' }),
+      h('button', { class: 'btn btn-primary', style: `height:36px;padding:0 15px;font-size:13px;${UI.saving ? 'opacity:.6;' : ''}`, disabled: UI.saving ? '' : null, onclick: () => (type === 'econ' ? saveEconForm() : saveForm(type)), text: UI.saving ? 'Saving…' : 'Save' }),
     ]),
     body,
   ]);
@@ -1245,6 +1476,7 @@ function renderForm() {
 
 function formBody(type) {
   const col = (kids) => h('div', { style: 'display:flex;flex-direction:column;gap:16px;' }, kids);
+  if (type === 'econ') return econFormBody();
   const interviewers = interviewerOptions(), owners = ownerOptions();
   const interviewIds = STATE.interviews.map(i => i.interview_id).filter(Boolean);
   if (type === 'interview') return col([
