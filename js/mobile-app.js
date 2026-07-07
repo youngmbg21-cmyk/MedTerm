@@ -1304,9 +1304,10 @@ function buildWeekly() {
   const stalled = STATE.outreach.filter(isStalled);
   const booked = STATE.outreach.filter(r => r.status === 'Booked');
   const phase = PHASES.find(p => p.n === CURRENT_PHASE);
-  const tagged = STATE.interviews.length ? Math.round(STATE.interviews.filter(isTagged).length / STATE.interviews.length * 100) : 100;
+  const tagged = STATE.interviews.length ? Math.round(STATE.interviews.filter(isTagged).length / STATE.interviews.length * 100) : null;
+  const taggedText = tagged == null ? 'n/a — no interviews logged yet' : `${tagged}% (the hard rule is 100%)`;
   return { title: `Weekly field update — ${todayLong()}`, sections: [
-    { title: 'Where we are', body: `Phase ${CURRENT_PHASE} — ${phase?.long || ''}. ${STATE.interviews.length} interviews logged, ${STATE.matrix.length} quotes tagged, ${STATE.outreach.length} contacts in outreach. Same-day tagging: ${tagged}% (the hard rule is 100%).` },
+    { title: 'Where we are', body: `Phase ${CURRENT_PHASE} — ${phase?.long || ''}. ${STATE.interviews.length} interviews logged, ${STATE.matrix.length} quotes tagged, ${STATE.outreach.length} contacts in outreach. Same-day tagging: ${taggedText}.` },
     { title: "This week's interviews", body: recent.length ? recent.map(r => `- ${r.interview_id} · ${r.segment} · ${fmtDay(r.date)} — ${r.brief_topic || 'no topic recorded'}`).join('\n') : 'No interviews in the last 7 days.' },
     { title: 'Top themes so far', body: topThemesByCount().map((t, i) => `${i + 1}. ${t.tag} (${t.count} mentions, ${t.wtpRate}% WTP)`).join('\n') || 'No themes tagged yet.' },
     { title: 'Blockers', body: [

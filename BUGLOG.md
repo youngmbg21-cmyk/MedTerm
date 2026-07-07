@@ -75,3 +75,14 @@ Note discovered (logged in DEFERRED): the mobile app writes the URL hash on rend
 - **`.btn-link` was a ~16px tap target** used for primary nav (form Cancel, "‹ More"/"‹ Interviews" back) — now a real 44px inline-flex target. Verified: Cancel is 44px, header still aligned.
 - **Bottom tab bar used a hardcoded 22px inset** instead of the iOS home-indicator safe area — now `max(12px, env(safe-area-inset-bottom))`; `.tab` given a 44px min-height hit area. Verified: tab 44px.
 - **`.icon-btn` 36→40px** (header/overlay-dismiss — most frequent controls). Inline verdict seats 32→38px and Document "View" 30→36px were bumped in their batches.
+
+## SWEEP PASS 2 (fresh pattern knowledge)
+
+### Batch F — second-pass pattern rescan
+- **Second false-100% found** `buildWeekly` (weekly report generator): `Same-day tagging: 100%` was reported when zero interviews were logged — same dangerous false-positive as the Today KPI, this time baked into an exported report. Fix: "n/a — no interviews logged yet" when there are no interviews.
+- Re-scanned the whole codebase for the fixed pattern classes:
+  - Dead handlers (`onclick: () => {}`): **zero remaining**.
+  - `overflow-x:auto` selectable rows: all 4 (sub-nav, phase rail, script tabs, form pill-select) now call `keepActiveInView`.
+  - Divide-by-zero / misleading defaults: economics + wtpRate + saturation all guarded; only `buildWeekly` remained (fixed above).
+  - Unguarded `[0].prop` / `.find().prop` / `.map`: all guarded (`stalled[0]` behind an `if`, split()[0] always defined, regex `m[0]` always present).
+- **Full console-error walk** (populated seed) across all 24 screens + reader/detail/assistant overlays and every More sub-screen: **zero console/page errors**.
