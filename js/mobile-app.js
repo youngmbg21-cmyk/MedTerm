@@ -192,6 +192,20 @@ function restoreViewFromHash() {
   if (VIEW_NAV[view]) Object.assign(UI, VIEW_NAV[view]);
 }
 
+/* Horizontal scroll rows (sub-nav, script segments, form pill-selects) rebuild
+   at scrollLeft 0 on every render, which can leave a just-selected right-side
+   item clipped off-frame. After layout, if the active item isn't fully visible,
+   centre it in its row. Only acts when clipped, so an already-visible selection
+   never drifts. */
+function keepActiveInView(row, activeEl) {
+  if (!row || !activeEl) return;
+  requestAnimationFrame(() => {
+    const r = row.getBoundingClientRect(), b = activeEl.getBoundingClientRect();
+    if (!b.width || (b.left >= r.left && b.right <= r.right)) return;
+    row.scrollLeft += (b.left + b.width / 2) - (r.left + r.width / 2);
+  });
+}
+
 /* ----------------------------------------------------------------- boot */
 export async function boot() {
   restoreViewFromHash(); // return to the page the URL points at before first paint
@@ -316,13 +330,7 @@ function renderHeader(view, title, question) {
       row.appendChild(btn);
     });
     hdr.appendChild(row);
-    // The row scrolls horizontally and rebuilds (scrollLeft 0) on every render,
-    // which would hide a selected right-side pill (MVP, Tests) off-frame. After
-    // layout, centre the active pill so the current selection is always visible.
-    if (activeBtn) requestAnimationFrame(() => {
-      const r = row.getBoundingClientRect(), b = activeBtn.getBoundingClientRect();
-      if (b.width) row.scrollLeft += (b.left + b.width / 2) - (r.left + r.width / 2);
-    });
+    keepActiveInView(row, activeBtn); // keep the selected pill (MVP, Tests…) in frame
   }
   return hdr;
 }
@@ -1179,7 +1187,13 @@ function renderScripts() {
   const seg = names.includes(UI.scriptSeg) ? UI.scriptSeg : names[0];
   const cur = bySeg[seg];
   const tabs = h('div', { class: 'mtscroll', style: 'display:flex;gap:7px;overflow-x:auto;padding:14px 16px 4px;' });
-  names.forEach(n => tabs.appendChild(h('button', { class: `pill ${n === seg ? 'active' : ''}`, onclick: () => setState({ scriptSeg: n }), text: n })));
+  let activeTab = null;
+  names.forEach(n => {
+    const btn = h('button', { class: `pill ${n === seg ? 'active' : ''}`, onclick: () => setState({ scriptSeg: n }), text: n });
+    if (n === seg) activeTab = btn;
+    tabs.appendChild(btn);
+  });
+  keepActiveInView(tabs, activeTab); // keep the selected segment in frame
   const sections = Array.isArray(cur.content) ? cur.content : [];
   const body = h('div', { style: 'padding:8px 16px 28px;' }, [
     h('div', { style: 'font-size:11.5px;color:#6E6A5E;margin-bottom:12px;', text: `Version ${cur.version || 1}${cur.revert_note ? ` · ${cur.revert_note}` : ''}` }),
@@ -1666,7 +1680,13 @@ function segControl(key, options) {
 }
 function pillControl(key, options) {
   const row = h('div', { class: 'mtscroll', style: 'display:flex;gap:7px;overflow-x:auto;padding-bottom:2px;' });
-  options.forEach(o => row.appendChild(h('button', { type: 'button', class: `pill tall ${UI.form[key] === o ? 'active' : ''}`, onclick: () => { UI.form[key] = o; render(); }, text: o })));
+  let activeBtn = null;
+  options.forEach(o => {
+    const btn = h('button', { type: 'button', class: `pill tall ${UI.form[key] === o ? 'active' : ''}`, onclick: () => { UI.form[key] = o; render(); }, text: o });
+    if (UI.form[key] === o) activeBtn = btn;
+    row.appendChild(btn);
+  });
+  keepActiveInView(row, activeBtn); // keep the chosen option in frame
   return row;
 }
 
