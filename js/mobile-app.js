@@ -91,7 +91,7 @@ const UI = {
   tab: 'today',
   subFieldwork: 'interviews', subInsights: 'pains', subDecision: 'brief',
   moreScreen: null, selectedId: null, scriptSeg: 'Patient',
-  assistantOpen: false, formType: null, form: {}, saving: false,
+  assistantOpen: false, formType: null, editId: null, form: {}, saving: false,
   messages: [{ role: 'bot', text: "I've read the workspace. Two interviews are still untagged past 24h, which breaches the same-day hard rule. Want me to summarise them so you can tag fast?" }],
   chatInput: '',
 };
@@ -428,12 +428,13 @@ function renderOutreach() {
   kids.push(h('div', { style: 'font-size:12px;color:#4A5651;margin-bottom:10px;', text: `${rows.length} contacts · ${contacted} contacted · ${bookedDone} booked or done` }));
   const list = h('div', { class: 'listcard' });
   rows.forEach(o => {
-    list.appendChild(h('div', { class: 'row' }, [
+    list.appendChild(h('button', { class: 'rowbtn', style: 'padding:12px 15px;', onclick: () => openForm('contact', o) }, [
       h('div', { style: 'display:flex;align-items:center;justify-content:space-between;gap:8px;' }, [
         h('span', { style: 'font-size:13.5px;font-weight:500;color:#1F2A28;', text: o.name || '—' }),
-        h('div', { style: 'display:flex;gap:5px;flex-shrink:0;' }, [
+        h('div', { style: 'display:flex;gap:5px;flex-shrink:0;align-items:center;' }, [
           isStalled(o) ? chip('stalled', 'honey', 'sm') : null,
           chip(o.status || 'Cold', statusTone(o.status), 'sm'),
+          h('span', { style: 'color:#96501F;font-size:16px;', text: '›' }),
         ]),
       ]),
       h('div', { style: 'font-size:11.5px;color:#6E6A5E;margin-top:4px;', text: [o.segment, o.organisation, o.country].filter(Boolean).join(' · ') || '—' }),
@@ -460,13 +461,14 @@ function renderMatrix() {
       h('span', { class: 'num', style: 'font-size:11px;color:#6E6A5E;flex-shrink:0;', text: `${g.count} · avg sev ${g.avgSev.toFixed(1)} · WTP-Y ${g.wtpRate}%` }),
     ]));
     g.quotes.forEach(q => {
-      card.appendChild(h('div', { class: 'row' }, [
+      card.appendChild(h('button', { class: 'rowbtn', style: 'padding:12px 15px;', onclick: () => openForm('quote', q) }, [
         h('div', { class: 'quote', text: `“${q.quote || ''}”` }),
         h('div', { style: 'display:flex;align-items:center;justify-content:space-between;gap:8px;margin-top:7px;' }, [
           h('span', { style: 'font-size:11px;color:#6E6A5E;', text: q.interview_id || '—' }),
-          h('div', { style: 'display:flex;gap:5px;' }, [
+          h('div', { style: 'display:flex;gap:5px;align-items:center;' }, [
             q.severity ? chip(`sev ${q.severity}`, sevTone(+q.severity), 'xs') : null,
             q.wtp ? chip(`WTP ${q.wtp}`, wtpTone(q.wtp), 'xs') : null,
+            h('span', { style: 'color:#96501F;font-size:15px;', text: '›' }),
           ]),
         ]),
       ]));
@@ -775,7 +777,7 @@ function renderFieldChecks() {
   const list = h('div', { style: 'display:flex;flex-direction:column;gap:10px;' });
   rows.forEach(f => {
     const tone = f.confirmed ? 'sage' : 'honey';
-    list.appendChild(h('div', { class: 'card', style: 'padding:14px 15px;' }, [
+    list.appendChild(h('button', { class: 'card', style: 'padding:14px 15px;text-align:left;cursor:pointer;display:block;width:100%;', onclick: () => openForm('check', f) }, [
       h('div', { style: 'display:flex;align-items:flex-start;justify-content:space-between;gap:10px;' }, [
         h('div', { style: 'font-size:13px;line-height:18px;color:#1F2A28;font-weight:500;', text: f.assumption || '' }),
         chip(f.confirmed ? 'Confirmed' : 'Unconfirmed', tone, 'sm'),
@@ -1034,6 +1036,10 @@ function renderDetail() {
       h('div', { style: 'font-size:11.5px;color:#6E6A5E;margin-top:6px;', text: `${fmtDay(r.date)} · ${r.format || '—'} · ${r.interviewer || '—'} · initials ${r.initials || '—'} · recorded ${r.recorded || '—'}` }),
     ]),
     h('div', { class: 'overlay-body mtscroll' }, [
+      h('div', { style: 'display:flex;gap:8px;margin-bottom:14px;' }, [
+        h('button', { class: 'btn btn-line', style: 'height:34px;flex:1;', onclick: () => openForm('interview', r), text: 'Edit' }),
+        h('button', { class: 'btn', style: 'height:34px;flex:1;background:#fff;border:1px solid #ECC9C9;color:#9A3F3F;font-size:12.5px;', onclick: () => deleteEntry('interview', r.id), text: 'Delete' }),
+      ]),
       isOverdue(r) ? h('div', { class: 'banner rose', style: 'justify-content:space-between;margin-bottom:14px;' }, [
         h('span', { text: `Untagged ${daysSince(r.date)} days. Untagged interviews are lost interviews.` }),
         h('button', { class: 'btn btn-line', style: 'height:30px;padding:0 11px;font-size:11.5px;border-radius:9px;border-color:#ECC9C9;color:#9A3F3F;', onclick: () => markTagged(r), text: 'Mark tagged' }),
@@ -1108,14 +1114,29 @@ async function sendChat(text) {
 /* =====================================================================
    ENTRY FORM OVERLAY  (6 forms, segmented/pill controls per the spec)
    ===================================================================== */
-function openForm(type) {
+/* Build the form model from an existing record (edit) or blank (create). */
+function formFromRecord(type, r) {
   const team = getTeam();
-  UI.form = { interviewer: team.field, segment: '', format: '', recorded: 'N', tagged_same_day: 'N', channel: '', status: 'Cold', owner: '', interview_id: '', theme_tag: '', severity: '', wtp: '', confirmed: 'No', date: new Date().toISOString().slice(0, 10), killed_date: new Date().toISOString().slice(0, 10) };
+  const today = new Date().toISOString().slice(0, 10);
+  const base = { interviewer: team.field, segment: '', format: '', recorded: 'N', tagged_same_day: 'N', channel: '', status: 'Cold', owner: '', interview_id: '', theme_tag: '', severity: '', wtp: '', confirmed: 'No', date: today, killed_date: today };
+  if (!r) return base;
+  if (type === 'interview') return { ...base, date: r.date || '', interviewer: r.interviewer || '', segment: r.segment || '', initials: r.initials || '', format: r.format || '', recorded: r.recorded || 'N', tagged_same_day: r.tagged_same_day || 'N', brief_topic: r.brief_topic || '', notes_markdown: r.notes_markdown || '' };
+  if (type === 'contact') return { ...base, name: r.name || '', segment: r.segment || '', organisation: r.organisation || '', country: r.country || '', channel: r.channel || '', status: r.status || 'Cold', owner: r.owner || '', first_contact: r.first_contact || '', notes: r.notes || '' };
+  if (type === 'quote') return { ...base, interview_id: r.interview_id || '', quote: r.quote || '', theme_tag: r.theme_tag || '', segment: r.segment || '', severity: r.severity ? String(r.severity) : '', wtp: r.wtp || '' };
+  if (type === 'check') return { ...base, assumption: r.assumption || '', confirmed: r.confirmed ? 'Yes' : 'No', confirmed_by: r.confirmed_by || '', notes: r.notes || '' };
+  return base;
+}
+
+function openForm(type, existing = null) {
+  UI.form = formFromRecord(type, existing);
+  UI.editId = existing ? existing.id : null;
   setState({ formType: type, saving: false });
 }
-function closeForm() { setState({ formType: null }); }
+function closeForm() { UI.editId = null; setState({ formType: null }); }
 
 const FORM_TITLES = { interview: 'Log interview', contact: 'Add contact', quote: 'Add quote', kill: 'Kill a hypothesis', check: 'Add field check', upload: 'Upload document' };
+const EDIT_TITLES = { interview: 'Edit interview', contact: 'Edit contact', quote: 'Edit quote', check: 'Edit field check' };
+const ENTRY_NOUN = { interview: 'interview', contact: 'contact', quote: 'quote', check: 'field check' };
 
 function fieldWrap(label, control) {
   return h('div', {}, [h('div', { class: 'micro fieldlabel', style: 'color:#4A5651;', text: label }), control]);
@@ -1143,11 +1164,20 @@ function pillControl(key, options) {
 
 function renderForm() {
   const type = UI.formType;
-  const body = h('div', { class: 'overlay-body mtscroll' }, [formBody(type)]);
+  const editing = !!UI.editId;
+  const kids = [formBody(type)];
+  // Deleting is available while editing (not for append-only kills / uploads).
+  if (editing && ENTRY_NOUN[type]) {
+    kids.push(h('button', {
+      class: 'btn', style: 'width:100%;height:44px;margin-top:22px;background:#fff;border:1px solid #ECC9C9;color:#9A3F3F;font-size:13px;',
+      onclick: () => deleteEntry(type, UI.editId), text: `Delete ${ENTRY_NOUN[type]}`,
+    }));
+  }
+  const body = h('div', { class: 'overlay-body mtscroll' }, kids);
   return h('div', { class: 'overlay form' }, [
     h('div', { class: 'overlay-head', style: 'display:flex;align-items:center;justify-content:space-between;gap:10px;padding:14px 14px 12px;' }, [
       h('button', { class: 'btn-link lg', onclick: closeForm, text: 'Cancel' }),
-      h('div', { class: 'serif', style: 'font-size:17px;flex:1;text-align:center;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;', text: FORM_TITLES[type] }),
+      h('div', { class: 'serif', style: 'font-size:17px;flex:1;text-align:center;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;', text: (editing && EDIT_TITLES[type]) || FORM_TITLES[type] }),
       h('button', { class: 'btn btn-primary', style: 'height:36px;padding:0 15px;font-size:13px;', onclick: () => saveForm(type), text: UI.saving ? 'Saved ✓' : 'Save' }),
     ]),
     body,
@@ -1234,11 +1264,59 @@ async function saveForm(type) {
     ['date', 'first_contact', 'killed_date'].forEach(k => { if (record[k] === '') record[k] = null; });
     ['segment', 'interview_id', 'theme_tag', 'channel', 'owner', 'format', 'confirmed_by'].forEach(k => { if (record[k] === '') record[k] = null; });
 
-    await data.create(table, record);
+    if (UI.editId) await data.update(table, UI.editId, record);
+    else await data.create(table, record);
     const refresh = { interview: 'interviews', contact: 'outreach', quote: 'matrix', kill: 'kill_list', check: 'field_checks', upload: 'documents' }[type];
     STATE[refresh] = await data.list(refresh);
     UI.saving = true; render();
-    setTimeout(() => { UI.saving = false; UI.formType = null; render(); }, 650);
+    setTimeout(() => { UI.saving = false; UI.formType = null; UI.editId = null; render(); }, 650);
   } catch (e) { alert('Save failed: ' + e.message); }
 }
 function pick(obj, keys) { const o = {}; keys.forEach(k => { o[k] = obj[k]; }); return o; }
+
+/* Delete an evidence record and the hypothesis links pointing at it, so the
+   board never cites something that no longer exists (mirrors the desktop). */
+async function removeLinksFor(evidenceType, evidenceId) {
+  const links = STATE.evidence_links.filter(l => l.evidence_type === evidenceType && l.evidence_id === evidenceId);
+  for (const l of links) await data.remove('evidence_links', l.id);
+  return links.length;
+}
+
+async function deleteEntry(type, id) {
+  if (!id) return;
+  try {
+    if (type === 'interview') {
+      const r = STATE.interviews.find(x => x.id === id); if (!r) return;
+      const quotes = STATE.matrix.filter(q => q.interview_id === r.interview_id);
+      const linkCount = STATE.evidence_links.filter(l =>
+        (l.evidence_type === 'interview' && l.evidence_id === r.interview_id) ||
+        (l.evidence_type === 'matrix' && quotes.some(q => q.id === l.evidence_id))).length;
+      const parts = [`Delete interview ${r.interview_id || 'this interview'}?`];
+      if (quotes.length) parts.push(`This also deletes its ${quotes.length} tagged quote${quotes.length === 1 ? '' : 's'}.`);
+      if (linkCount) parts.push(`${linkCount} hypothesis link${linkCount === 1 ? '' : 's'} will be removed.`);
+      parts.push('This cannot be undone.');
+      if (!confirm(parts.join(' '))) return;
+      for (const q of quotes) { await removeLinksFor('matrix', q.id); await data.remove('matrix', q.id); }
+      await removeLinksFor('interview', r.interview_id);
+      await data.remove('interviews', id);
+      [STATE.interviews, STATE.matrix, STATE.evidence_links] = await Promise.all([data.list('interviews'), data.list('matrix'), data.list('evidence_links')]);
+    } else if (type === 'contact') {
+      const r = STATE.outreach.find(x => x.id === id);
+      if (!confirm(`Delete contact "${(r && r.name) || 'this contact'}"? This cannot be undone.`)) return;
+      await data.remove('outreach', id);
+      STATE.outreach = await data.list('outreach');
+    } else if (type === 'quote') {
+      const linkCount = STATE.evidence_links.filter(l => l.evidence_type === 'matrix' && l.evidence_id === id).length;
+      if (!confirm(`Delete this quote?${linkCount ? ` ${linkCount} hypothesis link${linkCount === 1 ? '' : 's'} will be removed.` : ''} This cannot be undone.`)) return;
+      await removeLinksFor('matrix', id); await data.remove('matrix', id);
+      [STATE.matrix, STATE.evidence_links] = await Promise.all([data.list('matrix'), data.list('evidence_links')]);
+    } else if (type === 'check') {
+      const linkCount = STATE.evidence_links.filter(l => l.evidence_type === 'field_check' && l.evidence_id === id).length;
+      if (!confirm(`Delete this field check?${linkCount ? ` ${linkCount} hypothesis link${linkCount === 1 ? '' : 's'} will be removed.` : ''} This cannot be undone.`)) return;
+      await removeLinksFor('field_check', id); await data.remove('field_checks', id);
+      [STATE.field_checks, STATE.evidence_links] = await Promise.all([data.list('field_checks'), data.list('evidence_links')]);
+    } else return;
+    UI.formType = null; UI.editId = null; UI.selectedId = null;
+    render();
+  } catch (e) { alert('Delete failed: ' + e.message); }
+}
