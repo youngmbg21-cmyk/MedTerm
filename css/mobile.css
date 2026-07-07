@@ -117,6 +117,11 @@ a:hover { color: var(--clay-hover); }
 .btn { font-family: 'Inter'; cursor: pointer; border-radius: 10px; font-weight: 500; display: inline-flex; align-items: center; justify-content: center; gap: 4px; }
 .btn-primary { height: 36px; padding: 0 14px; border: none; background: var(--sage); color: #fff; font-size: 12.5px; }
 .btn-primary.tall { height: 40px; padding: 0 18px; font-size: 13px; }
+/* Semantic solid buttons — red = nothing generated yet, green = ready to open. */
+.btn-danger { height: 36px; padding: 0 14px; border: none; background: #A9453E; color: #fff; font-size: 12.5px; }
+.btn-danger.tall { height: 40px; padding: 0 18px; font-size: 13px; }
+.btn-go { height: 36px; padding: 0 14px; border: none; background: #3B6E4E; color: #fff; font-size: 12.5px; }
+.btn-go.tall { height: 40px; padding: 0 18px; font-size: 13px; }
 .btn-line { height: 36px; padding: 0 14px; border: 1px solid var(--line); background: #fff; color: var(--ink-soft); font-size: 12.5px; }
 .btn-link { background: none; border: none; color: var(--clay); font-family: 'Inter'; font-size: 13px; cursor: pointer; padding: 0; }
 .btn-link.lg { font-size: 14px; }

@@ -711,22 +711,44 @@ function renderBrief() {
   return screenWrap([leaning, hypBlock, killCard, trajectoryStrip()], '16px 16px 28px', '16px');
 }
 
-/* Regenerate-brief control (mobile mirror of desktop). */
+/* Run a fresh assessment with busy state + error surfacing. Shared by the
+   Generate and Regenerate affordances. */
+async function runRegen() {
+  if (UI.busy) return;
+  setState({ busy: 'assessment' });
+  try { await runAssessment(); UI.busy = null; render(); }
+  catch (e) { UI.busy = null; render(); alert('Assessment failed: ' + e.message); }
+}
+
+/* Brief control. Before anything is generated the button is red and says
+   "Generate brief"; once an assessment exists it turns green and says
+   "Open brief" (opening the full read), with a quiet Regenerate beneath so a
+   fresh assessment can still be appended. Mirrors the desktop capability while
+   making state obvious on a phone. */
 function regenControl() {
   if (!aiAvailable) {
-    return h('div', { style: 'margin-top:14px;padding-top:12px;border-top:1px solid #EFE9DD;font-size:11.5px;color:#6E6A5E;', text: 'Connect the assistant to regenerate the brief.' });
+    return h('div', { style: 'margin-top:14px;padding-top:12px;border-top:1px solid #EFE9DD;font-size:11.5px;color:#6E6A5E;', text: 'Connect the assistant to generate the brief.' });
   }
-  const busy = UI.busy === 'assessment';
-  return h('div', { style: 'margin-top:14px;padding-top:12px;border-top:1px solid #EFE9DD;' }, [
-    h('button', { class: 'btn btn-primary tall', style: `width:100%;${busy ? 'opacity:.6;' : ''}`, disabled: busy ? '' : null,
-      onclick: async () => {
-        if (UI.busy) return;
-        setState({ busy: 'assessment' });
-        try { await runAssessment(); UI.busy = null; render(); }
-        catch (e) { UI.busy = null; render(); alert('Assessment failed: ' + e.message); }
-      }, text: busy ? 'Generating…' : 'Regenerate brief' }),
-    h('div', { style: 'font-size:11px;color:#6E6A5E;margin-top:7px;text-align:center;', text: 'Appends a new assessment — the trajectory below is never rewritten.' }),
-  ]);
+  const wrap = h('div', { style: 'margin-top:14px;padding-top:12px;border-top:1px solid #EFE9DD;' });
+
+  if (UI.busy === 'assessment') {
+    wrap.appendChild(h('button', { class: 'btn btn-primary tall', style: 'width:100%;opacity:.6;', disabled: '', text: 'Generating…' }));
+    return wrap;
+  }
+
+  const assessment = latestAssessment();
+  if (!assessment) {
+    wrap.appendChild(h('button', { class: 'btn btn-danger tall', style: 'width:100%;', onclick: () => runRegen(), text: 'Generate brief' }));
+    wrap.appendChild(h('div', { style: 'font-size:11px;color:#6E6A5E;margin-top:7px;text-align:center;', text: 'Drafts the first assessment from the evidence ledger.' }));
+    return wrap;
+  }
+
+  wrap.appendChild(h('button', { class: 'btn btn-go tall', style: 'width:100%;',
+    onclick: () => openReader(`Assessment · ${fmtDay(assessment.created_at)}`, () => assessmentReader(assessment)),
+    text: 'Open brief' }));
+  wrap.appendChild(h('button', { class: 'btn-link', style: 'display:block;margin:9px auto 0;font-size:12px;',
+    onclick: () => runRegen(), text: 'Regenerate — append a new assessment' }));
+  return wrap;
 }
 
 /* Full-assessment reader body. */
@@ -1293,34 +1315,106 @@ function renderReader() {
 
 /* Tiny markdown → DOM (headings, bullets, **bold**, paragraphs). Text always
    via textContent — model output never touches innerHTML. */
-function renderMarkdown(text) {
-  const root = h('div', { style: 'display:flex;flex-direction:column;gap:10px;' });
-  String(text || '').split(/\n\s*\n/).forEach(block => {
-    const lines = block.split('\n').map(s => s.trim()).filter(Boolean);
-    if (!lines.length) return;
-    if (lines.every(s => s.startsWith('- ') || s.startsWith('* '))) {
-      const ul = h('ul', { style: 'margin:0;padding-left:1.2em;display:flex;flex-direction:column;gap:4px;' });
-      lines.forEach(s => ul.appendChild(h('li', { style: 'font-size:13px;line-height:19px;color:#1F2A28;' }, boldParts(s.slice(2)))));
-      root.appendChild(ul); return;
+/* Rich markdown → DOM for assistant replies and AI drafts. Handles headings,
+   bullet/numbered lists, blockquote callouts, and horizontal rules (which are
+   dropped as a hairline, never printed as "----"); inline it renders bold,
+   italic, and code, and turns the decision tokens GO / PIVOT / NO-GO /
+   INSUFFICIENT into colored pills so attention lands where it should.
+   A line-driven parser (not block-split) so a heading immediately followed by
+   a list — the model's usual shape — parses correctly. */
+function renderRich(text) {
+  const root = h('div', { style: 'display:flex;flex-direction:column;gap:9px;' });
+  const lines = String(text || '').replace(/\r/g, '').split('\n');
+  let para = [];
+  let list = null; // { type:'ul'|'ol', el }
+  const flushPara = () => {
+    if (para.length) {
+      root.appendChild(h('p', { style: 'font-size:13px;line-height:20px;color:#1F2A28;margin:0;' }, mdInline(para.join(' '))));
+      para = [];
     }
-    const head = lines[0].match(/^(#{1,4})\s+(.*)$/);
+  };
+  const flushList = () => { if (list) { root.appendChild(list.el); list = null; } };
+  const flushAll = () => { flushPara(); flushList(); };
+
+  for (const rawLine of lines) {
+    const t = rawLine.replace(/\s+$/, '').trim();
+    if (!t) { flushAll(); continue; }
+    if (/^(-{3,}|\*{3,}|_{3,}|—{2,}|={3,})$/.test(t)) {
+      flushAll(); root.appendChild(h('div', { style: 'height:1px;background:#EFE9DD;margin:3px 0;' })); continue;
+    }
+    const head = t.match(/^(#{1,6})\s+(.*)$/);
     if (head) {
-      root.appendChild(h('div', { class: 'serif', style: 'font-size:15px;margin-top:2px;', text: head[2] }));
-      const rest = lines.slice(1).join(' ');
-      if (rest) root.appendChild(h('p', { style: 'font-size:13px;line-height:20px;color:#1F2A28;margin:0;' }, boldParts(rest)));
-      return;
+      flushAll();
+      root.appendChild(h('div', { class: 'serif', style: 'font-size:15px;line-height:21px;color:#1F2A28;margin-top:1px;' }, mdInline(head[2])));
+      continue;
     }
-    root.appendChild(h('p', { style: 'font-size:13px;line-height:20px;color:#1F2A28;margin:0;' }, boldParts(lines.join(' '))));
-  });
+    const bq = t.match(/^>\s?(.*)$/);
+    if (bq) {
+      flushPara(); flushList();
+      root.appendChild(h('div', { style: 'border-left:3px solid #ECDCB6;background:#FBF3DF;padding:8px 11px;border-radius:8px;font-size:12.5px;line-height:19px;color:#5A4A24;' }, mdInline(bq[1])));
+      continue;
+    }
+    const bullet = t.match(/^[-*•]\s+(.*)$/);
+    if (bullet) {
+      flushPara();
+      if (!list || list.type !== 'ul') { flushList(); list = { type: 'ul', el: h('ul', { style: 'margin:0;padding-left:1.15em;display:flex;flex-direction:column;gap:5px;' }) }; }
+      list.el.appendChild(h('li', { style: 'font-size:13px;line-height:19px;color:#1F2A28;' }, mdInline(bullet[1])));
+      continue;
+    }
+    const num = t.match(/^\d+[.)]\s+(.*)$/);
+    if (num) {
+      flushPara();
+      if (!list || list.type !== 'ol') { flushList(); list = { type: 'ol', el: h('ol', { style: 'margin:0;padding-left:1.4em;display:flex;flex-direction:column;gap:5px;' }) }; }
+      list.el.appendChild(h('li', { style: 'font-size:13px;line-height:19px;color:#1F2A28;' }, mdInline(num[1])));
+      continue;
+    }
+    flushList();
+    para.push(t);
+  }
+  flushAll();
   return root;
 }
-function boldParts(text) {
-  const out = [];
-  String(text).split(/\*\*(.+?)\*\*/g).forEach((part, i) => {
-    if (!part) return;
-    out.push(i % 2 ? h('strong', { text: part }) : document.createTextNode(part));
-  });
-  return out;
+
+/* Kept as the public name the drafts/reader call; now the rich renderer. */
+function renderMarkdown(text) { return renderRich(text); }
+
+const LEANING_PILL = {
+  'GO':           { bg: '#E6EDE7', tx: '#3F5A4D' },
+  'NO-GO':        { bg: '#F6E3E3', tx: '#9A3F3F' },
+  'PIVOT':        { bg: '#F5E9CF', tx: '#755A1E' },
+  'INSUFFICIENT': { bg: '#F5E9CF', tx: '#755A1E' },
+};
+
+/* Inline: **bold**, *italic* / _italic_, `code`, then leaning-token pills in
+   the remaining plain runs. Order in the regex puts NO-GO before GO so the
+   longer token wins. */
+function mdInline(text) {
+  const nodes = [];
+  const src = String(text);
+  const re = /(\*\*[^*]+\*\*|__[^_]+__|\*[^*\n]+\*|(?<![A-Za-z0-9])_[^_\n]+_(?![A-Za-z0-9])|`[^`]+`)/g;
+  let last = 0, m;
+  while ((m = re.exec(src))) {
+    colorizeInto(nodes, src.slice(last, m.index));
+    const tok = m[0];
+    if (tok.startsWith('**') || tok.startsWith('__')) nodes.push(h('strong', { text: tok.slice(2, -2) }));
+    else if (tok.startsWith('`')) nodes.push(h('code', { style: 'font-family:ui-monospace,Menlo,monospace;font-size:12px;background:#EFEAE0;border-radius:4px;padding:1px 5px;', text: tok.slice(1, -1) }));
+    else nodes.push(h('em', { text: tok.slice(1, -1) }));
+    last = re.lastIndex;
+  }
+  colorizeInto(nodes, src.slice(last));
+  return nodes;
+}
+function colorizeInto(nodes, s) {
+  if (!s) return;
+  const re = /\b(NO-GO|GO|PIVOT|INSUFFICIENT)\b/g;
+  let last = 0, m;
+  while ((m = re.exec(s))) {
+    if (m.index > last) nodes.push(document.createTextNode(s.slice(last, m.index)));
+    const p = LEANING_PILL[m[1]];
+    nodes.push(h('span', { style: `background:${p.bg};color:${p.tx};font-weight:600;padding:1px 7px;border-radius:999px;font-size:11.5px;white-space:nowrap;`, text: m[1] }));
+    last = m.index + m[0].length;
+  }
+  if (last < s.length) nodes.push(document.createTextNode(s.slice(last)));
 }
 
 /* Run a fresh AI assessment (append-only) — mobile mirror of the desktop
@@ -1361,10 +1455,13 @@ function renderAssistant() {
   const msgs = h('div', { class: 'overlay-body mtscroll', style: 'display:flex;flex-direction:column;gap:11px;' });
   UI.messages.forEach(m => {
     const bot = m.role === 'bot';
-    msgs.appendChild(h('div', {
-      style: `max-width:86%;align-self:${bot ? 'flex-start' : 'flex-end'};background:${bot ? '#FAF7F1' : '#E6EDE7'};border:1px solid ${bot ? '#EFE9DD' : '#D4DFD5'};color:#1F2A28;padding:11px 13px;border-radius:14px;font-size:13.5px;line-height:20px;white-space:pre-wrap;`,
-      text: m.text,
-    }));
+    const rich = bot && m.text !== '…'; // bot replies get formatted; user text + typing dots stay literal
+    const bubble = h('div', {
+      style: `max-width:88%;align-self:${bot ? 'flex-start' : 'flex-end'};background:${bot ? '#FAF7F1' : '#E6EDE7'};border:1px solid ${bot ? '#EFE9DD' : '#D4DFD5'};color:#1F2A28;padding:11px 13px;border-radius:14px;font-size:13.5px;line-height:20px;${rich ? '' : 'white-space:pre-wrap;'}`,
+    });
+    if (rich) bubble.appendChild(renderRich(m.text));
+    else bubble.textContent = m.text;
+    msgs.appendChild(bubble);
   });
   const quick = h('div', { style: 'padding:0 16px 8px;display:flex;flex-wrap:wrap;gap:7px;' },
     STRATEGY_PROMPTS.map(([label, prompt]) => h('button', { class: 'pill', style: 'height:31px;font-size:11.5px;', onclick: () => sendChat(prompt), text: label })));

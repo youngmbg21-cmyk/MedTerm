@@ -89,14 +89,84 @@ function clearChat() {
 function addChatMessage(role, text) {
   const msgs = document.getElementById('chat-messages');
   const el = h('div', { class: role === 'user' ? 'chat-msg user' : 'chat-msg bot' });
-  // Minimal markdown: **bold** only. Everything else is plain text.
-  text.split(/\*\*(.+?)\*\*/g).forEach((part, i) => {
-    if (i % 2 === 1) el.appendChild(h('strong', { text: part }));
-    else el.appendChild(document.createTextNode(part));
-  });
+  // User text stays literal; bot replies get the rich renderer (headings,
+  // bullets, callouts, bold/italic/code, leaning pills; "----" rules dropped).
+  if (role === 'user') el.appendChild(document.createTextNode(text));
+  else el.appendChild(renderRich(text));
   msgs.appendChild(el);
   msgs.scrollTop = msgs.scrollHeight;
   return el;
+}
+
+/* Rich markdown → DOM (desktop mirror of the mobile renderer). Line-driven so a
+   heading immediately followed by a list parses correctly; horizontal rules are
+   dropped to a hairline, and the decision tokens GO / PIVOT / NO-GO /
+   INSUFFICIENT become colored pills. */
+const LEANING_PILL = {
+  'GO':           { bg: '#E6EDE7', tx: '#3F5A4D' },
+  'NO-GO':        { bg: '#F6E3E3', tx: '#9A3F3F' },
+  'PIVOT':        { bg: '#F5E9CF', tx: '#755A1E' },
+  'INSUFFICIENT': { bg: '#F5E9CF', tx: '#755A1E' },
+};
+function renderRich(text) {
+  const root = h('div', { class: 'chat-rich' });
+  const lines = String(text || '').replace(/\r/g, '').split('\n');
+  let para = [], list = null;
+  const flushPara = () => { if (para.length) { root.appendChild(h('p', { class: 'chat-p' }, mdInline(para.join(' ')))); para = []; } };
+  const flushList = () => { if (list) { root.appendChild(list.el); list = null; } };
+  const flushAll = () => { flushPara(); flushList(); };
+  for (const rawLine of lines) {
+    const t = rawLine.replace(/\s+$/, '').trim();
+    if (!t) { flushAll(); continue; }
+    if (/^(-{3,}|\*{3,}|_{3,}|—{2,}|={3,})$/.test(t)) { flushAll(); root.appendChild(h('hr', { class: 'chat-hr' })); continue; }
+    const head = t.match(/^(#{1,6})\s+(.*)$/);
+    if (head) { flushAll(); root.appendChild(h('div', { class: 'chat-h' }, mdInline(head[2]))); continue; }
+    const bq = t.match(/^>\s?(.*)$/);
+    if (bq) { flushPara(); flushList(); root.appendChild(h('div', { class: 'chat-quote' }, mdInline(bq[1]))); continue; }
+    const bullet = t.match(/^[-*•]\s+(.*)$/);
+    if (bullet) {
+      flushPara();
+      if (!list || list.type !== 'ul') { flushList(); list = { type: 'ul', el: h('ul', { class: 'chat-ul' }) }; }
+      list.el.appendChild(h('li', {}, mdInline(bullet[1]))); continue;
+    }
+    const num = t.match(/^\d+[.)]\s+(.*)$/);
+    if (num) {
+      flushPara();
+      if (!list || list.type !== 'ol') { flushList(); list = { type: 'ol', el: h('ol', { class: 'chat-ol' }) }; }
+      list.el.appendChild(h('li', {}, mdInline(num[1]))); continue;
+    }
+    flushList(); para.push(t);
+  }
+  flushAll();
+  return root;
+}
+function mdInline(text) {
+  const nodes = [];
+  const src = String(text);
+  const re = /(\*\*[^*]+\*\*|__[^_]+__|\*[^*\n]+\*|(?<![A-Za-z0-9])_[^_\n]+_(?![A-Za-z0-9])|`[^`]+`)/g;
+  let last = 0, m;
+  while ((m = re.exec(src))) {
+    colorizeInto(nodes, src.slice(last, m.index));
+    const tok = m[0];
+    if (tok.startsWith('**') || tok.startsWith('__')) nodes.push(h('strong', { text: tok.slice(2, -2) }));
+    else if (tok.startsWith('`')) nodes.push(h('code', { class: 'chat-code', text: tok.slice(1, -1) }));
+    else nodes.push(h('em', { text: tok.slice(1, -1) }));
+    last = re.lastIndex;
+  }
+  colorizeInto(nodes, src.slice(last));
+  return nodes;
+}
+function colorizeInto(nodes, s) {
+  if (!s) return;
+  const re = /\b(NO-GO|GO|PIVOT|INSUFFICIENT)\b/g;
+  let last = 0, m;
+  while ((m = re.exec(s))) {
+    if (m.index > last) nodes.push(document.createTextNode(s.slice(last, m.index)));
+    const p = LEANING_PILL[m[1]];
+    nodes.push(h('span', { class: 'chat-pill', style: `background:${p.bg};color:${p.tx};`, text: m[1] }));
+    last = m.index + m[0].length;
+  }
+  if (last < s.length) nodes.push(document.createTextNode(s.slice(last)));
 }
 
 function setTyping(on) {
