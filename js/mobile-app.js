@@ -4,10 +4,10 @@
    configuration through js/config.js. Reproduces the spec's shell, screens,
    forms, and overlays exactly. No framework, no build step.
    ============================================================================ */
-import { data, isLocalMode, aiAvailable, chatRequest, assessmentRequest, draftSectionRequest, aiDataSlices } from './data.js';
+import { data, isLocalMode, aiAvailable, chatRequest, assessmentRequest, draftSectionRequest, aiDataSlices, blobToBase64 } from './data.js';
 import {
   CURRENT_PHASE, PHASES, SEGMENTS, SEGMENT_NAMES, THEMES, OUTREACH_STATUSES,
-  CHANNELS, STALL_DAYS, getTeam, interviewerOptions, ownerOptions,
+  CHANNELS, STALL_DAYS, getTeam, interviewerOptions, ownerOptions, SCHEMA_VERSION,
 } from './config.js';
 
 /* ----------------------------------------------------------------- h() */
@@ -714,7 +714,10 @@ function renderStateOfField() {
   const rec = STATE.deliverables.find(d => d.phase === 3 && d.deliverable === 'State of the field');
   if (rec && rec.evidence) {
     return screenWrap([h('div', { class: 'card', style: 'padding:18px;' }, [
-      h('div', { style: 'font-size:11px;color:#6E6A5E;margin-bottom:10px;', text: `Last updated ${fmtDay(rec.updated_at || rec.created_at)}` }),
+      h('div', { style: 'display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:10px;' }, [
+        h('div', { style: 'font-size:11px;color:#6E6A5E;', text: `Last updated ${fmtDay(rec.updated_at || rec.created_at)}` }),
+        h('button', { class: 'btn-link', style: 'font-size:12.5px;', onclick: () => openStateEditor(), text: 'Edit' }),
+      ]),
       h('div', { style: 'font-size:13.5px;line-height:21px;color:#1F2A28;white-space:pre-line;', text: rec.evidence }),
     ])]);
   }
@@ -722,7 +725,7 @@ function renderStateOfField() {
     h('div', { class: 'serif', style: 'font-size:17px;color:#4A5651;', text: 'No state-of-the-field written yet' }),
     h('div', { style: 'font-size:12.5px;line-height:18px;color:#6E6A5E;max-width:40ch;', text: 'One dated paragraph, updated whenever the picture changes. Let the assistant draft it from the whole ledger, then shape and save.' }),
     h('button', { class: 'btn btn-primary tall', style: 'margin-top:12px;', onclick: () => setState({ assistantOpen: true }), text: 'Draft from evidence' }),
-    h('button', { class: 'btn btn-line', onclick: () => {}, text: 'Write manually' }),
+    h('button', { class: 'btn btn-line tall', onclick: () => openStateEditor(), text: 'Write manually' }),
   ])]);
 }
 
@@ -1454,7 +1457,7 @@ function renderDocuments() {
         h('div', { style: 'font-size:13.5px;font-weight:500;color:#1F2A28;', text: d.filename || '—' }),
         h('div', { style: 'font-size:11px;color:#6E6A5E;margin-top:3px;', text: [d.segment, d.interview_id, fmtDay(d.created_at)].filter(Boolean).join(' · ') }),
       ]),
-      h('button', { class: 'btn btn-line', style: 'height:30px;padding:0 11px;font-size:11.5px;border-radius:9px;', onclick: () => {}, text: 'View' }),
+      h('button', { class: 'btn btn-line', style: 'height:36px;padding:0 13px;font-size:11.5px;border-radius:9px;flex-shrink:0;', onclick: () => viewDocument(d), text: 'View' }),
     ]),
     d.description ? h('div', { style: 'font-size:12px;line-height:17px;color:#4A5651;margin-top:8px;', text: d.description }) : null,
   ])));
@@ -1498,7 +1501,7 @@ function renderSettings() {
     h('div', { class: 'card', style: 'padding:16px;' }, [
       h('div', { class: 'micro', style: 'color:#6E6A5E;margin-bottom:6px;', text: 'Data management' }),
       h('div', { style: 'font-size:12.5px;line-height:18px;color:#4A5651;margin-bottom:12px;', text: 'Back up, restore, or reset the workspace. Every export is a single JSON file.' }),
-      h('button', { class: 'btn btn-line', style: 'width:100%;height:42px;font-size:13px;color:#1F2A28;', onclick: () => {}, text: 'Export everything (backup)' }),
+      h('button', { class: 'btn btn-line', style: 'width:100%;height:42px;font-size:13px;color:#1F2A28;', onclick: (e) => exportEverything(e.currentTarget), text: 'Export everything (backup)' }),
     ]),
   ], '16px 16px 28px', '14px');
 }
@@ -1555,6 +1558,91 @@ async function markTagged(r) {
    ===================================================================== */
 function openReader(title, build) { setState({ reader: { title, build } }); }
 function closeReader() { setState({ reader: null }); }
+
+/* View an uploaded document in-app: images render inline, text shows verbatim,
+   other binaries offer an open/download link (an anchor click keeps the user
+   gesture, so no popup-blocker issues). Uses data.getFile — never fetch direct. */
+async function viewDocument(doc) {
+  let blob = null;
+  try { blob = await data.getFile(doc.id, doc); }
+  catch (e) { alert('Could not open the file: ' + e.message); return; }
+  openReader(doc.filename || 'Document', () => {
+    const wrap = h('div', {});
+    const meta = [doc.segment, doc.interview_id, fmtDay(doc.created_at)].filter(Boolean).join(' · ');
+    if (meta) wrap.appendChild(h('div', { style: 'font-size:11px;color:#6E6A5E;margin-bottom:10px;', text: meta }));
+    if (doc.description) wrap.appendChild(h('div', { style: 'font-size:12.5px;line-height:18px;color:#4A5651;margin-bottom:12px;', text: doc.description }));
+    const mime = (blob && blob.type) || doc.mime_type || '';
+    if (doc.text_content != null) {
+      wrap.appendChild(h('div', { style: 'font-size:13px;line-height:20px;color:#1F2A28;white-space:pre-line;', text: doc.text_content }));
+    } else if (!blob) {
+      wrap.appendChild(h('div', { style: 'font-size:13px;color:#9A3F3F;', text: 'This file has no stored content to display here. It may live only in the team’s browser (local mode).' }));
+    } else {
+      const url = URL.createObjectURL(blob);
+      if (mime.startsWith('image/')) {
+        wrap.appendChild(h('img', { src: url, alt: doc.filename || 'document', style: 'max-width:100%;border-radius:10px;' }));
+      } else {
+        wrap.appendChild(h('a', { href: url, target: '_blank', rel: 'noopener', download: doc.filename || '', class: 'btn btn-primary tall', style: 'text-decoration:none;', text: 'Open / download file' }));
+      }
+    }
+    return wrap;
+  });
+}
+
+/* Manually write/edit the state-of-the-field paragraph (stored on the phase-3
+   'State of the field' deliverable). Mirrors the desktop capability. */
+function openStateEditor() {
+  const rec = STATE.deliverables.find(d => d.phase === 3 && d.deliverable === 'State of the field');
+  UI.stateDraft = rec?.evidence || '';
+  openReader('State of the field', () => {
+    const ta = h('textarea', { class: 'field', rows: '10', style: 'width:100%;min-height:220px;', placeholder: 'One dated paragraph on where the research stands…',
+      oninput: (e) => { UI.stateDraft = e.target.value; } });
+    ta.value = UI.stateDraft;
+    return h('div', {}, [
+      h('div', { style: 'font-size:12px;color:#6E6A5E;margin-bottom:10px;', text: 'One paragraph on where the research stands. Humans own the words; the assistant only drafts.' }),
+      ta,
+      h('div', { style: 'display:flex;gap:8px;margin-top:16px;' }, [
+        h('button', { class: 'btn btn-primary tall', style: 'flex:1;', onclick: () => saveStateOfField(rec), text: 'Save' }),
+        h('button', { class: 'btn btn-line tall', style: 'flex:0 0 auto;', onclick: closeReader, text: 'Cancel' }),
+      ]),
+    ]);
+  });
+}
+async function saveStateOfField(rec) {
+  const text = (UI.stateDraft || '').trim();
+  if (!text) { alert('Write something first, or tap Cancel.'); return; }
+  try {
+    if (rec) await data.update('deliverables', rec.id, { evidence: text });
+    else await data.create('deliverables', { phase: 3, deliverable: 'State of the field', status: 'In progress', evidence: text });
+    STATE.deliverables = await data.list('deliverables');
+    closeReader();
+  } catch (e) { alert('Save failed: ' + e.message); }
+}
+
+/* Export the whole workspace as one self-contained JSON backup (binary docs
+   embedded as base64). Mirrors desktop Settings' export. */
+async function exportEverything(btn) {
+  if (UI.busy === 'export') return;
+  if (btn) btn.textContent = 'Exporting…';
+  UI.busy = 'export';
+  try {
+    const dump = { schema_version: SCHEMA_VERSION, app: 'MedTerminal', exported_at: new Date().toISOString(), tables: {} };
+    for (const t of TABLES) dump.tables[t] = await data.list(t).catch(() => []);
+    for (const doc of dump.tables.documents || []) {
+      if (doc.text_content != null) continue;
+      try {
+        const blob = await data.getFile(doc.id, doc);
+        if (blob && blob.size > 0) { doc.file_base64 = await blobToBase64(blob); doc.file_mime = blob.type || doc.mime_type; }
+      } catch { /* best-effort — a missing blob shouldn't fail the whole export */ }
+    }
+    const blob = new Blob([JSON.stringify(dump, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = h('a', { href: url, download: `medterminal-backup-${new Date().toISOString().slice(0, 10)}.json` });
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 4000);
+    UI.busy = null;
+    if (btn) btn.textContent = 'Export everything (backup)';
+  } catch (e) { UI.busy = null; if (btn) btn.textContent = 'Export everything (backup)'; alert('Export failed: ' + e.message); }
+}
 function renderReader() {
   return h('div', { class: 'overlay rise' }, [
     h('div', { class: 'overlay-head', style: 'display:flex;align-items:flex-start;justify-content:space-between;gap:10px;' }, [
