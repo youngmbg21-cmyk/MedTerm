@@ -87,12 +87,18 @@ const TABLES = ['outreach', 'interviews', 'matrix', 'deliverables', 'scripts', '
 const STATE = {};
 TABLES.forEach(t => { STATE[t] = []; });
 
+/* Latest append-only AI assessment (the live one), or null. */
+function latestAssessment() {
+  return [...STATE.ai_assessments].sort((a, b) => String(b.created_at || '').localeCompare(String(a.created_at || '')))[0] || null;
+}
+const LEANING_TONE = { GO: 'sage', PIVOT: 'honey', 'NO-GO': 'rose', INSUFFICIENT: 'honey' };
+
 const UI = {
   tab: 'today',
   subFieldwork: 'interviews', subInsights: 'pains', subDecision: 'brief',
   moreScreen: null, selectedId: null, scriptSeg: 'Patient',
   assistantOpen: false, formType: null, editId: null, form: {}, saving: false,
-  messages: [{ role: 'bot', text: "I've read the workspace. Two interviews are still untagged past 24h, which breaches the same-day hard rule. Want me to summarise them so you can tag fast?" }],
+  messages: [], // seeded from live data the first time the assistant opens
   chatInput: '',
 };
 
@@ -151,12 +157,27 @@ export async function boot() {
 }
 
 /* ----------------------------------------------------------------- render */
+let lastView = null, lastOverlayKey = '';
+function overlayKey() {
+  if (UI.formType) return `form:${UI.formType}:${UI.editId || ''}`;
+  if (UI.selectedId) return `detail:${UI.selectedId}`;
+  if (UI.assistantOpen) return 'assistant';
+  return '';
+}
+
 function render() {
   const frame = document.getElementById('frame');
-  frame.innerHTML = '';
   const view = currentView();
-  const [title, question] = TITLES[view] || TITLES.today;
+  const oKey = overlayKey();
+  // Preserve scroll across re-renders so tapping a control, saving, or toggling
+  // an overlay never snaps the screen/form back to the top. Only restore when
+  // it's the same screen / same overlay — a genuine navigation still starts fresh.
+  const prevMain = (view === lastView) ? (document.getElementById('scroll')?.scrollTop || 0) : 0;
+  const bodies = document.querySelectorAll('.overlay-body');
+  const prevOverlay = (oKey && oKey === lastOverlayKey && bodies.length) ? bodies[bodies.length - 1].scrollTop : 0;
 
+  frame.innerHTML = '';
+  const [title, question] = TITLES[view] || TITLES.today;
   frame.appendChild(renderHeader(view, title, question));
   const scroll = h('div', { class: 'scroll mtscroll', id: 'scroll' });
   scroll.appendChild(renderScreen(view));
@@ -166,6 +187,11 @@ function render() {
   if (UI.selectedId) frame.appendChild(renderDetail());
   if (UI.assistantOpen) frame.appendChild(renderAssistant());
   if (UI.formType) frame.appendChild(renderForm());
+
+  // Restore scroll after the new DOM is in place.
+  const ns = document.getElementById('scroll'); if (ns && prevMain) ns.scrollTop = prevMain;
+  const nb = document.querySelectorAll('.overlay-body'); if (nb.length && prevOverlay) nb[nb.length - 1].scrollTop = prevOverlay;
+  lastView = view; lastOverlayKey = oKey;
 }
 
 function setState(patch) { Object.assign(UI, patch); render(); }
@@ -328,14 +354,18 @@ function renderToday() {
       h('div', { style: 'font-size:11px;line-height:15px;color:#6E6A5E;margin-top:5px;', text: k.note }),
     ])));
 
-  // decision pulse
+  // decision pulse — derived from the live hypothesis board and kill list
+  const assessment = latestAssessment();
+  const leaning = assessment?.leaning || 'INSUFFICIENT';
+  const strengthening = STATE.hypotheses.filter(hy => hy.kind === 'buyer_hypothesis' && hy.status === 'strengthening').length;
+  const killed = STATE.kill_list.length;
   const pulse = h('button', { class: 'card', style: 'text-align:left;width:100%;padding:15px;cursor:pointer;display:flex;align-items:center;gap:12px;',
     onclick: () => setState({ tab: 'decision', subDecision: 'brief' }) }, [
     h('div', { style: 'flex:1;min-width:0;' }, [
       h('div', { class: 'micro', style: 'color:#6E6A5E;', text: 'If we decided today' }),
       h('div', { style: 'display:flex;align-items:center;gap:8px;margin-top:7px;' }, [
-        chip('INSUFFICIENT', 'honey'),
-        h('span', { class: 'num', style: 'font-size:11.5px;color:#6E6A5E;', text: '2 strengthening · 0 killed' }),
+        chip(leaning, LEANING_TONE[leaning] || 'honey'),
+        h('span', { class: 'num', style: 'font-size:11.5px;color:#6E6A5E;', text: `${strengthening} strengthening · ${killed} killed` }),
       ]),
     ]),
     h('span', { style: 'color:#96501F;font-size:18px;', text: '›' }),
@@ -616,10 +646,15 @@ function renderBrief() {
   const dirTone = (s) => ({ strengthening: 'sage', weakening: 'honey', dead: 'rose', open: 'line', unknown: 'line' }[s] || 'line');
   const linksFor = (id) => STATE.evidence_links.filter(l => l.hypothesis_id === id);
 
+  const assessment = latestAssessment();
+  const leaningLabel = assessment?.leaning || 'INSUFFICIENT';
+  const rationale = (assessment && (assessment.summary_markdown || '').trim())
+    ? String(assessment.summary_markdown).split(/\n\s*\n/)[0].replace(/[#*]/g, '').trim()
+    : `No AI assessment has been run yet, and the kill criteria still have no numbers under them (no CAC, no conversion, no cost-to-serve) — so the honest current leaning is ${leaningLabel}. Run the assistant to draft one from the evidence.`;
   const leaning = h('div', { class: 'card', style: 'padding:17px;' }, [
     h('div', { class: 'micro', style: 'color:#6E6A5E;', text: 'Current leaning · advisory, not a verdict' }),
-    h('div', { style: 'margin-top:10px;' }, [chip('INSUFFICIENT', 'honey', 'lg')]),
-    h('div', { style: 'font-size:13px;line-height:20px;color:#4A5651;margin-top:12px;', text: 'Early in the programme the honest answer is INSUFFICIENT. Twelve interviews point toward a diaspora-payer wedge, but the kill criteria have no numbers under them yet — no CAC, no conversion, no cost-to-serve.' }),
+    h('div', { style: 'margin-top:10px;' }, [chip(leaningLabel, LEANING_TONE[leaningLabel] || 'honey', 'lg')]),
+    h('div', { style: 'font-size:13px;line-height:20px;color:#4A5651;margin-top:12px;', text: rationale }),
     h('div', { class: 'num', style: 'font-size:11px;color:#6E6A5E;margin-top:12px;padding-top:11px;border-top:1px solid #EFE9DD;', text: `Based on ${STATE.interviews.length} interviews · ${STATE.matrix.length} matrix entries · phase ${CURRENT_PHASE}` }),
   ]);
 
@@ -682,10 +717,14 @@ function renderMemo() {
       h('div', { class: 'micro', style: 'color:#6E6A5E;margin-bottom:12px;', text: 'Verdict · three seats. Humans decide; the AI argues.' }),
       h('div', { style: 'display:flex;flex-direction:column;gap:12px;' }, [
         seat(team.lead, 'lead'), seat(team.field, 'field'),
-        h('div', {}, [
-          h('div', { class: 'micro', style: 'color:#6E6A5E;margin-bottom:6px;', text: 'AI assessment · advisory' }),
-          h('div', { style: 'display:flex;align-items:center;gap:8px;' }, [chip('INSUFFICIENT', 'honey'), h('span', { style: 'font-size:11px;color:#6E6A5E;', text: 'no assessment yet' })]),
-        ]),
+        (() => {
+          const a = latestAssessment();
+          const lean = a?.leaning || 'INSUFFICIENT';
+          return h('div', {}, [
+            h('div', { class: 'micro', style: 'color:#6E6A5E;margin-bottom:6px;', text: 'AI assessment · advisory' }),
+            h('div', { style: 'display:flex;align-items:center;gap:8px;' }, [chip(lean, LEANING_TONE[lean] || 'honey'), h('span', { style: 'font-size:11px;color:#6E6A5E;', text: a ? `assessed ${fmtDay(a.created_at)}` : 'no assessment yet' })]),
+          ]);
+        })(),
       ]),
     ]),
     h('div', { class: 'micro', style: 'color:#6E6A5E;margin-bottom:8px;', text: 'Seven sections · AI drafts, humans edit & sign' }),
@@ -752,11 +791,10 @@ function renderEconomics() {
 /* ------------------------------------------------------------ DECISION: ALT MODELS */
 function renderAlt() {
   const cards = STATE.segment_cards.filter(c => c.card_type === 'alt_model');
-  const models = cards.length ? cards.map(c => ({ name: c.name, who: c.who || '', how: c.how || '', revenue: c.revenue || '', pros: c.pros || '', cons: c.cons || '' })) : [
-    { name: 'B2B case-packaging for hospital IPDs', who: 'Hospital IPD pays', how: 'Sell pre-qualified, complete case files to Indian hospital international desks.', revenue: 'Per-qualified-case fee or SaaS seat', pros: 'Two independent IPD willingness-to-pay signals; clean B2B invoice.', cons: 'Smaller TAM; depends on hospital procurement cycles.' },
-    { name: 'Agent tooling (arm the existing channel)', who: 'Agents pay', how: 'Sell the coordination software to existing agents rather than competing with them.', revenue: 'SaaS per agent seat', pros: 'Agents already do the work manually; faster adoption.', cons: 'Agents fear patient-side transparency; churn risk.' },
-    { name: 'Diaspora-first coordination concierge', who: 'Family abroad pays', how: 'Premium concierge for diaspora children funding a parent’s care, with real-time visibility.', revenue: 'Flat coordination fee per case', pros: 'Strongest WTP signal in the interviews; clear payer.', cons: 'CAC to reach diaspora unproven; smaller volume.' },
-  ];
+  if (!cards.length) {
+    return screenWrap([emptyCard('No alternate models yet', 'If patient-pays breaks at its economics, capture the fallback business models here.')]);
+  }
+  const models = cards.map(c => ({ name: c.name, who: c.who || '', how: c.how || '', revenue: c.revenue || '', pros: c.pros || '', cons: c.cons || '' }));
   const el = models.map(m => h('div', { class: 'card', style: 'padding:15px;' }, [
     h('div', { class: 'serif', style: 'font-size:16px;margin-bottom:8px;', text: m.name }),
     h('div', { style: 'margin-bottom:10px;' }, [chip(m.who, 'info')]),
@@ -1062,7 +1100,18 @@ async function markTagged(r) {
 /* =====================================================================
    ASSISTANT OVERLAY
    ===================================================================== */
+/* First-open greeting, built from the live workspace (not hardcoded). */
+function assistantSeed() {
+  const overdue = STATE.interviews.filter(isOverdue).map(r => r.interview_id);
+  if (overdue.length) {
+    const which = overdue.join(', ');
+    return `I've read the workspace. ${overdue.length} interview${overdue.length === 1 ? ' is' : 's are'} still untagged past 24h (${which}), which breaches the same-day hard rule. Want me to summarise ${overdue.length === 1 ? 'it' : 'them'} so you can tag fast?`;
+  }
+  return "I've read the workspace — every interview is tagged and nothing is overdue. Ask me anything about where the project stands or what to do next.";
+}
+
 function renderAssistant() {
+  if (!UI.messages.length) UI.messages.push({ role: 'bot', text: assistantSeed() });
   const msgs = h('div', { class: 'overlay-body mtscroll', style: 'display:flex;flex-direction:column;gap:11px;' });
   UI.messages.forEach(m => {
     const bot = m.role === 'bot';
@@ -1178,7 +1227,7 @@ function renderForm() {
     h('div', { class: 'overlay-head', style: 'display:flex;align-items:center;justify-content:space-between;gap:10px;padding:14px 14px 12px;' }, [
       h('button', { class: 'btn-link lg', onclick: closeForm, text: 'Cancel' }),
       h('div', { class: 'serif', style: 'font-size:17px;flex:1;text-align:center;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;', text: (editing && EDIT_TITLES[type]) || FORM_TITLES[type] }),
-      h('button', { class: 'btn btn-primary', style: 'height:36px;padding:0 15px;font-size:13px;', onclick: () => saveForm(type), text: UI.saving ? 'Saved ✓' : 'Save' }),
+      h('button', { class: 'btn btn-primary', style: `height:36px;padding:0 15px;font-size:13px;${UI.saving ? 'opacity:.6;' : ''}`, disabled: UI.saving ? '' : null, onclick: () => saveForm(type), text: UI.saving ? 'Saving…' : 'Save' }),
     ]),
     body,
   ]);
@@ -1250,27 +1299,28 @@ function formBody(type) {
 }
 
 async function saveForm(type) {
+  if (UI.saving) return; // already in flight — ignore repeat taps (no double-save)
   const f = UI.form;
-  try {
-    let table, record;
-    if (type === 'interview') { table = 'interviews'; record = pick(f, ['date', 'interviewer', 'segment', 'initials', 'format', 'recorded', 'tagged_same_day', 'brief_topic', 'notes_markdown']); }
-    else if (type === 'contact') { table = 'outreach'; record = pick(f, ['name', 'segment', 'organisation', 'country', 'channel', 'status', 'owner', 'first_contact', 'notes']); }
-    else if (type === 'quote') { table = 'matrix'; record = pick(f, ['interview_id', 'quote', 'theme_tag', 'segment', 'severity', 'wtp']); record.severity = record.severity ? Number(record.severity) : null; if (!record.wtp) record.wtp = null; }
-    else if (type === 'kill') { table = 'kill_list'; record = pick(f, ['hypothesis', 'evidence', 'killed_date']); if (!record.hypothesis || !record.evidence) { alert('Hypothesis and evidence are both required.'); return; } }
-    else if (type === 'check') { table = 'field_checks'; record = { assumption: f.assumption || '', confirmed: f.confirmed === 'Yes', confirmed_by: f.confirmed_by || null, notes: f.notes || '' }; }
-    else if (type === 'upload') { table = 'documents'; record = { filename: f.description ? f.description.slice(0, 40) : 'Document', segment: f.segment || null, interview_id: f.interview_id || null, description: f.description || '' }; }
-    else return;
-    // normalise blank date/enum fields to null
-    ['date', 'first_contact', 'killed_date'].forEach(k => { if (record[k] === '') record[k] = null; });
-    ['segment', 'interview_id', 'theme_tag', 'channel', 'owner', 'format', 'confirmed_by'].forEach(k => { if (record[k] === '') record[k] = null; });
+  let table, record;
+  if (type === 'interview') { table = 'interviews'; record = pick(f, ['date', 'interviewer', 'segment', 'initials', 'format', 'recorded', 'tagged_same_day', 'brief_topic', 'notes_markdown']); }
+  else if (type === 'contact') { table = 'outreach'; record = pick(f, ['name', 'segment', 'organisation', 'country', 'channel', 'status', 'owner', 'first_contact', 'notes']); }
+  else if (type === 'quote') { table = 'matrix'; record = pick(f, ['interview_id', 'quote', 'theme_tag', 'segment', 'severity', 'wtp']); record.severity = record.severity ? Number(record.severity) : null; if (!record.wtp) record.wtp = null; }
+  else if (type === 'kill') { table = 'kill_list'; record = pick(f, ['hypothesis', 'evidence', 'killed_date']); if (!record.hypothesis || !record.evidence) { alert('Hypothesis and evidence are both required.'); return; } }
+  else if (type === 'check') { table = 'field_checks'; record = { assumption: f.assumption || '', confirmed: f.confirmed === 'Yes', confirmed_by: f.confirmed_by || null, notes: f.notes || '' }; }
+  else if (type === 'upload') { table = 'documents'; record = { filename: f.description ? f.description.slice(0, 40) : 'Document', segment: f.segment || null, interview_id: f.interview_id || null, description: f.description || '' }; }
+  else return;
+  // normalise blank date/enum fields to null
+  ['date', 'first_contact', 'killed_date'].forEach(k => { if (record[k] === '') record[k] = null; });
+  ['segment', 'interview_id', 'theme_tag', 'channel', 'owner', 'format', 'confirmed_by'].forEach(k => { if (record[k] === '') record[k] = null; });
 
+  UI.saving = true; render(); // disable the button + show "Saving…" while the write is in flight
+  try {
     if (UI.editId) await data.update(table, UI.editId, record);
     else await data.create(table, record);
     const refresh = { interview: 'interviews', contact: 'outreach', quote: 'matrix', kill: 'kill_list', check: 'field_checks', upload: 'documents' }[type];
     STATE[refresh] = await data.list(refresh);
-    UI.saving = true; render();
-    setTimeout(() => { UI.saving = false; UI.formType = null; UI.editId = null; render(); }, 650);
-  } catch (e) { alert('Save failed: ' + e.message); }
+    UI.saving = false; UI.formType = null; UI.editId = null; render(); // close as soon as the write lands
+  } catch (e) { UI.saving = false; render(); alert('Save failed: ' + e.message); }
 }
 function pick(obj, keys) { const o = {}; keys.forEach(k => { o[k] = obj[k]; }); return o; }
 
