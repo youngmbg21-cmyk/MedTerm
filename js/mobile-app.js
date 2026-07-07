@@ -149,8 +149,52 @@ function currentView() {
   return UI.moreScreen || 'moreList';
 }
 
+/* Reverse of currentView(): the nav state each view name restores to. Kept in
+   the URL hash so a page refresh returns to the same page. Overlays (forms,
+   readers, the assistant) are deliberately not encoded — a refresh returns to
+   the underlying page, not a reopened modal. */
+const VIEW_NAV = {
+  today: { tab: 'today' },
+  outreach: { tab: 'fieldwork', subFieldwork: 'outreach' },
+  interviews: { tab: 'fieldwork', subFieldwork: 'interviews' },
+  matrix: { tab: 'fieldwork', subFieldwork: 'matrix' },
+  saturation: { tab: 'fieldwork', subFieldwork: 'saturation' },
+  pains: { tab: 'insights', subInsights: 'pains' },
+  themes: { tab: 'insights', subInsights: 'themes' },
+  segments: { tab: 'insights', subInsights: 'segments' },
+  kill: { tab: 'insights', subInsights: 'kill' },
+  state: { tab: 'insights', subInsights: 'state' },
+  brief: { tab: 'decision', subDecision: 'brief' },
+  memo: { tab: 'decision', subDecision: 'memo' },
+  economics: { tab: 'decision', subDecision: 'economics' },
+  alt: { tab: 'decision', subDecision: 'alt' },
+  fieldchecks: { tab: 'decision', subDecision: 'fieldchecks' },
+  mvp: { tab: 'decision', subDecision: 'mvp' },
+  tests: { tab: 'decision', subDecision: 'tests' },
+  moreList: { tab: 'more', moreScreen: null },
+  scripts: { tab: 'more', moreScreen: 'scripts' },
+  templates: { tab: 'more', moreScreen: 'templates' },
+  manual: { tab: 'more', moreScreen: 'manual' },
+  reports: { tab: 'more', moreScreen: 'reports' },
+  documents: { tab: 'more', moreScreen: 'documents' },
+  settings: { tab: 'more', moreScreen: 'settings' },
+};
+
+/* Keep the URL hash pointing at the current page. replaceState (not a hash
+   assignment) so it neither fires hashchange nor stacks history entries. */
+function syncHash(view) {
+  const want = '#' + view;
+  if (location.hash !== want) { try { history.replaceState(null, '', want); } catch { /* ignore */ } }
+}
+/* Restore the page from the hash on boot, before the first paint. */
+function restoreViewFromHash() {
+  const view = decodeURIComponent((location.hash || '').replace(/^#/, ''));
+  if (VIEW_NAV[view]) Object.assign(UI, VIEW_NAV[view]);
+}
+
 /* ----------------------------------------------------------------- boot */
 export async function boot() {
+  restoreViewFromHash(); // return to the page the URL points at before first paint
   render(); // paint the shell immediately (empty lists)
   // The synced backend (api data) and the worker assistant both require a
   // signed-in Supabase session; without one every request 401s
@@ -183,6 +227,7 @@ function overlayKey() {
 function render() {
   const frame = document.getElementById('frame');
   const view = currentView();
+  syncHash(view); // keep the URL on the current page so a refresh returns here
   const oKey = overlayKey();
   // Preserve scroll across re-renders so tapping a control, saving, or toggling
   // an overlay never snaps the screen/form back to the top. Only restore when
