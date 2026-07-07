@@ -95,7 +95,7 @@ const LEANING_TONE = { GO: 'sage', PIVOT: 'honey', 'NO-GO': 'rose', INSUFFICIENT
 
 const UI = {
   tab: 'today',
-  subFieldwork: 'interviews', subInsights: 'pains', subDecision: 'brief',
+  subFieldwork: 'outreach', subInsights: 'pains', subDecision: 'brief',
   moreScreen: null, selectedId: null, scriptSeg: 'Patient',
   assistantOpen: false, formType: null, editId: null, form: {}, saving: false,
   messages: [], // seeded from live data the first time the assistant opens
@@ -250,7 +250,7 @@ function renderHeader(view, title, question) {
 
 function subnavFor(tab) {
   if (tab === 'fieldwork') return { key: 'subFieldwork', current: UI.subFieldwork, items: [
-    { l: 'Interviews', v: 'interviews' }, { l: 'Outreach', v: 'outreach' }, { l: 'Matrix', v: 'matrix' }, { l: 'Saturation', v: 'saturation' }] };
+    { l: 'Outreach', v: 'outreach' }, { l: 'Interviews', v: 'interviews' }, { l: 'Matrix', v: 'matrix' }, { l: 'Saturation', v: 'saturation' }] };
   if (tab === 'insights') return { key: 'subInsights', current: UI.subInsights, items: [
     { l: 'Top pains', v: 'pains' }, { l: 'Themes', v: 'themes' }, { l: 'Segments', v: 'segments' }, { l: 'Kill list', v: 'kill' }, { l: 'State', v: 'state' }] };
   if (tab === 'decision') return { key: 'subDecision', current: UI.subDecision, items: [
