@@ -19,7 +19,7 @@
 
    Records are flat snake_case objects matching sql/schema.sql.
    ============================================================ */
-import { DATA_MODE, AI_MODE, WORKER_URL, SUPABASE_ANON_KEY, SEGMENT_NAMES } from './config.js';
+import { DATA_MODE, AI_MODE, WORKER_URL, SUPABASE_URL, SUPABASE_ANON_KEY, SEGMENT_NAMES } from './config.js';
 import { buildSeed, buildFreshFieldworkSeed, buildHypotheses, buildScripts } from './seed.js';
 
 const LS_KEY = 'medterm_data_v1';
@@ -328,11 +328,41 @@ const localAdapter = {
    Sends the Supabase session JWT as a Bearer token.
    Untestable without secrets; kept ready for go-live.
    ------------------------------------------------------------ */
+/* Read the persisted Supabase session straight from localStorage. supabase-js
+   stores it there at login under `sb-<ref>-auth-token`; reading it directly
+   means a routine read/write never has to load supabase-js from a CDN at
+   request time (that runtime import proved flaky in the field — a transient
+   esm.sh hiccup surfaced as "Importing a module script failed" on save). */
+function readStoredSession() {
+  try {
+    const ref = new URL(SUPABASE_URL).hostname.split('.')[0];
+    let raw = localStorage.getItem(`sb-${ref}-auth-token`);
+    if (!raw) {
+      for (let i = 0; i < localStorage.length; i++) {
+        const k = localStorage.key(i);
+        if (k && k.startsWith('sb-') && k.endsWith('-auth-token')) { raw = localStorage.getItem(k); break; }
+      }
+    }
+    if (!raw) return null;
+    const p = JSON.parse(raw);
+    return p && p.access_token ? p : (p?.currentSession || p?.session || null);
+  } catch { return null; }
+}
+
 async function getAccessToken() {
-  // Lazy import so local mode never loads the Supabase CDN client.
-  const { getSession } = await import('./auth.js');
-  const session = await getSession();
-  return session?.access_token || null;
+  // Fast path: a valid cached token (60s expiry guard) — no CDN import needed.
+  const session = readStoredSession();
+  const exp = session?.expires_at; // seconds since epoch
+  if (session?.access_token && (!exp || exp * 1000 - 60000 > Date.now())) {
+    return session.access_token;
+  }
+  // Slow path: token missing/expired — load supabase-js to refresh or prompt
+  // login. Only here do we depend on the CDN client.
+  try {
+    const { getSession } = await import('./auth.js');
+    const fresh = await getSession();
+    return fresh?.access_token || null;
+  } catch { return session?.access_token || null; }
 }
 
 async function workerFetch(path, opts = {}) {
