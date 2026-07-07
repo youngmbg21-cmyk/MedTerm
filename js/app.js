@@ -262,13 +262,24 @@ let drawerReturnFocus = null;
    modal opened while the chat panel is open) — the page only unlocks once the
    last overlay closes. The visual containment lives in css/theme.css. */
 let scrollLockDepth = 0;
+let lockedScrollY = 0;
 export function lockScroll() {
   scrollLockDepth += 1;
+  if (scrollLockDepth > 1) return;
+  /* position:fixed, not overflow:hidden — iOS Safari ignores overflow on the
+     body for touch drags, which let the page creep behind open panes. Pinning
+     the body at its current offset makes it immovable; the offset is restored
+     on unlock so the user never notices the swap. */
+  lockedScrollY = window.scrollY;
+  document.body.style.top = `-${lockedScrollY}px`;
   document.body.classList.add('scroll-locked');
 }
 export function unlockScroll() {
   scrollLockDepth = Math.max(0, scrollLockDepth - 1);
-  if (scrollLockDepth === 0) document.body.classList.remove('scroll-locked');
+  if (scrollLockDepth > 0) return;
+  document.body.classList.remove('scroll-locked');
+  document.body.style.top = '';
+  window.scrollTo(0, lockedScrollY);
 }
 
 export function openSidebar() {
@@ -402,10 +413,21 @@ export function emptyState(title, sub, action) {
 /* ------------------------------------------------------------
    MODAL + FORM HELPERS
    ------------------------------------------------------------ */
+/* Several screens (documents viewer, reports, scripts, settings, decision
+   brief) compose their own dialog straight into #modal-root rather than
+   through openModal. The page freeze therefore watches the mount point
+   itself: any pane mounted there locks the page, and the lock releases when
+   the root empties — no call site can forget to lock or leak an unlock. */
+const modalRootEl = document.getElementById('modal-root');
+let modalLockHeld = false;
+new MutationObserver(() => {
+  const open = modalRootEl.children.length > 0;
+  if (open && !modalLockHeld) { lockScroll(); modalLockHeld = true; }
+  else if (!open && modalLockHeld) { unlockScroll(); modalLockHeld = false; }
+}).observe(modalRootEl, { childList: true });
+
 export function openModal(title, fields, onSubmit, submitLabel = 'Save', { danger } = {}) {
   const root = document.getElementById('modal-root');
-  // Re-opening replaces the current modal; only lock once for the modal layer.
-  const alreadyOpen = root.children.length > 0;
   root.innerHTML = '';
 
   const form = h('form', { onsubmit: (e) => {
@@ -433,14 +455,10 @@ export function openModal(title, fields, onSubmit, submitLabel = 'Save', { dange
     class: 'modal-bg fade-in',
     onclick: (e) => { if (e.target.classList.contains('modal-bg')) closeModal(); },
   }, [h('div', { class: 'modal p-6' }, [form])]));
-  if (!alreadyOpen) lockScroll();
 }
 
 export function closeModal() {
-  const root = document.getElementById('modal-root');
-  const wasOpen = root.children.length > 0;
-  root.innerHTML = '';
-  if (wasOpen) unlockScroll();
+  document.getElementById('modal-root').innerHTML = '';
 }
 
 export function formField(label, key, type, value, options, inputType, attrs = {}) {
