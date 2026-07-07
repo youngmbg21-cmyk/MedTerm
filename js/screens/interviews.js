@@ -9,7 +9,7 @@ import {
 import { SEGMENTS, SEGMENT_NAMES, interviewerOptions } from '../config.js';
 import { data } from '../data.js';
 import { exportInterviews } from '../export.js';
-import { openLinkModal, existingLinkChips } from '../evidence.js';
+import { openLinkModal, existingLinkChips, removeLinksForEvidence } from '../evidence.js';
 import { barChart } from '../charts.js';
 
 let selectedId = null;
@@ -167,7 +167,10 @@ function renderInterviews(page) {
     const header = h('div', { class: 'px-6 pt-5 pb-4 border-b b-soft' }, [
       h('div', { class: 'flex flex-wrap items-center justify-between gap-2' }, [
         h('div', { class: 'serif text-xl', text: `${r.interview_id || '—'} · ${r.segment || '—'}` }),
-        h('button', { class: 'btn btn-line text-xs', onclick: () => openInterviewForm(r) }, 'Edit'),
+        h('div', { class: 'flex gap-2' }, [
+          h('button', { class: 'btn btn-line text-xs', onclick: () => openInterviewForm(r) }, 'Edit'),
+          h('button', { class: 'btn btn-line text-xs t-rose', onclick: () => deleteInterview(r) }, 'Delete'),
+        ]),
       ]),
       h('div', { class: 'text-xs mt-1 t-mute', text: `${fmtDate(r.date)} · ${r.format || '—'} · by ${r.interviewer || '—'} · initials ${r.initials || '—'} · recorded ${r.recorded || '—'}` }),
     ]);
@@ -284,7 +287,7 @@ function renderInterviews(page) {
 function openInterviewForm(existing) {
   const r = existing || {};
   const fields = [
-    formField('Date', 'date', 'input', r.date || new Date().toISOString().slice(0, 10), null, 'date'),
+    formField('Date', 'date', 'input', r.date || new Date().toISOString().slice(0, 10), null, 'date', { required: true }),
     formField('Interviewer', 'interviewer', 'select', r.interviewer, interviewerOptions()),
     formField('Segment', 'segment', 'select', r.segment, SEGMENT_NAMES),
     formField('Initials', 'initials', 'input', r.initials),
@@ -307,6 +310,37 @@ function openInterviewForm(existing) {
       renderCurrentRoute();
     } catch (e) { alert('Save failed: ' + e.message); }
   });
+}
+
+async function deleteInterview(r) {
+  /* An interview owns its tagged quotes (matrix.interview_id is a real FK),
+     so deleting it must take those quotes — and every hypothesis link on the
+     interview or its quotes — with it. Spell that out before confirming. */
+  const quotes = STATE.matrix.filter(q => q.interview_id === r.interview_id);
+  const linkCount = STATE.evidence_links.filter(l =>
+    (l.evidence_type === 'interview' && l.evidence_id === r.interview_id) ||
+    (l.evidence_type === 'matrix' && quotes.some(q => q.id === l.evidence_id))
+  ).length;
+
+  const parts = [`Delete interview ${r.interview_id || 'this interview'}?`];
+  if (quotes.length) parts.push(`This also deletes its ${quotes.length} tagged matrix quote${quotes.length === 1 ? '' : 's'}.`);
+  if (linkCount) parts.push(`${linkCount} hypothesis link${linkCount === 1 ? '' : 's'} will be removed.`);
+  parts.push('This cannot be undone.');
+  if (!confirm(parts.join(' '))) return;
+
+  try {
+    for (const q of quotes) {
+      await removeLinksForEvidence('matrix', q.id);
+      await data.remove('matrix', q.id);
+    }
+    await removeLinksForEvidence('interview', r.interview_id);
+    await data.remove('interviews', r.id);
+    if (selectedId === r.id) selectedId = null;
+    [STATE.interviews, STATE.matrix, STATE.evidence_links] = await Promise.all([
+      data.list('interviews'), data.list('matrix'), data.list('evidence_links'),
+    ]);
+    renderCurrentRoute();
+  } catch (e) { alert('Delete failed: ' + e.message); }
 }
 
 registerRoute('interviews', 'Interviews', renderInterviews,

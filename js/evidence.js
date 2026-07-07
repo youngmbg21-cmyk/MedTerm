@@ -67,6 +67,16 @@ export function linksForEvidence(evidenceType, evidenceId) {
   return STATE.evidence_links.filter(l => l.evidence_type === evidenceType && l.evidence_id === evidenceId);
 }
 
+/* When a record is deleted, its hypothesis links must go too — the board
+   never cites evidence that no longer exists (rule 11). Deletes every link
+   pointing at the record and returns how many were removed. Caller reloads
+   STATE.evidence_links afterwards. */
+export async function removeLinksForEvidence(evidenceType, evidenceId) {
+  const links = linksForEvidence(evidenceType, evidenceId);
+  for (const l of links) await data.remove('evidence_links', l.id);
+  return links.length;
+}
+
 /* Resolve a link to its underlying record: { cite, text, record }. */
 export function resolveLink(link) {
   switch (link.evidence_type) {

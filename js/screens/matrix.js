@@ -9,7 +9,7 @@ import {
 import { SEGMENT_NAMES, THEMES } from '../config.js';
 import { data } from '../data.js';
 import { exportMatrix } from '../export.js';
-import { openLinkModal, existingLinkChips, maybeProposeLinks } from '../evidence.js';
+import { openLinkModal, existingLinkChips, maybeProposeLinks, removeLinksForEvidence } from '../evidence.js';
 
 /* View + drill-down state persist across re-renders within the session — never to storage. */
 let activeView = null; // 'grid' | 'quotes' — auto-picked until the user taps a toggle
@@ -217,6 +217,7 @@ function renderQuotesView(card) {
             h('button', { class: 'btn btn-ghost text-xs', title: 'Link to hypothesis',
               onclick: () => openLinkModal({ evidence_type: 'matrix', evidence_id: q.id, cite: q.interview_id || 'quote' }) }, 'Link'),
             h('button', { class: 'btn btn-ghost text-xs', onclick: () => openMatrixForm(q) }, 'Edit'),
+            h('button', { class: 'btn btn-ghost text-xs t-rose', onclick: () => deleteQuote(q) }, 'Delete'),
           ]),
         });
         const linkChips = existingLinkChips('matrix', q.id);
@@ -254,6 +255,8 @@ function openMatrixForm(existing) {
     formField('Notes', 'notes', 'textarea', r.notes),
   ], async (form) => {
     if (form.severity) form.severity = Number(form.severity);
+    // '' would violate the FK to interviews(interview_id) — unlinked is NULL.
+    if (!form.interview_id) form.interview_id = null;
     try {
       let saved;
       if (existing) saved = await data.update('matrix', existing.id, form);
@@ -265,6 +268,22 @@ function openMatrixForm(existing) {
       maybeProposeLinks('matrix', saved);
     } catch (e) { alert('Save failed: ' + e.message); }
   });
+}
+
+async function deleteQuote(q) {
+  const linkCount = existingLinkChips('matrix', q.id).length;
+  const parts = ['Delete this quote?'];
+  if (linkCount) parts.push(`${linkCount} hypothesis link${linkCount === 1 ? '' : 's'} will be removed.`);
+  parts.push('This cannot be undone.');
+  if (!confirm(parts.join(' '))) return;
+  try {
+    await removeLinksForEvidence('matrix', q.id);
+    await data.remove('matrix', q.id);
+    [STATE.matrix, STATE.evidence_links] = await Promise.all([
+      data.list('matrix'), data.list('evidence_links'),
+    ]);
+    renderCurrentRoute();
+  } catch (e) { alert('Delete failed: ' + e.message); }
 }
 
 registerRoute('matrix', 'Theme matrix', renderMatrix,

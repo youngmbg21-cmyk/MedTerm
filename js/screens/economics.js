@@ -5,7 +5,7 @@ import {
 } from '../app.js';
 import { interviewerOptions } from '../config.js';
 import { data } from '../data.js';
-import { openLinkModal, existingLinkChips, maybeProposeLinks } from '../evidence.js';
+import { openLinkModal, existingLinkChips, maybeProposeLinks, removeLinksForEvidence } from '../evidence.js';
 
 /* ---------- Unit economics — "Does the patient-pays model survive its break-points?" ---------- */
 /* Exported so reports.js can reuse the exact model for the Risk Assessment
@@ -261,6 +261,7 @@ function renderFieldChecks(page) {
               h('button', { class: 'btn btn-ghost text-xs', title: 'Link to hypothesis or kill criterion',
                 onclick: () => openLinkModal({ evidence_type: 'field_check', evidence_id: r.id, cite: 'field check' }) }, 'Link'),
               h('button', { class: 'btn btn-ghost text-xs', onclick: () => openFieldCheckForm(r) }, 'Edit'),
+              h('button', { class: 'btn btn-ghost text-xs t-rose', onclick: () => deleteFieldCheck(r) }, 'Delete'),
             ]),
           ]),
         ]));
@@ -295,6 +296,22 @@ function openFieldCheckForm(existing) {
       }
     } catch (e) { alert('Save failed: ' + e.message); }
   });
+}
+
+async function deleteFieldCheck(r) {
+  const linkCount = existingLinkChips('field_check', r.id).length;
+  const parts = ['Delete this field check?'];
+  if (linkCount) parts.push(`${linkCount} hypothesis link${linkCount === 1 ? '' : 's'} will be removed.`);
+  parts.push('This cannot be undone.');
+  if (!confirm(parts.join(' '))) return;
+  try {
+    await removeLinksForEvidence('field_check', r.id);
+    await data.remove('field_checks', r.id);
+    [STATE.field_checks, STATE.evidence_links] = await Promise.all([
+      data.list('field_checks'), data.list('evidence_links'),
+    ]);
+    renderCurrentRoute();
+  } catch (e) { alert('Delete failed: ' + e.message); }
 }
 
 registerRoute('field-checks', 'Field checks', renderFieldChecks,

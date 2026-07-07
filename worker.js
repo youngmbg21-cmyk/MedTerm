@@ -717,6 +717,23 @@ Draft "${body.section_label}" now.`;
   }
 
   // --- CRUD endpoints ---
+  // Browsers submit '' for cleared inputs, but Postgres rejects '' for DATE
+  // (22007) and INTEGER (22P02) columns and for the interview FK (23503).
+  // Normalise to NULL at the seam so every client path is covered.
+  const EMPTY_AS_NULL = {
+    outreach: ['first_contact'],
+    interviews: ['date'],
+    matrix: ['severity', 'interview_id'],
+    kill_list: ['killed_date'],
+    field_checks: ['confirmed_date'],
+  };
+  const normalizeEmpty = (table, row) => {
+    (EMPTY_AS_NULL[table] || []).forEach(col => {
+      if (row[col] === '') row[col] = null;
+    });
+    return row;
+  };
+
   // Table mapping
   const tableRoutes = {
     '/api/outreach': 'outreach',
@@ -756,7 +773,7 @@ Draft "${body.section_label}" now.`;
 
     if (request.method === 'POST' && isWriteRole) {
       const body = await request.json();
-      const row = body.fields || body;
+      const row = normalizeEmpty(table, body.fields || body);
       row.created_by = member.id;
       if (table === 'documents') row.uploaded_by = member.display_name;
       const { data, status } = await supabaseRequest('POST', table, row, env);
@@ -767,7 +784,7 @@ Draft "${body.section_label}" now.`;
 
     if (request.method === 'PATCH' && recordId && isWriteRole) {
       const body = await request.json();
-      const fields = body.fields || body;
+      const fields = normalizeEmpty(table, body.fields || body);
       const { data, status } = await supabaseRequest(
         'PATCH', `${table}?id=eq.${recordId}`, fields, env
       );
@@ -776,9 +793,13 @@ Draft "${body.section_label}" now.`;
       return jsonResponse(updated, status, origin, env);
     }
 
-    // Leads can delete anywhere; partners can delete their own documents.
+    // Leads delete anywhere. Write-role members (partners) may delete the
+    // fieldwork records they capture and edit — mirroring their update
+    // capability — plus their own documents. Append-only and decision-spine
+    // tables (ai_assessments, kill_list, hypotheses, …) stay lead-only.
+    const PARTNER_DELETABLE = ['outreach', 'interviews', 'matrix', 'field_checks', 'evidence_links', 'documents'];
     if (request.method === 'DELETE' && recordId &&
-        (member.role === 'lead' || (table === 'documents' && isWriteRole))) {
+        (member.role === 'lead' || (isWriteRole && PARTNER_DELETABLE.includes(table)))) {
       const { data, status } = await supabaseRequest(
         'DELETE', `${table}?id=eq.${recordId}`, null, env
       );

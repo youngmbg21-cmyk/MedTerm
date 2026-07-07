@@ -75,7 +75,12 @@ function renderOutreach(page) {
         statusTd,
         h('td', { class: 'num', 'data-label': 'First contact', text: fmtDate(r.first_contact) }),
         h('td', { 'data-label': 'Owner', text: r.owner || '—' }),
-        h('td', { 'data-label': '' }, [h('button', { class: 'btn btn-ghost text-xs', onclick: () => openOutreachForm(r) }, 'Edit')]),
+        h('td', { 'data-label': '' }, [
+          h('div', { class: 'flex gap-1 justify-end' }, [
+            h('button', { class: 'btn btn-ghost text-xs', onclick: () => openOutreachForm(r) }, 'Edit'),
+            h('button', { class: 'btn btn-ghost text-xs t-rose', onclick: () => deleteContact(r) }, 'Delete'),
+          ]),
+        ]),
       ]));
     });
     table.appendChild(tbody);
@@ -105,6 +110,15 @@ function openOutreachForm(existing) {
       renderCurrentRoute();
     } catch (e) { alert('Save failed: ' + e.message); }
   });
+}
+
+async function deleteContact(r) {
+  if (!confirm(`Delete contact "${r.name || 'this contact'}"? This cannot be undone.`)) return;
+  try {
+    await data.remove('outreach', r.id);
+    STATE.outreach = await data.list('outreach');
+    renderCurrentRoute();
+  } catch (e) { alert('Delete failed: ' + e.message); }
 }
 
 registerRoute('outreach', 'Outreach', renderOutreach,

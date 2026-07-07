@@ -395,7 +395,11 @@ export function openModal(title, fields, onSubmit, submitLabel = 'Save', { dange
     const out = {};
     fields.forEach(f => {
       const el = form.querySelector(`[name="${f.key}"]`);
-      if (el) out[f.key] = el.value;
+      if (!el) return;
+      // A cleared date/number input submits '' — Postgres rejects '' for
+      // typed columns (22007/22P02), so it must become NULL before data.js.
+      out[f.key] = el.value === '' && (el.type === 'date' || el.type === 'number')
+        ? null : el.value;
     });
     onSubmit(out);
   } });
@@ -417,7 +421,7 @@ export function closeModal() {
   document.getElementById('modal-root').innerHTML = '';
 }
 
-export function formField(label, key, type, value, options, inputType) {
+export function formField(label, key, type, value, options, inputType, attrs = {}) {
   const wrap = h('div', { class: 'mb-3' });
   wrap.appendChild(h('label', { class: 'label', text: label }));
   let input;
@@ -432,7 +436,7 @@ export function formField(label, key, type, value, options, inputType) {
     input = h('textarea', { class: 'textarea', name: key, rows: '3' });
     if (value) input.value = value;
   } else {
-    input = h('input', { class: 'input', name: key, type: inputType || 'text', value: value ?? '' });
+    input = h('input', { class: 'input', name: key, type: inputType || 'text', value: value ?? '', ...attrs });
   }
   wrap.appendChild(input);
   return { key, el: wrap };
