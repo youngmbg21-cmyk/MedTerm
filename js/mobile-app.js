@@ -1044,6 +1044,11 @@ function renderSettings() {
       h('div', { style: 'display:flex;align-items:center;gap:8px;' }, [h('span', { style: 'font-size:12.5px;color:#4A5651;', text: 'Assistant:' }), chip(ai, aiAvailable ? 'sage' : 'line', 'sm')]),
     ]),
     h('div', { class: 'card', style: 'padding:16px;' }, [
+      h('div', { class: 'micro', style: 'color:#6E6A5E;margin-bottom:6px;', text: 'Assistant API key' }),
+      h('div', { style: 'font-size:12.5px;line-height:18px;color:#4A5651;margin-bottom:12px;', text: 'The assistant runs on your Claude API key, held on the server and shared by the whole team. Set or replace it on the admin page.' }),
+      h('a', { class: 'btn btn-primary', style: 'width:100%;height:42px;font-size:13px;text-decoration:none;', href: './admin.html', text: 'Manage API key' }),
+    ]),
+    h('div', { class: 'card', style: 'padding:16px;' }, [
       h('div', { class: 'micro', style: 'color:#6E6A5E;margin-bottom:6px;', text: 'Data management' }),
       h('div', { style: 'font-size:12.5px;line-height:18px;color:#4A5651;margin-bottom:12px;', text: 'Back up, restore, or reset the workspace. Every export is a single JSON file.' }),
       h('button', { class: 'btn btn-line', style: 'width:100%;height:42px;font-size:13px;color:#1F2A28;', onclick: () => {}, text: 'Export everything (backup)' }),
@@ -1152,10 +1157,15 @@ async function sendChat(text) {
   UI.messages.push({ role: 'bot', text: '…' });
   render();
   try {
-    const res = await chatRequest({ message: msg, history: UI.messages.slice(0, -1), localData: aiDataSlices(STATE) });
-    UI.messages[UI.messages.length - 1] = { role: 'bot', text: res.reply || res.text || '(no reply)' };
+    // The worker expects a Claude-style messages array ({role, content}); map
+    // ours (bot->assistant, text->content) and drop the typing placeholder.
+    const history = UI.messages
+      .filter(m => m.text !== '…')
+      .map(m => ({ role: m.role === 'bot' ? 'assistant' : 'user', content: m.text }));
+    const res = await chatRequest({ messages: history, tools: true, localData: aiDataSlices(STATE) });
+    UI.messages[UI.messages.length - 1] = { role: 'bot', text: res.text || '(empty reply)' };
   } catch (e) {
-    UI.messages[UI.messages.length - 1] = { role: 'bot', text: 'The assistant is unavailable right now.' };
+    UI.messages[UI.messages.length - 1] = { role: 'bot', text: `Couldn't reach the assistant. ${e.message}` };
   }
   render();
 }
