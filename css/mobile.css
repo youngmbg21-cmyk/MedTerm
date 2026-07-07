@@ -131,6 +131,15 @@ a:hover { color: var(--clay-hover); }
 textarea.field { height: auto; padding: 11px 12px; line-height: 22px; resize: none; }
 .fieldlabel { margin-bottom: 6px; }
 
+/* Assistant "thinking" indicator — three bouncing dots. Under reduced motion
+   the global rule stops the animation, leaving three static dots (still a
+   clear "working" sign). */
+.typing { display: inline-flex; align-items: center; gap: 5px; height: 20px; }
+.typing-dot { width: 7px; height: 7px; border-radius: 50%; background: #A79E8C; animation: mt-typing 1.2s infinite ease-in-out both; }
+.typing-dot:nth-child(2) { animation-delay: .16s; }
+.typing-dot:nth-child(3) { animation-delay: .32s; }
+@keyframes mt-typing { 0%, 70%, 100% { transform: translateY(0); opacity: .35; } 35% { transform: translateY(-4px); opacity: 1; } }
+
 /* segmented control (equal width) */
 .seg { display: flex; gap: 7px; }
 .seg-btn { flex: 1; height: 40px; border-radius: 10px; border: 1px solid var(--line); background: #fff; color: var(--ink-soft); font-family: 'Inter'; font-size: 13px; font-weight: 500; cursor: pointer; }

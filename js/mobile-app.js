@@ -206,7 +206,14 @@ function render() {
 
   // Restore scroll after the new DOM is in place.
   const ns = document.getElementById('scroll'); if (ns && prevMain) ns.scrollTop = prevMain;
-  const nb = document.querySelectorAll('.overlay-body'); if (nb.length && prevOverlay) nb[nb.length - 1].scrollTop = prevOverlay;
+  const nb = document.querySelectorAll('.overlay-body');
+  if (nb.length) {
+    const body = nb[nb.length - 1];
+    // A just-sent chat message jumps the assistant to the bottom so the user
+    // sees their message and the thinking indicator; otherwise keep position.
+    if (UI.assistantOpen && UI.chatToBottom) { body.scrollTop = body.scrollHeight; UI.chatToBottom = false; }
+    else if (prevOverlay) body.scrollTop = prevOverlay;
+  }
   lastView = view; lastOverlayKey = oKey;
 }
 
@@ -1466,19 +1473,25 @@ function renderAssistant() {
   const msgs = h('div', { class: 'overlay-body mtscroll', style: 'display:flex;flex-direction:column;gap:11px;' });
   UI.messages.forEach(m => {
     const bot = m.role === 'bot';
-    const rich = bot && m.text !== '…'; // bot replies get formatted; user text + typing dots stay literal
+    const typing = bot && m.text === TYPING; // the pending-answer placeholder
+    const rich = bot && !typing;             // real bot replies get markdown formatting
     const bubble = h('div', {
-      style: `max-width:88%;align-self:${bot ? 'flex-start' : 'flex-end'};background:${bot ? '#FAF7F1' : '#E6EDE7'};border:1px solid ${bot ? '#EFE9DD' : '#D4DFD5'};color:#1F2A28;padding:11px 13px;border-radius:14px;font-size:13.5px;line-height:20px;${rich ? '' : 'white-space:pre-wrap;'}`,
+      style: `max-width:88%;align-self:${bot ? 'flex-start' : 'flex-end'};background:${bot ? '#FAF7F1' : '#E6EDE7'};border:1px solid ${bot ? '#EFE9DD' : '#D4DFD5'};color:#1F2A28;padding:11px 13px;border-radius:14px;font-size:13.5px;line-height:20px;${(rich || typing) ? '' : 'white-space:pre-wrap;'}`,
     });
-    if (rich) bubble.appendChild(renderRich(m.text));
+    if (typing) bubble.appendChild(typingDots());
+    else if (rich) bubble.appendChild(renderRich(m.text));
     else bubble.textContent = m.text;
     msgs.appendChild(bubble);
   });
   const quick = h('div', { style: 'padding:0 16px 8px;display:flex;flex-wrap:wrap;gap:7px;' },
     STRATEGY_PROMPTS.map(([label, prompt]) => h('button', { class: 'pill', style: 'height:31px;font-size:11.5px;', onclick: () => sendChat(prompt), text: label })));
-  const input = h('input', { class: 'field', style: 'flex:1;height:42px;border-radius:12px;', placeholder: 'Ask about the project state…', value: UI.chatInput,
-    oninput: (e) => { UI.chatInput = e.target.value; } });
-  input.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); sendChat(input.value); } });
+  // Textarea (not input) so long questions wrap and stay readable instead of
+  // scrolling off the left edge. Grows with content up to a few lines.
+  const input = h('textarea', { class: 'field', rows: '1', style: 'flex:1;min-height:44px;max-height:132px;border-radius:12px;overflow-y:auto;', placeholder: 'Ask about the project state…',
+    oninput: (e) => { UI.chatInput = e.target.value; autoGrow(e.target); } });
+  input.value = UI.chatInput;
+  requestAnimationFrame(() => autoGrow(input)); // size a restored draft on mount
+  input.addEventListener('keydown', (e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendChat(input.value); } });
 
   return h('div', { class: 'overlay rise' }, [
     h('div', { class: 'overlay-head', style: 'display:flex;align-items:flex-start;justify-content:space-between;gap:10px;' }, [
@@ -1499,6 +1512,23 @@ function renderAssistant() {
     ]),
   ]);
 }
+/* Sentinel for the "assistant is answering" placeholder message. Rendered as
+   animated dots, and filtered out of the history sent to the worker. */
+const TYPING = ' typing';
+
+/* Grow a chat textarea to fit its content, up to the CSS max-height. */
+function autoGrow(el) {
+  if (!el) return;
+  el.style.height = 'auto';
+  el.style.height = Math.min(el.scrollHeight, 132) + 'px';
+}
+
+/* Three bouncing dots so it's clear the assistant is thinking. */
+function typingDots() {
+  return h('div', { class: 'typing', role: 'status', 'aria-label': 'Assistant is thinking' },
+    [0, 1, 2].map(() => h('span', { class: 'typing-dot' })));
+}
+
 /* Wipe the conversation. Next render re-seeds the opening message, so the
    panel returns to its fresh state rather than going blank. */
 function clearChat() {
@@ -1514,22 +1544,23 @@ async function sendChat(text) {
   UI.chatInput = '';
   if (!aiAvailable) {
     UI.messages.push({ role: 'bot', text: "The assistant connects when AI_MODE is 'worker'. Everything else in the workspace works without it." });
-    render(); return;
+    UI.chatToBottom = true; render(); return;
   }
-  UI.messages.push({ role: 'bot', text: '…' });
+  UI.messages.push({ role: 'bot', text: TYPING });
+  UI.chatToBottom = true; // reveal the user's message + the thinking indicator
   render();
   try {
     // The worker expects a Claude-style messages array ({role, content}); map
     // ours (bot->assistant, text->content) and drop the typing placeholder.
     const history = UI.messages
-      .filter(m => m.text !== '…')
+      .filter(m => m.text !== TYPING)
       .map(m => ({ role: m.role === 'bot' ? 'assistant' : 'user', content: m.text }));
     const res = await chatRequest({ messages: history, tools: true, localData: aiDataSlices(STATE) });
     UI.messages[UI.messages.length - 1] = { role: 'bot', text: res.text || '(empty reply)' };
   } catch (e) {
     UI.messages[UI.messages.length - 1] = { role: 'bot', text: `Couldn't reach the assistant. ${e.message}` };
   }
-  render();
+  render(); // leave scroll where it is so the answer is read from its top
 }
 
 /* =====================================================================
