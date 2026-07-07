@@ -116,10 +116,17 @@
    BASE
    ========================================================================== */
 html, body { background: var(--surface-page); color: var(--ink); }
-/* Firm mobile UX: the document scrolls vertically only. No sideways pan (any
-   element a hair wider than the viewport would otherwise let the whole page
-   drift left/right), and no rubber-band chaining at the document edges. */
-html, body { overflow-x: hidden; overscroll-behavior: none; }
+/* Firm UX: the document scrolls vertically only. No sideways pan (any element
+   a hair wider than the viewport — e.g. the off-screen chat panel — would
+   otherwise let the whole page drift left/right), and no rubber-band chaining
+   at the document edges.
+   Clipping lives on <html> ONLY. Adding overflow-x to <body> as well turns the
+   BODY into the scroll container, and a body-scroller only reliably responds to
+   the scrollbar in some browsers (Safari/macOS) — wheeling over content in the
+   middle does nothing. Keeping it on <html> leaves the root as the single,
+   wheel-anywhere scroll owner while still clipping the sideways overflow. */
+html { overflow-x: hidden; overflow-y: scroll; overscroll-behavior: none; }
+body { overscroll-behavior: none; }
 body {
   font-family: 'Inter', system-ui, sans-serif;
   font-feature-settings: "ss01", "cv11";
