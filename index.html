@@ -1,149 +1,20 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="utf-8" />
-<meta name="viewport" content="width=device-width,initial-scale=1" />
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1">
 <title>MedTerminal — Research Workspace</title>
-<script src="https://cdn.tailwindcss.com"></script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <!-- Exactly two weights per family (design system): Fraunces 400/600 + italic, Inter 400/500 -->
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,600;1,9..144,400&family=Inter:wght@400;500&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="css/theme.css">
+<link rel="stylesheet" href="./css/mobile.css">
 </head>
 <body>
-
-<!-- Mobile overlay -->
-<div id="mobile-overlay" class="mobile-overlay"></div>
-
-<!-- Sidebar nav — positioning lives entirely in theme.css so the shell
-     never depends on the Tailwind CDN (see DECISIONS.md: mobile nav fix) -->
-<aside id="sidebar" class="sidebar-nav" aria-label="Main navigation">
-  <div class="wordmark">
-    <div class="wordmark-badge"><span class="serif">M</span></div>
-    <div>
-      <div class="wordmark-name serif">MedTerminal</div>
-      <div class="wordmark-sub micro">Research Workspace</div>
-    </div>
-  </div>
-
-  <nav id="nav-root" class="nav-scroll"></nav>
-
-  <div class="sidebar-foot">
-    <button class="btn btn-line" id="open-chat-btn">
-      <span>💬</span><span>Assistant</span>
-    </button>
-    <div class="sidebar-foot-row">
-      <a class="nav-foot-link" id="settings-link" href="#settings">Settings</a>
-      <span class="micro t-mute" id="version-tag" title="If this doesn't match the latest release, hard-refresh — the browser is serving cached files.">v0.4</span>
-    </div>
-  </div>
-</aside>
-
-<!-- Main area -->
-<main class="main-area">
-  <header class="app-header">
-    <div class="app-header-inner">
-      <div class="header-left">
-        <button class="hamburger" id="hamburger-btn" aria-label="Menu">
-          <svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5"><line x1="3" y1="5" x2="17" y2="5"/><line x1="3" y1="10" x2="17" y2="10"/><line x1="3" y1="15" x2="17" y2="15"/></svg>
-        </button>
-        <div class="header-title-block">
-          <h1 id="page-title" class="serif">Overview</h1>
-          <div id="page-question" class="page-question"></div>
-        </div>
-      </div>
-      <div class="header-right">
-        <div id="page-actions" class="header-actions"></div>
-        <span id="sync-status" class="chip chip-line">Loading…</span>
-        <button class="btn btn-ghost" id="refresh-btn" title="Reload data">↻</button>
-      </div>
-    </div>
-  </header>
-
-  <div id="page" class="page-content"></div>
-</main>
-
-<!-- Assistant side panel -->
-<aside id="chat-panel" class="chat-panel closed">
-  <div class="px-5 py-4 border-b flex items-center justify-between" style="border-color:var(--line-soft);">
-    <div>
-      <div class="serif text-lg leading-none">Research assistant</div>
-      <div class="micro mt-1" style="color:var(--ink-mute);">Reads your data · advises next steps</div>
-    </div>
-    <div class="flex items-center gap-2">
-      <button class="btn btn-ghost text-xs" id="clear-chat-btn" title="Clear conversation">Clear</button>
-      <button class="btn btn-ghost" id="close-chat-btn" aria-label="Close">✕</button>
-    </div>
-  </div>
-
-  <div id="chat-messages" class="flex-1 overflow-y-auto px-5 py-4 flex flex-col gap-3"></div>
-
-  <div id="chat-quick" class="px-5 py-3 border-t flex flex-wrap gap-2" style="border-color:var(--line-soft);"></div>
-
-  <div class="px-5 py-4 border-t" style="border-color:var(--line-soft);">
-    <div class="flex gap-2 items-end">
-      <textarea id="chat-input" class="textarea" rows="2" placeholder="Ask anything about the project state…"></textarea>
-      <button class="btn btn-primary" id="send-chat-btn">Send</button>
-    </div>
-  </div>
-</aside>
-
-<!-- Modal container -->
-<div id="modal-root"></div>
-
-<!-- Boot -->
+<div class="frame" id="frame" aria-label="MedTerminal"></div>
 <script type="module">
-  import { loadAllData, renderCurrentRoute, buildNav, go, openSidebar, closeSidebar } from './js/app.js';
-  import { DATA_MODE, AI_MODE } from './js/config.js';
-  import { initChat } from './js/chat.js';
-
-  // Screen modules (each registers its routes)
-  import './js/screens/overview.js';
-  import './js/screens/decision-brief.js';
-  import './js/screens/outreach.js';
-  import './js/screens/interviews.js';
-  import './js/screens/matrix.js';
-  import './js/screens/saturation.js';
-  import './js/screens/scripts.js';
-  import './js/screens/templates.js';
-  import './js/screens/manual.js';
-  import './js/screens/sensemaking.js';
-  import './js/screens/economics.js';
-  import './js/screens/decision.js';
-  import './js/screens/reports.js';
-  import './js/screens/documents.js';
-  import './js/screens/settings.js';
-
-  document.getElementById('hamburger-btn').addEventListener('click', openSidebar);
-  document.getElementById('mobile-overlay').addEventListener('click', closeSidebar);
-
-  // Hidden admin door: five quick taps on the wordmark → admin.html.
-  // Taps more than 1.5s apart reset the count, so ordinary clicks never trigger it.
-  let wordmarkTaps = 0, wordmarkTimer = null;
-  document.querySelector('.wordmark').addEventListener('click', () => {
-    wordmarkTaps++;
-    clearTimeout(wordmarkTimer);
-    wordmarkTimer = setTimeout(() => { wordmarkTaps = 0; }, 1500);
-    if (wordmarkTaps >= 5) { wordmarkTaps = 0; window.location.href = 'admin.html'; }
-  });
-  document.getElementById('refresh-btn').addEventListener('click', () => loadAllData());
-  document.getElementById('settings-link').addEventListener('click', () => { go('settings'); closeSidebar(); });
-
-  buildNav();
-  initChat();
-
-  window.addEventListener('hashchange', renderCurrentRoute);
-  if (!location.hash) location.hash = 'overview';
-  renderCurrentRoute();
-
-  // api data mode needs login for data; worker AI mode needs it for identity
-  // (the worker authenticates every AI call with the same magic-link JWT).
-  if (DATA_MODE === 'api' || AI_MODE === 'worker') {
-    const { requireLogin } = await import('./js/auth.js');
-    await requireLogin();
-  }
-  await loadAllData();
+  import { boot } from './js/mobile-app.js';
+  boot();
 </script>
 </body>
 </html>

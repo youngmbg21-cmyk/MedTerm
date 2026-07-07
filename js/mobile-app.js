@@ -1,0 +1,1244 @@
+/* ============================================================================
+   MedTerminal — Mobile app (native concept, reskinned to the design handoff).
+   Self-contained front end: reads/writes live data through js/data.js and
+   configuration through js/config.js. Reproduces the spec's shell, screens,
+   forms, and overlays exactly. No framework, no build step.
+   ============================================================================ */
+import { data, isLocalMode, aiAvailable, chatRequest, aiDataSlices } from './data.js';
+import {
+  CURRENT_PHASE, PHASES, SEGMENTS, SEGMENT_NAMES, THEMES, OUTREACH_STATUSES,
+  CHANNELS, STALL_DAYS, getTeam, interviewerOptions, ownerOptions,
+} from './config.js';
+
+/* ----------------------------------------------------------------- h() */
+export function h(tag, attrs = {}, children = []) {
+  const el = document.createElement(tag);
+  for (const [k, v] of Object.entries(attrs)) {
+    if (v == null) continue;
+    if (k === 'class') el.className = v;
+    else if (k === 'text') el.textContent = v;
+    else if (k === 'html') { /* never used for user text */ }
+    else if (k === 'style') el.style.cssText = v;
+    else if (k.startsWith('on') && typeof v === 'function') el.addEventListener(k.slice(2).toLowerCase(), v);
+    else el.setAttribute(k, v);
+  }
+  (Array.isArray(children) ? children : [children]).forEach(c => {
+    if (c == null || c === false) return;
+    el.appendChild(typeof c === 'string' ? document.createTextNode(c) : c);
+  });
+  return el;
+}
+const frag = (...kids) => kids;
+
+/* ----------------------------------------------------------------- tones */
+const TONE = {
+  sage:  { bg: '#E6EDE7', border: '#D4DFD5', ink: '#3F5A4D' },
+  honey: { bg: '#F5E9CF', border: '#ECDCB6', ink: '#755A1E' },
+  rose:  { bg: '#F6E3E3', border: '#ECC9C9', ink: '#9A3F3F' },
+  info:  { bg: '#E4EBF1', border: '#CDDAE5', ink: '#3E5C77' },
+  plum:  { bg: '#EEE6EF', border: '#DDD0DE', ink: '#644A67' },
+  line:  { bg: '#FFFFFF', border: '#E5DDD0', ink: '#4A5651' },
+};
+const sevTone = (s) => (s >= 4 ? 'rose' : s >= 3 ? 'honey' : 'sage');
+const wtpTone = (w) => (w === 'Y' ? 'sage' : w === 'Maybe' ? 'honey' : 'line');
+const statusTone = (s) => ({ Done: 'sage', Booked: 'info', Replied: 'sage', Sent: 'honey', Declined: 'rose', Cold: 'line' }[s] || 'line');
+const chip = (label, tone = 'line', size = '') => h('span', { class: `chip ${size} ${tone}`.trim(), text: label });
+
+/* ----------------------------------------------------------------- dates */
+const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+function daysSince(dateStr) {
+  if (!dateStr) return null;
+  const then = new Date(String(dateStr).slice(0, 10) + 'T00:00:00');
+  if (isNaN(then)) return null;
+  return Math.floor((Date.now() - then.getTime()) / 86400000);
+}
+function fmtDay(dateStr) {
+  if (!dateStr) return '—';
+  const d = new Date(String(dateStr).slice(0, 10) + 'T00:00:00');
+  if (isNaN(d)) return String(dateStr);
+  return `${d.getDate()} ${MONTHS[d.getMonth()]}`;
+}
+const isTagged = (r) => r.tagged_same_day === 'Y';
+const isOverdue = (r) => !isTagged(r) && (daysSince(r.date) ?? 0) >= 1;
+const isStalled = (c) => ['Sent', 'Replied'].includes(c.status) && (daysSince(c.first_contact) ?? 0) >= STALL_DAYS;
+
+/* ----------------------------------------------------------------- analysis */
+function rankThemes(rows) {
+  const map = {};
+  rows.forEach(r => {
+    if (!r.theme_tag) return;
+    const d = map[r.theme_tag] || (map[r.theme_tag] = { tag: r.theme_tag, count: 0, sev: 0, wtpY: 0, quotes: [] });
+    d.count++; d.sev += +r.severity || 0; if (r.wtp === 'Y') d.wtpY++; d.quotes.push(r);
+  });
+  return Object.values(map).map(d => ({
+    tag: d.tag, count: d.count,
+    avgSev: d.count ? d.sev / d.count : 0,
+    wtpRate: d.count ? Math.round((d.wtpY / d.count) * 100) : 0,
+    score: d.count * (d.count ? d.sev / d.count : 0) * (1 + (d.count ? d.wtpY / d.count : 0)),
+    quotes: d.quotes,
+  })).sort((a, b) => b.score - a.score);
+}
+
+/* ----------------------------------------------------------------- state */
+const TABLES = ['outreach', 'interviews', 'matrix', 'deliverables', 'scripts', 'kill_list',
+  'field_checks', 'economics', 'segment_cards', 'decision_memos', 'reports', 'documents',
+  'hypotheses', 'evidence_links', 'ai_assessments'];
+
+const STATE = {};
+TABLES.forEach(t => { STATE[t] = []; });
+
+const UI = {
+  tab: 'today',
+  subFieldwork: 'interviews', subInsights: 'pains', subDecision: 'brief',
+  moreScreen: null, selectedId: null, scriptSeg: 'Patient',
+  assistantOpen: false, formType: null, form: {}, saving: false,
+  messages: [{ role: 'bot', text: "I've read the workspace. Two interviews are still untagged past 24h, which breaches the same-day hard rule. Want me to summarise them so you can tag fast?" }],
+  chatInput: '',
+};
+
+const TITLES = {
+  today: ['Today', 'Where does the project stand, and what needs me?'],
+  interviews: ['Interviews', 'Which conversations have we had — and is each one tagged?'],
+  outreach: ['Outreach', 'Who have we approached, and where do they stand?'],
+  matrix: ['Theme matrix', 'What is the evidence saying, quote by quote?'],
+  saturation: ['Saturation', 'Which segments have we heard enough from?'],
+  pains: ['Top-3 pains', 'Which three pains should any product be built around?'],
+  themes: ['Theme analysis', 'Which themes are strongest?'],
+  segments: ['Segment cards', 'What do we now know about each segment?'],
+  kill: ['Kill list', 'Which hypotheses has the evidence killed?'],
+  state: ['State of the field', 'Where does the research stand, in one paragraph?'],
+  brief: ['Decision Brief', 'If we had to decide today, what would we do?'],
+  memo: ['Decision memo', 'GO, PIVOT, or NO-GO — and on what evidence?'],
+  economics: ['Unit economics', 'Does patient-pays survive its break-points?'],
+  alt: ['Alternate models', 'If patient-pays breaks, what replaces it?'],
+  fieldchecks: ['Field checks', 'Which fragile assumptions have we verified?'],
+  mvp: ['MVP scope', 'The narrowest thing we build first, if GO'],
+  tests: ['Confirmatory tests', 'Does reality agree with the decision?'],
+  moreList: ['More', 'Reference, reports, and workspace settings'],
+  scripts: ['Interview scripts', 'What exactly do we ask each segment?'],
+  templates: ['Outreach templates', 'Which message do I send this contact?'],
+  manual: ['Operating manual', 'How do we run this project, day to day?'],
+  reports: ['Reports', "What do we send to someone who wasn't in the room?"],
+  documents: ['Documents', 'Where is every file the field produced?'],
+  settings: ['Settings', 'Who is on the team, and how is it configured?'],
+};
+
+/* header + action per view */
+const ACTIONS = {
+  interviews: ['+ Log', 'interview'], outreach: ['+ Contact', 'contact'],
+  matrix: ['+ Quote', 'quote'], fieldchecks: ['+ Add', 'check'],
+  kill: ['+ Kill', 'kill'], documents: ['+ Upload', 'upload'],
+};
+
+const MORE_VIEWS = ['moreList', 'scripts', 'templates', 'manual', 'reports', 'documents', 'settings'];
+
+function currentView() {
+  if (UI.tab === 'today') return 'today';
+  if (UI.tab === 'fieldwork') return UI.subFieldwork;
+  if (UI.tab === 'insights') return UI.subInsights;
+  if (UI.tab === 'decision') return UI.subDecision;
+  return UI.moreScreen || 'moreList';
+}
+
+/* ----------------------------------------------------------------- boot */
+export async function boot() {
+  render(); // paint the shell immediately (empty lists)
+  try {
+    const results = await Promise.all(TABLES.map(t => data.list(t).catch(() => [])));
+    TABLES.forEach((t, i) => { STATE[t] = results[i]; });
+  } catch (e) { console.error(e); }
+  render();
+}
+
+/* ----------------------------------------------------------------- render */
+function render() {
+  const frame = document.getElementById('frame');
+  frame.innerHTML = '';
+  const view = currentView();
+  const [title, question] = TITLES[view] || TITLES.today;
+
+  frame.appendChild(renderHeader(view, title, question));
+  const scroll = h('div', { class: 'scroll mtscroll', id: 'scroll' });
+  scroll.appendChild(renderScreen(view));
+  frame.appendChild(scroll);
+  frame.appendChild(renderTabBar());
+
+  if (UI.selectedId) frame.appendChild(renderDetail());
+  if (UI.assistantOpen) frame.appendChild(renderAssistant());
+  if (UI.formType) frame.appendChild(renderForm());
+}
+
+function setState(patch) { Object.assign(UI, patch); render(); }
+
+/* ----------------------------------------------------------------- header */
+const assistantIcon = () => {
+  const s = 'http://www.w3.org/2000/svg';
+  const svg = document.createElementNS(s, 'svg');
+  svg.setAttribute('width', '18'); svg.setAttribute('height', '18'); svg.setAttribute('viewBox', '0 0 24 24');
+  svg.setAttribute('fill', 'none'); svg.setAttribute('stroke', 'currentColor'); svg.setAttribute('stroke-width', '1.7');
+  svg.setAttribute('stroke-linecap', 'round'); svg.setAttribute('stroke-linejoin', 'round');
+  const p = document.createElementNS(s, 'path'); p.setAttribute('d', 'M4 5h16v11H9l-4 4V5Z'); svg.appendChild(p);
+  return svg;
+};
+
+function renderHeader(view, title, question) {
+  const action = ACTIONS[view];
+  const top = h('div', { class: 'hdr-pad' }, [
+    h('div', { style: 'min-width:0;' }, [
+      h('h1', { class: 'serif hdr-title', text: title }),
+      h('div', { class: 'hdr-q', text: question }),
+    ]),
+    h('div', { class: 'hdr-actions' }, [
+      action ? h('button', { class: 'btn btn-primary', onclick: () => openForm(action[1]) }, [
+        h('span', { style: 'font-size:15px;margin-top:-1px;', text: '+' }),
+        action[0].replace('+ ', ''),
+      ]) : null,
+      h('button', { class: 'icon-btn', 'aria-label': 'Assistant', onclick: () => setState({ assistantOpen: true }) }, [assistantIcon()]),
+    ]),
+  ]);
+
+  const hdr = h('div', { class: 'hdr' }, [top]);
+
+  // More back-link
+  if (MORE_VIEWS.includes(view) && view !== 'moreList') {
+    hdr.appendChild(h('div', { class: 'moreback' }, [
+      h('button', { class: 'btn-link', onclick: () => setState({ moreScreen: null }), text: '‹ More' }),
+    ]));
+  }
+
+  // Sub-nav
+  const subs = subnavFor(UI.tab);
+  if (subs) {
+    const row = h('div', { class: 'subnav mtscroll' });
+    subs.items.forEach(it => {
+      row.appendChild(h('button', {
+        class: `pill ${it.v === subs.current ? 'active' : ''}`,
+        onclick: () => setState({ [subs.key]: it.v, selectedId: null }),
+        text: it.l,
+      }));
+    });
+    hdr.appendChild(row);
+  }
+  return hdr;
+}
+
+function subnavFor(tab) {
+  if (tab === 'fieldwork') return { key: 'subFieldwork', current: UI.subFieldwork, items: [
+    { l: 'Interviews', v: 'interviews' }, { l: 'Outreach', v: 'outreach' }, { l: 'Matrix', v: 'matrix' }, { l: 'Saturation', v: 'saturation' }] };
+  if (tab === 'insights') return { key: 'subInsights', current: UI.subInsights, items: [
+    { l: 'Top pains', v: 'pains' }, { l: 'Themes', v: 'themes' }, { l: 'Segments', v: 'segments' }, { l: 'Kill list', v: 'kill' }, { l: 'State', v: 'state' }] };
+  if (tab === 'decision') return { key: 'subDecision', current: UI.subDecision, items: [
+    { l: 'Brief', v: 'brief' }, { l: 'Memo', v: 'memo' }, { l: 'Economics', v: 'economics' }, { l: 'Alt models', v: 'alt' },
+    { l: 'Field checks', v: 'fieldchecks' }, { l: 'MVP', v: 'mvp' }, { l: 'Tests', v: 'tests' }] };
+  return null;
+}
+
+/* ----------------------------------------------------------------- tab bar */
+function tabIcon(name) {
+  const s = 'http://www.w3.org/2000/svg';
+  const svg = document.createElementNS(s, 'svg');
+  svg.setAttribute('width', '22'); svg.setAttribute('height', '22'); svg.setAttribute('viewBox', '0 0 24 24');
+  svg.setAttribute('fill', 'none'); svg.setAttribute('stroke', 'currentColor'); svg.setAttribute('stroke-width', '1.6');
+  svg.setAttribute('stroke-linecap', 'round'); svg.setAttribute('stroke-linejoin', 'round');
+  const paths = {
+    today: ['M3 10.5 12 3l9 7.5', 'M5 9.5V20h14V9.5'],
+    fieldwork: ['M5 3h14v18H5z', 'M9 3.5V6h6V3.5M9 11h6M9 15h4'],
+    insights: ['M12 3 3 8l9 5 9-5-9-5Z', 'M3 13l9 5 9-5'],
+    decision: ['M12 3v18M5 7h14M7 7l-3 6a3 3 0 0 0 6 0L7 7Zm10 0-3 6a3 3 0 0 0 6 0l-3-6Z'],
+    more: ['M5 12h.01M12 12h.01M19 12h.01'],
+  }[name];
+  paths.forEach(d => { const p = document.createElementNS(s, 'path'); p.setAttribute('d', d); svg.appendChild(p); });
+  return svg;
+}
+function renderTabBar() {
+  const tabs = [
+    ['today', 'Today', 'today'], ['fieldwork', 'Fieldwork', 'fieldwork'],
+    ['insights', 'Insights', 'insights'], ['decision', 'Decision', 'decision'], ['more', 'More', 'more'],
+  ];
+  const bar = h('div', { class: 'tabbar' });
+  tabs.forEach(([tab, label, icon]) => {
+    bar.appendChild(h('button', {
+      class: `tab ${UI.tab === tab ? 'active' : ''}`,
+      onclick: () => setState({ tab, moreScreen: null, selectedId: null, assistantOpen: false }),
+    }, [tabIcon(icon), h('span', { text: label })]));
+  });
+  return bar;
+}
+
+/* =====================================================================
+   SCREENS
+   ===================================================================== */
+function screenWrap(children, pad = '16px 16px 28px', gap = null) {
+  const style = `padding:${pad};` + (gap ? `display:flex;flex-direction:column;gap:${gap};` : '');
+  return h('div', { class: 'screen', style }, children);
+}
+
+function renderScreen(view) {
+  const fn = SCREENS[view];
+  return fn ? fn() : screenWrap([h('div', { class: 'card', style: 'padding:20px;', text: 'Coming soon.' })]);
+}
+
+const SCREENS = {
+  today: renderToday,
+  interviews: renderInterviews, outreach: renderOutreach, matrix: renderMatrix, saturation: renderSaturation,
+  pains: renderPains, themes: renderThemes, segments: renderSegments, kill: renderKill, state: renderStateOfField,
+  brief: renderBrief, memo: renderMemo, economics: renderEconomics, alt: renderAlt, fieldchecks: renderFieldChecks,
+  mvp: renderMvp, tests: renderTests,
+  moreList: renderMoreList, scripts: renderScripts, templates: renderTemplates, manual: renderManual,
+  reports: renderReports, documents: renderDocuments, settings: renderSettings,
+};
+
+/* ------------------------------------------------------------ TODAY */
+function renderToday() {
+  const interviews = STATE.interviews;
+  const outreach = STATE.outreach;
+  const tagged = interviews.filter(isTagged).length;
+  const taggedPct = interviews.length ? Math.round((tagged / interviews.length) * 100) : 100;
+  const contacted = outreach.filter(o => o.status && o.status !== 'Cold').length;
+  const bookedDone = outreach.filter(o => ['Booked', 'Done'].includes(o.status)).length;
+  const themeCount = new Set(STATE.matrix.map(m => m.theme_tag).filter(Boolean)).size;
+
+  // phase rail
+  const rail = h('div', { class: 'mtscroll', style: 'display:flex;gap:6px;overflow-x:auto;' });
+  PHASES.forEach(p => {
+    const current = p.n === CURRENT_PHASE, done = p.n < CURRENT_PHASE;
+    const t = done ? TONE.sage : current ? TONE.line : TONE.line;
+    const bg = done ? TONE.sage.bg : '#fff';
+    const border = current ? '#3F5A4D' : done ? TONE.sage.border : '#E5DDD0';
+    const ink = done ? '#3F5A4D' : current ? '#1F2A28' : '#6E6A5E';
+    const pct = p.n < CURRENT_PHASE ? '100%' : p.n === CURRENT_PHASE ? '20%' : '—';
+    rail.appendChild(h('div', { style: `flex:0 0 auto;min-width:74px;padding:9px 11px;border-radius:12px;border:1px solid ${border};background:${bg};` }, [
+      h('div', { class: 'micro', style: `color:${ink};font-size:9.5px;`, text: `Phase ${p.n}` }),
+      h('div', { class: 'serif', style: `font-size:13px;line-height:16px;margin-top:2px;color:${ink};`, text: p.name }),
+      h('div', { class: 'num', style: `font-size:12px;color:${ink};opacity:.85;margin-top:3px;`, text: pct }),
+    ]));
+  });
+
+  // KPIs
+  const kpis = [
+    { value: String(interviews.length), label: 'Interviews logged', note: 'target 36 by phase 2 close', color: '#1F2A28' },
+    { value: `${taggedPct}%`, label: 'Same-day tagged', note: 'hard rule: must be 100%', color: taggedPct >= 100 ? '#3F5A4D' : '#755A1E' },
+    { value: String(contacted), label: 'Outreach contacted', note: `${bookedDone} booked or done`, color: '#1F2A28' },
+    { value: String(themeCount), label: 'Themes surfaced', note: 'rich pool', color: '#1F2A28' },
+  ];
+  const kpiGrid = h('div', { style: 'display:grid;grid-template-columns:1fr 1fr;gap:10px;' },
+    kpis.map(k => h('div', { class: 'card', style: 'padding:14px 15px;' }, [
+      h('div', { class: 'serif num kpi-num', style: `color:${k.color};`, text: k.value }),
+      h('div', { class: 'micro', style: 'color:#6E6A5E;margin-top:6px;', text: k.label }),
+      h('div', { style: 'font-size:11px;line-height:15px;color:#6E6A5E;margin-top:5px;', text: k.note }),
+    ])));
+
+  // decision pulse
+  const pulse = h('button', { class: 'card', style: 'text-align:left;width:100%;padding:15px;cursor:pointer;display:flex;align-items:center;gap:12px;',
+    onclick: () => setState({ tab: 'decision', subDecision: 'brief' }) }, [
+    h('div', { style: 'flex:1;min-width:0;' }, [
+      h('div', { class: 'micro', style: 'color:#6E6A5E;', text: 'If we decided today' }),
+      h('div', { style: 'display:flex;align-items:center;gap:8px;margin-top:7px;' }, [
+        chip('INSUFFICIENT', 'honey'),
+        h('span', { class: 'num', style: 'font-size:11.5px;color:#6E6A5E;', text: '2 strengthening · 0 killed' }),
+      ]),
+    ]),
+    h('span', { style: 'color:#96501F;font-size:18px;', text: '›' }),
+  ]);
+
+  // needs attention
+  const overdue = interviews.filter(isOverdue).sort((a, b) => (daysSince(b.date) ?? 0) - (daysSince(a.date) ?? 0));
+  const stalled = outreach.filter(isStalled);
+  const att = [];
+  overdue.slice(0, 2).forEach(r => att.push(attnRow('rose',
+    `${r.interview_id} untagged for ${daysSince(r.date)} days — tag it now`, () => setState({ tab: 'fieldwork', subFieldwork: 'interviews' }))));
+  if (stalled[0]) att.push(attnRow('honey',
+    `${stalled[0].name} (${(stalled[0].status || '').toLowerCase()}) silent since ${fmtDay(stalled[0].first_contact)} — chase or close`,
+    () => setState({ tab: 'fieldwork', subFieldwork: 'outreach' })));
+  if (stalled.length > 1) att.push(attnRow('honey',
+    `${stalled.length - 1} more contact${stalled.length - 1 === 1 ? '' : 's'} stalled ${STALL_DAYS}+ days — review outreach`,
+    () => setState({ tab: 'fieldwork', subFieldwork: 'outreach' })));
+
+  const attnBlock = h('div', {}, [
+    h('div', { class: 'micro', style: 'color:#6E6A5E;margin-bottom:8px;', text: 'Needs attention · problems first' }),
+    h('div', { style: 'display:flex;flex-direction:column;gap:8px;' }, att.length ? att : [h('div', { class: 'card', style: 'padding:14px;font-size:12.5px;color:#6E6A5E;', text: 'Nothing needs you right now.' })]),
+  ]);
+
+  // exit criteria (from deliverables of current phase)
+  const crit = STATE.deliverables.filter(d => d.phase === CURRENT_PHASE);
+  const critCard = h('div', { class: 'listcard' }, [
+    h('div', { style: 'padding:14px 16px 10px;border-bottom:1px solid #EFE9DD;' }, [
+      h('div', { class: 'micro', style: 'color:#6E6A5E;', text: `Phase ${CURRENT_PHASE} exit criteria` }),
+      h('div', { class: 'serif', style: 'font-size:15px;margin-top:2px;', text: (PHASES.find(p => p.n === CURRENT_PHASE) || {}).long || 'Exit criteria' }),
+    ]),
+    ...(crit.length ? crit : []).map(c => {
+      const st = c.status || 'Not started';
+      const tone = st === 'Complete' || st === 'Done' ? 'sage' : st === 'Blocked' ? 'rose' : 'honey';
+      const done = tone === 'sage';
+      return h('div', { class: 'row', style: 'display:flex;align-items:flex-start;justify-content:space-between;gap:10px;' }, [
+        h('span', { style: `font-size:12.5px;line-height:17px;color:${done ? '#6E6A5E' : '#1F2A28'};text-decoration:${done ? 'line-through' : 'none'};`, text: c.deliverable || c.name || '—' }),
+        chip(st, tone),
+      ]);
+    }),
+  ]);
+
+  return screenWrap([
+    h('div', {}, [h('div', { class: 'micro', style: 'color:#6E6A5E;margin-bottom:8px;', text: `Programme · phase ${CURRENT_PHASE} of 5` }), rail]),
+    kpiGrid, pulse, attnBlock, critCard,
+  ], '16px 16px 28px', '16px');
+}
+function attnRow(tone, text, onclick) {
+  const t = TONE[tone];
+  return h('button', { style: `text-align:left;cursor:pointer;display:flex;align-items:center;gap:10px;padding:12px 14px;border-radius:12px;background:${t.bg};border:1px solid ${t.border};color:${t.ink};font-size:12.5px;line-height:17px;font-weight:500;`, onclick }, [
+    tone === 'rose' ? h('span', { style: 'width:7px;height:7px;border-radius:50%;background:#C95F5F;flex-shrink:0;' }) : null,
+    h('span', { style: 'flex:1;', text }),
+    h('span', { style: 'font-size:16px;', text: '›' }),
+  ]);
+}
+
+/* ------------------------------------------------------------ INTERVIEWS */
+function renderInterviews() {
+  const rows = [...STATE.interviews].sort((a, b) => String(b.date || '').localeCompare(String(a.date || '')));
+  const overdue = rows.filter(isOverdue);
+  const kids = [];
+  if (overdue.length) kids.push(h('div', { class: 'banner rose', style: 'margin-bottom:12px;' }, [
+    h('span', { class: 'dot' }), h('span', { text: `Hard rule breached: ${overdue.map(r => r.interview_id).join(', ')} untagged past 24h. Tag them today.` }),
+  ]));
+  kids.push(h('div', { style: 'font-size:12px;color:#4A5651;margin-bottom:12px;', text: `${rows.length} logged · hard rule: tag in matrix the same day` }));
+  kids.push(h('div', { class: 'micro', style: 'color:#6E6A5E;margin-bottom:8px;', text: 'All interviews · newest first' }));
+  const list = h('div', { class: 'listcard' });
+  rows.forEach(r => {
+    const tone = isTagged(r) ? 'sage' : 'rose';
+    list.appendChild(h('button', { class: 'rowbtn', style: `border-left:3px solid ${isOverdue(r) ? '#C95F5F' : 'transparent'};padding:12px 15px;`, onclick: () => setState({ selectedId: r.id }) }, [
+      h('div', { style: 'display:flex;align-items:center;justify-content:space-between;gap:8px;' }, [
+        h('span', { class: 'num', style: 'font-size:13.5px;font-weight:500;color:#1F2A28;', text: `${r.interview_id || '—'} · ${r.segment || '—'}` }),
+        chip(isTagged(r) ? 'tagged' : 'untagged', tone, 'sm'),
+      ]),
+      h('div', { style: 'font-size:11.5px;color:#6E6A5E;margin-top:4px;', text: `${fmtDay(r.date)} · ${r.format || '—'} · ${r.interviewer || '—'}` }),
+      r.brief_topic ? h('div', { style: 'font-size:12px;color:#4A5651;margin-top:4px;line-height:16px;', text: r.brief_topic }) : null,
+    ]));
+  });
+  kids.push(list);
+  return screenWrap(kids, '14px 16px 28px');
+}
+
+/* ------------------------------------------------------------ OUTREACH */
+function renderOutreach() {
+  const rows = [...STATE.outreach].sort((a, b) => (isStalled(b) - isStalled(a)) || String(b.first_contact || '').localeCompare(String(a.first_contact || '')));
+  const stalled = rows.filter(isStalled);
+  const contacted = rows.filter(o => o.status && o.status !== 'Cold').length;
+  const bookedDone = rows.filter(o => ['Booked', 'Done'].includes(o.status)).length;
+  const kids = [];
+  if (stalled.length) kids.push(h('div', { class: 'banner honey', style: 'margin-bottom:12px;', text: `${stalled.length} contact${stalled.length === 1 ? '' : 's'} stalled — no movement for ${STALL_DAYS}+ days. Chase or close them.` }));
+  kids.push(h('div', { style: 'font-size:12px;color:#4A5651;margin-bottom:10px;', text: `${rows.length} contacts · ${contacted} contacted · ${bookedDone} booked or done` }));
+  const list = h('div', { class: 'listcard' });
+  rows.forEach(o => {
+    list.appendChild(h('div', { class: 'row' }, [
+      h('div', { style: 'display:flex;align-items:center;justify-content:space-between;gap:8px;' }, [
+        h('span', { style: 'font-size:13.5px;font-weight:500;color:#1F2A28;', text: o.name || '—' }),
+        h('div', { style: 'display:flex;gap:5px;flex-shrink:0;' }, [
+          isStalled(o) ? chip('stalled', 'honey', 'sm') : null,
+          chip(o.status || 'Cold', statusTone(o.status), 'sm'),
+        ]),
+      ]),
+      h('div', { style: 'font-size:11.5px;color:#6E6A5E;margin-top:4px;', text: [o.segment, o.organisation, o.country].filter(Boolean).join(' · ') || '—' }),
+    ]));
+  });
+  kids.push(list);
+  return screenWrap(kids, '14px 16px 28px');
+}
+
+/* ------------------------------------------------------------ MATRIX */
+function renderMatrix() {
+  const ranked = rankThemes(STATE.matrix);
+  const missing = STATE.interviews.filter(isOverdue).map(r => r.interview_id);
+  const kids = [];
+  if (missing.length) kids.push(h('div', { class: 'banner rose', style: 'margin-bottom:12px;' }, [
+    h('span', { class: 'dot' }), h('span', { text: `Matrix is missing ${missing.join(', ')} — tag those interviews first.` }),
+  ]));
+  kids.push(h('div', { style: 'font-size:12px;color:#4A5651;margin-bottom:12px;', text: `${STATE.matrix.length} quotes tagged · grouped by theme, ranked by weight` }));
+  const groups = h('div', { style: 'display:flex;flex-direction:column;gap:14px;' });
+  ranked.forEach(g => {
+    const card = h('div', { class: 'listcard' });
+    card.appendChild(h('div', { style: 'display:flex;align-items:center;justify-content:space-between;gap:8px;padding:11px 15px;background:#FAF7F1;border-bottom:1px solid #EFE9DD;' }, [
+      chip(g.tag, 'plum'),
+      h('span', { class: 'num', style: 'font-size:11px;color:#6E6A5E;flex-shrink:0;', text: `${g.count} · avg sev ${g.avgSev.toFixed(1)} · WTP-Y ${g.wtpRate}%` }),
+    ]));
+    g.quotes.forEach(q => {
+      card.appendChild(h('div', { class: 'row' }, [
+        h('div', { class: 'quote', text: `“${q.quote || ''}”` }),
+        h('div', { style: 'display:flex;align-items:center;justify-content:space-between;gap:8px;margin-top:7px;' }, [
+          h('span', { style: 'font-size:11px;color:#6E6A5E;', text: q.interview_id || '—' }),
+          h('div', { style: 'display:flex;gap:5px;' }, [
+            q.severity ? chip(`sev ${q.severity}`, sevTone(+q.severity), 'xs') : null,
+            q.wtp ? chip(`WTP ${q.wtp}`, wtpTone(q.wtp), 'xs') : null,
+          ]),
+        ]),
+      ]));
+    });
+    groups.appendChild(card);
+  });
+  kids.push(groups);
+  return screenWrap(kids, '14px 16px 28px');
+}
+
+/* ------------------------------------------------------------ SATURATION */
+function renderSaturation() {
+  const list = h('div', { style: 'display:flex;flex-direction:column;gap:10px;' });
+  SEGMENTS.forEach(s => {
+    const done = STATE.interviews.filter(r => r.segment === s.name).length;
+    const pct = Math.min(100, Math.round((done / s.target) * 100));
+    const color = pct >= 100 ? '#5C7A6B' : pct >= 50 ? '#D4A24C' : '#E5DDD0';
+    const status = pct >= 100 ? 'Target met — check the matrix for new themes' : done === 0 ? 'Not started' : `${s.target - done} more to target`;
+    list.appendChild(h('div', { class: 'card', style: 'padding:14px 15px;' }, [
+      h('div', { style: 'display:flex;align-items:baseline;justify-content:space-between;margin-bottom:8px;' }, [
+        h('span', { class: 'serif', style: 'font-size:15px;', text: s.name }),
+        h('span', { class: 'num', style: 'font-size:12px;color:#6E6A5E;', text: `${done} / ${s.target}` }),
+      ]),
+      h('div', { class: 'bar' }, [h('div', { class: 'bar-fill', style: `width:${pct}%;background:${color};` })]),
+      h('div', { style: 'font-size:11px;color:#6E6A5E;margin-top:7px;', text: status }),
+    ]));
+  });
+  const note = h('div', { style: 'background:#FAF7F1;border:1px solid #EFE9DD;border-radius:14px;padding:14px 15px;margin-top:14px;font-size:12.5px;line-height:18px;color:#4A5651;' }, [
+    h('strong', { text: 'How to read this: ' }),
+    'a segment “saturates” when the last three interviews surface 0–1 new themes each. Counts are necessary, not sufficient — check the matrix for whether new themes still emerge.',
+  ]);
+  return screenWrap([list, note]);
+}
+
+/* ------------------------------------------------------------ INSIGHTS: PAINS */
+function renderPains() {
+  const ranked = rankThemes(STATE.matrix).slice(0, 3);
+  const cards = ranked.map((p, i) => {
+    const strongest = [...p.quotes].sort((a, b) => (+b.severity || 0) - (+a.severity || 0))[0] || {};
+    return h('div', { class: 'card', style: 'padding:15px;' }, [
+      h('div', { class: 'serif', style: 'font-size:16px;line-height:20px;margin-bottom:9px;', text: `${i + 1}. ${p.tag}` }),
+      h('div', { style: 'display:flex;flex-wrap:wrap;gap:6px;margin-bottom:11px;' }, [
+        chip(`${p.count} mentions`, 'line', 'sm'),
+        chip(`avg severity ${p.avgSev.toFixed(1)}`, sevTone(p.avgSev), 'sm'),
+        chip(`${p.wtpRate}% WTP`, p.wtpRate >= 50 ? 'sage' : 'honey', 'sm'),
+      ]),
+      h('div', { class: 'quote', style: 'font-size:14.5px;line-height:1.55;padding-left:13px;', text: `“${strongest.quote || ''}”` }),
+      h('div', { style: 'font-size:11px;color:#6E6A5E;text-align:right;margin-top:6px;', text: strongest.interview_id || '' }),
+    ]);
+  });
+  return screenWrap(cards, '16px 16px 28px', '12px');
+}
+
+/* ------------------------------------------------------------ INSIGHTS: THEMES */
+function renderThemes() {
+  const ranked = rankThemes(STATE.matrix);
+  const themeCount = new Set(STATE.matrix.map(m => m.theme_tag).filter(Boolean)).size;
+  const list = h('div', { class: 'listcard' });
+  ranked.forEach((t, i) => {
+    list.appendChild(h('div', { class: 'row' }, [
+      h('div', { style: 'display:flex;align-items:flex-start;gap:10px;' }, [
+        h('span', { class: 'num', style: 'font-size:12px;color:#6E6A5E;width:16px;margin-top:2px;', text: String(i + 1) }),
+        h('span', { class: 'chip plum', style: 'flex:1;', text: t.tag }),
+      ]),
+      h('div', { style: 'display:flex;gap:14px;margin-top:7px;padding-left:26px;' }, [
+        h('span', { class: 'num', style: 'font-size:11px;color:#6E6A5E;', text: `${t.count} quotes` }),
+        h('span', { class: 'num', style: `font-size:11px;color:${TONE[sevTone(t.avgSev)].ink};`, text: `avg sev ${t.avgSev.toFixed(1)}` }),
+        h('span', { class: 'num', style: 'font-size:11px;color:#6E6A5E;', text: `WTP ${t.wtpRate}%` }),
+        h('span', { class: 'num', style: 'font-size:11px;color:#1F2A28;font-weight:500;margin-left:auto;', text: `score ${t.score.toFixed(1)}` }),
+      ]),
+    ]));
+  });
+  return screenWrap([
+    h('div', { style: 'font-size:12px;color:#4A5651;margin-bottom:12px;', text: `Ranked by frequency × avg severity × WTP signal. ${themeCount} themes from ${STATE.matrix.length} matrix entries.` }),
+    list,
+  ]);
+}
+
+/* ------------------------------------------------------------ INSIGHTS: SEGMENTS */
+function renderSegments() {
+  const bySeg = {};
+  STATE.matrix.forEach(m => { if (!m.segment) return; (bySeg[m.segment] = bySeg[m.segment] || []).push(m); });
+  const cards = Object.entries(bySeg).map(([name, quotes]) => {
+    const highSev = quotes.filter(q => (+q.severity || 0) >= 4).length;
+    const wtpY = quotes.filter(q => q.wtp === 'Y').length;
+    const topThemes = rankThemes(quotes).slice(0, 3).map(t => t.tag);
+    const strongest = [...quotes].sort((a, b) => (+b.severity || 0) - (+a.severity || 0))[0] || {};
+    return h('div', { class: 'card', style: 'padding:15px;' }, [
+      h('div', { class: 'serif', style: 'font-size:17px;margin-bottom:10px;', text: name }),
+      h('div', { style: 'display:flex;flex-wrap:wrap;gap:6px;margin-bottom:12px;' }, [
+        chip(`${quotes.length} quotes`, 'line', 'sm'),
+        chip(`${highSev} high-severity`, highSev ? 'rose' : 'line', 'sm'),
+        chip(`${wtpY} WTP`, wtpY ? 'sage' : 'line', 'sm'),
+      ]),
+      h('div', { class: 'micro', style: 'color:#6E6A5E;margin-bottom:7px;', text: 'Top themes' }),
+      h('div', { style: 'display:flex;flex-wrap:wrap;gap:6px;margin-bottom:12px;' }, topThemes.map(th => h('span', { class: 'chip plum', style: 'height:auto;padding:3px 9px;font-size:10px;', text: th }))),
+      h('div', { class: 'micro', style: 'color:#6E6A5E;margin-bottom:5px;', text: 'Strongest quote' }),
+      h('div', { class: 'quote', style: 'font-size:13.5px;', text: `“${strongest.quote || ''}”` }),
+    ]);
+  });
+  return screenWrap(cards.length ? cards : [emptyCard('No segment evidence yet', 'Tag quotes in the matrix and segment cards build themselves.')], '16px 16px 28px', '12px');
+}
+
+/* ------------------------------------------------------------ INSIGHTS: KILL LIST */
+function renderKill() {
+  const rows = [...STATE.kill_list].sort((a, b) => String(b.killed_date || '').localeCompare(String(a.killed_date || '')));
+  const list = h('div', { class: 'listcard' });
+  rows.forEach(k => {
+    list.appendChild(h('div', { class: 'row', style: 'padding:14px 15px;' }, [
+      h('div', { style: 'display:flex;align-items:center;gap:8px;margin-bottom:8px;' }, [
+        chip('Killed', 'rose', 'sm'),
+        h('span', { style: 'font-size:11px;color:#6E6A5E;', text: fmtDay(k.killed_date) }),
+      ]),
+      h('div', { class: 'serif', style: 'font-size:15px;line-height:20px;margin-bottom:6px;', text: k.hypothesis || '' }),
+      h('div', { style: 'font-size:12.5px;line-height:18px;color:#4A5651;', text: k.evidence || '' }),
+    ]));
+  });
+  return screenWrap([
+    h('div', { style: 'font-size:12px;color:#4A5651;margin-bottom:12px;', text: 'Append-only. Entries cannot be edited or removed — that is the point.' }),
+    rows.length ? list : emptyCard('Nothing killed yet', 'When the evidence falsifies a hypothesis, record it here — permanently.'),
+  ]);
+}
+
+/* ------------------------------------------------------------ INSIGHTS: STATE OF FIELD */
+function renderStateOfField() {
+  const rec = STATE.deliverables.find(d => d.phase === 3 && d.deliverable === 'State of the field');
+  if (rec && rec.evidence) {
+    return screenWrap([h('div', { class: 'card', style: 'padding:18px;' }, [
+      h('div', { style: 'font-size:11px;color:#6E6A5E;margin-bottom:10px;', text: `Last updated ${fmtDay(rec.updated_at || rec.created_at)}` }),
+      h('div', { style: 'font-size:13.5px;line-height:21px;color:#1F2A28;white-space:pre-line;', text: rec.evidence }),
+    ])]);
+  }
+  return screenWrap([h('div', { class: 'card', style: 'padding:24px 18px;display:flex;flex-direction:column;align-items:center;text-align:center;gap:6px;min-height:200px;justify-content:center;' }, [
+    h('div', { class: 'serif', style: 'font-size:17px;color:#4A5651;', text: 'No state-of-the-field written yet' }),
+    h('div', { style: 'font-size:12.5px;line-height:18px;color:#6E6A5E;max-width:40ch;', text: 'One dated paragraph, updated whenever the picture changes. Let the assistant draft it from the whole ledger, then shape and save.' }),
+    h('button', { class: 'btn btn-primary tall', style: 'margin-top:12px;', onclick: () => setState({ assistantOpen: true }), text: 'Draft from evidence' }),
+    h('button', { class: 'btn btn-line', onclick: () => {}, text: 'Write manually' }),
+  ])]);
+}
+
+/* ------------------------------------------------------------ DECISION: BRIEF */
+function renderBrief() {
+  const hyps = STATE.hypotheses.filter(x => x.kind === 'buyer_hypothesis').sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
+  const kills = STATE.hypotheses.filter(x => x.kind === 'kill_criterion').sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
+  const dirTone = (s) => ({ strengthening: 'sage', weakening: 'honey', dead: 'rose', open: 'line', unknown: 'line' }[s] || 'line');
+  const linksFor = (id) => STATE.evidence_links.filter(l => l.hypothesis_id === id);
+
+  const leaning = h('div', { class: 'card', style: 'padding:17px;' }, [
+    h('div', { class: 'micro', style: 'color:#6E6A5E;', text: 'Current leaning · advisory, not a verdict' }),
+    h('div', { style: 'margin-top:10px;' }, [chip('INSUFFICIENT', 'honey', 'lg')]),
+    h('div', { style: 'font-size:13px;line-height:20px;color:#4A5651;margin-top:12px;', text: 'Early in the programme the honest answer is INSUFFICIENT. Twelve interviews point toward a diaspora-payer wedge, but the kill criteria have no numbers under them yet — no CAC, no conversion, no cost-to-serve.' }),
+    h('div', { class: 'num', style: 'font-size:11px;color:#6E6A5E;margin-top:12px;padding-top:11px;border-top:1px solid #EFE9DD;', text: `Based on ${STATE.interviews.length} interviews · ${STATE.matrix.length} matrix entries · phase ${CURRENT_PHASE}` }),
+  ]);
+
+  const hypBlock = h('div', {}, [
+    h('div', { class: 'micro', style: 'color:#6E6A5E;margin-bottom:8px;', text: 'Buyer hypotheses · who pays?' }),
+    h('div', { style: 'display:flex;flex-direction:column;gap:11px;' }, hyps.map(hy => {
+      const ls = linksFor(hy.id);
+      const supp = ls.filter(l => l.direction === 'supports').length;
+      const contra = ls.filter(l => l.direction === 'contradicts').length;
+      return h('div', { class: 'card', style: 'padding:15px;' }, [
+        h('div', { style: 'display:flex;align-items:flex-start;justify-content:space-between;gap:10px;' }, [
+          h('div', { class: 'serif', style: 'font-size:15.5px;line-height:20px;', text: `${hy.code} · ${hy.title}` }),
+          chip(hy.status || 'open', dirTone(hy.status)),
+        ]),
+        h('div', { style: 'font-size:12px;line-height:17px;color:#4A5651;margin-top:5px;', text: hy.description || '' }),
+        h('div', { class: 'num', style: 'font-size:11.5px;color:#6E6A5E;margin-top:9px;', text: `${supp} supporting · ${contra} contradicting` }),
+      ]);
+    })),
+  ]);
+
+  const killCard = h('div', { class: 'card', style: 'padding:15px;' }, [
+    h('div', { class: 'micro', style: 'color:#6E6A5E;margin-bottom:10px;', text: 'Kill criteria · any breach kills patient-pays' }),
+    ...kills.map((k, i) => h('div', { style: `display:flex;align-items:flex-start;gap:9px;padding:9px 0;${i < kills.length - 1 ? 'border-bottom:1px solid #EFE9DD;' : ''}` }, [
+      chip(k.status || 'unknown', 'inset', 'sm'),
+      h('div', { style: 'min-width:0;' }, [
+        h('div', { style: 'font-size:12.5px;font-weight:500;color:#1F2A28;', text: `${k.code} · ${k.title}` }),
+        h('div', { style: 'font-size:11.5px;line-height:16px;color:#6E6A5E;margin-top:2px;', text: k.description || '' }),
+      ]),
+    ])),
+  ]);
+
+  return screenWrap([leaning, hypBlock, killCard], '16px 16px 28px', '16px');
+}
+
+/* ------------------------------------------------------------ DECISION: MEMO */
+function renderMemo() {
+  const team = getTeam();
+  const seat = (who, role) => h('div', {}, [
+    h('div', { class: 'micro', style: 'color:#6E6A5E;margin-bottom:6px;', text: `${who} · ${role}` }),
+    h('div', { style: 'display:flex;gap:6px;flex-wrap:wrap;' }, ['Undecided', 'GO', 'PIVOT', 'NO-GO'].map((v, i) =>
+      h('span', { style: `display:inline-flex;align-items:center;height:30px;padding:0 12px;border-radius:8px;font-size:12px;font-weight:${i === 0 ? 500 : 400};${i === 0 ? 'background:#3F5A4D;color:#fff;' : 'background:#fff;border:1px solid #E5DDD0;color:#4A5651;'}`, text: v })),
+    ),
+  ]);
+  const sections = [
+    'Recommendation', 'Evidence summary', 'Buyer & willingness to pay', 'Unit economics verdict',
+    'Key risks & unknowns', 'What would change our mind', 'Decision & next step',
+  ];
+  const memoCard = h('div', { class: 'listcard' });
+  sections.forEach(label => memoCard.appendChild(h('div', { class: 'row', style: 'padding:13px 15px;' }, [
+    h('div', { class: 'micro', style: 'color:#96501F;margin-bottom:5px;', text: label }),
+    h('div', { style: 'font-size:12.5px;line-height:18px;color:#6E6A5E;', text: 'Not yet drafted — the assistant drafts from the evidence ledger; humans edit and sign.' }),
+  ])));
+  memoCard.appendChild(h('div', { style: 'padding:14px 15px;' }, [
+    h('div', { class: 'micro', style: 'color:#6E6A5E;margin-bottom:6px;', text: 'Co-signatures' }),
+    h('div', { style: 'font-size:12.5px;line-height:18px;color:#4A5651;', text: `Not yet co-signed. ${team.lead} and ${team.field} must each pick the same verdict above to enable signing.` }),
+  ]));
+
+  return screenWrap([
+    h('div', { class: 'card', style: 'padding:16px;margin-bottom:14px;' }, [
+      h('div', { class: 'micro', style: 'color:#6E6A5E;margin-bottom:12px;', text: 'Verdict · three seats. Humans decide; the AI argues.' }),
+      h('div', { style: 'display:flex;flex-direction:column;gap:12px;' }, [
+        seat(team.lead, 'lead'), seat(team.field, 'field'),
+        h('div', {}, [
+          h('div', { class: 'micro', style: 'color:#6E6A5E;margin-bottom:6px;', text: 'AI assessment · advisory' }),
+          h('div', { style: 'display:flex;align-items:center;gap:8px;' }, [chip('INSUFFICIENT', 'honey'), h('span', { style: 'font-size:11px;color:#6E6A5E;', text: 'no assessment yet' })]),
+        ]),
+      ]),
+    ]),
+    h('div', { class: 'micro', style: 'color:#6E6A5E;margin-bottom:8px;', text: 'Seven sections · AI drafts, humans edit & sign' }),
+    memoCard,
+  ], '16px 16px 28px');
+}
+
+/* ------------------------------------------------------------ DECISION: ECONOMICS */
+const ECON_DEFAULTS = { procedure_cost_usd: 8000, take_rate_pct: 8, cac_usd: 150, consult_to_travel_pct: 20, service_cost_per_case_usd: 200, cases_per_month: 10, monthly_fixed_costs_usd: 2000 };
+function renderEconomics() {
+  const saved = STATE.economics.find(m => m.model_name === 'base');
+  const a = { ...ECON_DEFAULTS, ...(saved?.assumptions || {}) };
+  const revenuePerCase = Math.round(a.procedure_cost_usd * (a.take_rate_pct / 100));
+  const cacPerCase = a.consult_to_travel_pct ? Math.round(a.cac_usd / (a.consult_to_travel_pct / 100)) : 0;
+  const grossMargin = revenuePerCase - a.service_cost_per_case_usd;
+  const netMargin = grossMargin - cacPerCase;
+  const leadsNeeded = a.consult_to_travel_pct ? Math.round(1 / (a.consult_to_travel_pct / 100)) : 0;
+  const monthlyCac = cacPerCase * a.cases_per_month;
+  const monthlyRevenue = revenuePerCase * a.cases_per_month;
+  const monthlyNet = netMargin * a.cases_per_month - a.monthly_fixed_costs_usd;
+  const money = (n) => (n < 0 ? `−$${Math.abs(n).toLocaleString()}` : `$${n.toLocaleString()}`);
+
+  const breakpoints = [
+    { ok: cacPerCase <= revenuePerCase, label: 'CAC per closed case vs revenue per case', detail: `CAC ${money(cacPerCase)} ${cacPerCase > revenuePerCase ? '>' : '≤'} revenue ${money(revenuePerCase)}`, pass: cacPerCase <= revenuePerCase, code: '①' },
+    { ok: a.consult_to_travel_pct >= 15, label: 'Consult → travel conversion ≥ 15%', detail: `conversion ${a.consult_to_travel_pct}% ${a.consult_to_travel_pct >= 15 ? '≥' : '<'} 15`, pass: a.consult_to_travel_pct >= 15, code: '②' },
+    { ok: a.service_cost_per_case_usd <= 300, label: 'Service cost per case ≤ $300', detail: `service ${money(a.service_cost_per_case_usd)} ${a.service_cost_per_case_usd <= 300 ? '≤' : '>'} 300`, pass: a.service_cost_per_case_usd <= 300, code: '③' },
+  ];
+  const bpCard = h('div', { class: 'card', style: 'padding:15px;margin-bottom:14px;' }, [
+    h('div', { class: 'micro', style: 'color:#6E6A5E;margin-bottom:10px;', text: 'Break-point checks · any red kills patient-pays' }),
+    ...breakpoints.map((b, i) => h('div', { style: `display:flex;align-items:flex-start;gap:10px;padding:8px 0;${i < 2 ? 'border-bottom:1px solid #EFE9DD;' : ''}` }, [
+      chip(b.pass ? '✓ PASS' : '✗ BROKEN', b.pass ? 'sage' : 'rose'),
+      h('div', { style: 'min-width:0;' }, [
+        h('div', { style: 'font-size:12.5px;line-height:17px;color:#1F2A28;', text: `${b.code} ${b.label}` }),
+        h('div', { class: 'num', style: 'font-size:11px;color:#6E6A5E;margin-top:2px;', text: b.detail }),
+      ]),
+    ])),
+  ]);
+
+  const assumptions = [
+    ['Procedure cost', money(a.procedure_cost_usd)], ['Take rate', `${a.take_rate_pct}%`], ['CAC / lead', money(a.cac_usd)],
+    ['Consult → travel', `${a.consult_to_travel_pct}%`], ['Service / case', money(a.service_cost_per_case_usd)],
+    ['Cases / mo', String(a.cases_per_month)], ['Fixed / mo', money(a.monthly_fixed_costs_usd)],
+  ];
+  const outputs = [
+    ['Revenue / case', money(revenuePerCase), '#1F2A28'], ['CAC / closed', money(cacPerCase), cacPerCase > revenuePerCase ? '#9A3F3F' : '#1F2A28'],
+    ['Gross margin', money(grossMargin), grossMargin < 0 ? '#9A3F3F' : '#1F2A28'], ['Net margin', money(netMargin), netMargin < 0 ? '#9A3F3F' : '#1F2A28'],
+    ['Leads needed', String(leadsNeeded), '#1F2A28'], ['Monthly CAC', money(monthlyCac), '#1F2A28'],
+    ['Monthly revenue', money(monthlyRevenue), '#1F2A28'], ['Monthly net', money(monthlyNet), monthlyNet < 0 ? '#9A3F3F' : '#1F2A28'],
+  ];
+  const kvCard = (title, rows) => h('div', { class: 'card', style: 'padding:15px;' }, [
+    h('div', { class: 'micro', style: 'color:#6E6A5E;margin-bottom:10px;', text: title }),
+    ...rows.map(([l, v, color]) => h('div', { style: 'display:flex;justify-content:space-between;gap:8px;padding:5px 0;font-size:12px;' }, [
+      h('span', { style: 'color:#4A5651;', text: l }),
+      h('span', { class: 'num', style: `font-weight:500;${color ? `color:${color};` : ''}`, text: v }),
+    ])),
+  ]);
+
+  return screenWrap([
+    bpCard,
+    h('div', { style: 'display:grid;grid-template-columns:1fr 1fr;gap:14px;' }, [kvCard('Assumptions', assumptions), kvCard('Derived outputs', outputs)]),
+  ], '16px 16px 28px');
+}
+
+/* ------------------------------------------------------------ DECISION: ALT MODELS */
+function renderAlt() {
+  const cards = STATE.segment_cards.filter(c => c.card_type === 'alt_model');
+  const models = cards.length ? cards.map(c => ({ name: c.name, who: c.who || '', how: c.how || '', revenue: c.revenue || '', pros: c.pros || '', cons: c.cons || '' })) : [
+    { name: 'B2B case-packaging for hospital IPDs', who: 'Hospital IPD pays', how: 'Sell pre-qualified, complete case files to Indian hospital international desks.', revenue: 'Per-qualified-case fee or SaaS seat', pros: 'Two independent IPD willingness-to-pay signals; clean B2B invoice.', cons: 'Smaller TAM; depends on hospital procurement cycles.' },
+    { name: 'Agent tooling (arm the existing channel)', who: 'Agents pay', how: 'Sell the coordination software to existing agents rather than competing with them.', revenue: 'SaaS per agent seat', pros: 'Agents already do the work manually; faster adoption.', cons: 'Agents fear patient-side transparency; churn risk.' },
+    { name: 'Diaspora-first coordination concierge', who: 'Family abroad pays', how: 'Premium concierge for diaspora children funding a parent’s care, with real-time visibility.', revenue: 'Flat coordination fee per case', pros: 'Strongest WTP signal in the interviews; clear payer.', cons: 'CAC to reach diaspora unproven; smaller volume.' },
+  ];
+  const el = models.map(m => h('div', { class: 'card', style: 'padding:15px;' }, [
+    h('div', { class: 'serif', style: 'font-size:16px;margin-bottom:8px;', text: m.name }),
+    h('div', { style: 'margin-bottom:10px;' }, [chip(m.who, 'info')]),
+    ...[['How it works', m.how], ['Revenue', m.revenue], ['Pros', m.pros], ['Cons', m.cons]].map(([label, body]) => h('div', {}, [
+      h('div', { class: 'micro', style: 'color:#6E6A5E;margin-bottom:3px;margin-top:0;', text: label }),
+      h('div', { style: `font-size:12.5px;line-height:18px;color:${label === 'How it works' || label === 'Revenue' ? '#1F2A28' : '#4A5651'};margin-bottom:9px;`, text: body }),
+    ])),
+  ]));
+  return screenWrap(el, '16px 16px 28px', '12px');
+}
+
+/* ------------------------------------------------------------ DECISION: FIELD CHECKS */
+function renderFieldChecks() {
+  const rows = STATE.field_checks;
+  const unverified = rows.filter(r => !r.confirmed).length;
+  const kids = [];
+  if (unverified) kids.push(h('div', { class: 'banner honey', style: 'margin-bottom:12px;', text: `${unverified} assumption${unverified === 1 ? '' : 's'} still unverified — each one is model risk.` }));
+  const list = h('div', { style: 'display:flex;flex-direction:column;gap:10px;' });
+  rows.forEach(f => {
+    const tone = f.confirmed ? 'sage' : 'honey';
+    list.appendChild(h('div', { class: 'card', style: 'padding:14px 15px;' }, [
+      h('div', { style: 'display:flex;align-items:flex-start;justify-content:space-between;gap:10px;' }, [
+        h('div', { style: 'font-size:13px;line-height:18px;color:#1F2A28;font-weight:500;', text: f.assumption || '' }),
+        chip(f.confirmed ? 'Confirmed' : 'Unconfirmed', tone, 'sm'),
+      ]),
+      f.notes ? h('div', { style: 'font-size:12px;line-height:17px;color:#6E6A5E;margin-top:6px;', text: f.notes }) : null,
+      h('div', { style: 'font-size:11px;color:#6E6A5E;margin-top:6px;', text: [f.confirmed_by && `by ${f.confirmed_by}`, f.confirmed_date && fmtDay(f.confirmed_date)].filter(Boolean).join(' · ') }),
+    ]));
+  });
+  kids.push(rows.length ? list : emptyCard('No field checks yet', 'Log the fragile assumptions the model rests on, and verify them.'));
+  return screenWrap(kids, '16px 16px 28px');
+}
+
+/* ------------------------------------------------------------ DECISION: MVP */
+function renderMvp() {
+  const fields = [
+    'One buyer', 'One pain', 'One journey step', 'One channel', 'One success metric', 'Explicitly out of scope',
+  ];
+  const card = h('div', { class: 'card', style: 'padding:16px;display:flex;flex-direction:column;gap:14px;' }, [
+    ...fields.map(label => h('div', {}, [
+      h('div', { class: 'micro', style: 'color:#96501F;margin-bottom:4px;', text: label }),
+      h('div', { style: 'font-size:12.5px;line-height:18px;color:#6E6A5E;', text: 'Not yet defined — draft from the evidence, then narrow to one of each.' }),
+    ])),
+    h('button', { class: 'btn btn-primary tall', onclick: () => setState({ assistantOpen: true }), text: 'Draft scope from evidence' }),
+  ]);
+  return screenWrap([
+    h('div', { style: 'font-size:12px;color:#4A5651;margin-bottom:12px;', text: 'The narrowest thing to build first, if the verdict is GO — one of each.' }),
+    card,
+  ], '16px 16px 28px');
+}
+
+/* ------------------------------------------------------------ DECISION: TESTS */
+function renderTests() {
+  const tests = [
+    { name: 'Fake-door landing test', description: 'A one-page offer for diaspora coordination; measure real intent before building anything.', metrics: ['Unique visitors', 'Email sign-ups', 'Sign-up rate', 'Cost per sign-up'] },
+    { name: 'Concierge pilot (5 real cases)', description: 'Hand-run five real coordination cases end-to-end; measure whether families pay and what it costs to serve.', metrics: ['Cases served', 'Paid conversions', 'Avg price paid', 'Hours per case'] },
+  ];
+  const el = tests.map(t => h('div', { class: 'card', style: 'padding:15px;' }, [
+    h('div', { class: 'serif', style: 'font-size:15.5px;line-height:20px;margin-bottom:6px;', text: t.name }),
+    h('div', { style: 'font-size:12.5px;line-height:18px;color:#4A5651;margin-bottom:12px;', text: t.description }),
+    h('div', { class: 'micro', style: 'color:#6E6A5E;margin-bottom:6px;', text: 'Metrics' }),
+    ...t.metrics.map((m, i) => h('div', { style: `display:flex;justify-content:space-between;gap:8px;padding:7px 0;${i < t.metrics.length - 1 ? 'border-bottom:1px solid #EFE9DD;' : ''}font-size:12.5px;` }, [
+      h('span', { style: 'color:#1F2A28;', text: m }), h('span', { class: 'num', style: 'color:#6E6A5E;', text: '—' }),
+    ])),
+  ]));
+  return screenWrap(el, '16px 16px 28px', '12px');
+}
+
+/* ------------------------------------------------------------ MORE: LIST */
+function moreItem(label, sub, onclick, last) {
+  return h('button', { class: 'rowbtn', style: `padding:14px 15px;display:flex;align-items:center;justify-content:space-between;gap:10px;${last ? 'border-bottom:none;' : ''}`, onclick }, [
+    h('div', {}, [
+      h('div', { style: 'font-size:14px;font-weight:500;color:#1F2A28;', text: label }),
+      h('div', { style: 'font-size:11.5px;color:#6E6A5E;margin-top:2px;', text: sub }),
+    ]),
+    h('span', { style: 'color:#96501F;font-size:18px;', text: '›' }),
+  ]);
+}
+function renderMoreList() {
+  const open = (v) => setState({ moreScreen: v });
+  const group = (label, items) => frag(
+    h('div', { class: 'micro', style: 'color:#6E6A5E;margin-bottom:8px;', text: label }),
+    h('div', { class: 'listcard', style: 'margin-bottom:18px;' }, items),
+  );
+  return screenWrap([
+    ...group('Reference', [
+      moreItem('Interview scripts', 'Versioned questions, one per segment', () => open('scripts')),
+      moreItem('Outreach templates', 'Ready-to-send messages', () => open('templates')),
+      moreItem('Operating manual', 'How we run this project', () => open('manual'), true),
+    ]),
+    ...group('Workspace', [
+      moreItem('Reports', 'Print-ready, from live data', () => open('reports')),
+      moreItem('Documents', 'Every file the field produced', () => open('documents'), true),
+    ]),
+    ...group('Settings', [moreItem('Team & workspace', 'Names, data, phase', () => open('settings'), true)]),
+    h('div', { style: 'text-align:center;margin-top:4px;' }, [
+      h('div', { style: 'display:inline-flex;align-items:center;gap:8px;' }, [
+        h('div', { class: 'serif', style: 'width:26px;height:26px;border-radius:8px;background:#3F5A4D;color:#fff;display:flex;align-items:center;justify-content:center;', text: 'M' }),
+        h('span', { class: 'serif', style: 'font-size:14px;', text: 'MedTerminal' }),
+      ]),
+      h('div', { style: 'font-size:11px;color:#6E6A5E;margin-top:6px;', text: 'Research Workspace · v0.4' }),
+    ]),
+  ], '18px 16px 28px');
+}
+
+/* ------------------------------------------------------------ MORE: SCRIPTS */
+function renderScripts() {
+  const scripts = STATE.scripts;
+  const bySeg = {};
+  scripts.forEach(s => { const cur = bySeg[s.script_name]; if (!cur || (s.version || 1) > (cur.version || 1)) bySeg[s.script_name] = s; });
+  const names = SEGMENT_NAMES.filter(n => bySeg[n]);
+  if (!names.length) return screenWrap([emptyCard('No scripts yet', 'Starter scripts seed on first run.')]);
+  const seg = names.includes(UI.scriptSeg) ? UI.scriptSeg : names[0];
+  const cur = bySeg[seg];
+  const tabs = h('div', { class: 'mtscroll', style: 'display:flex;gap:7px;overflow-x:auto;padding:14px 16px 4px;' });
+  names.forEach(n => tabs.appendChild(h('button', { class: `pill ${n === seg ? 'active' : ''}`, onclick: () => setState({ scriptSeg: n }), text: n })));
+  const sections = Array.isArray(cur.content) ? cur.content : [];
+  const body = h('div', { style: 'padding:8px 16px 28px;' }, [
+    h('div', { style: 'font-size:11.5px;color:#6E6A5E;margin-bottom:12px;', text: `Version ${cur.version || 1}${cur.revert_note ? ` · ${cur.revert_note}` : ''}` }),
+    h('div', { class: 'card', style: 'padding:16px;display:flex;flex-direction:column;gap:14px;' }, sections.map(sec => h('div', {}, [
+      h('div', { class: 'micro', style: 'color:#96501F;margin-bottom:4px;', text: sec.title || '' }),
+      h('div', { style: 'font-size:12.5px;line-height:18px;color:#1F2A28;', text: sec.body || sec.text || '' }),
+    ]))),
+  ]);
+  return h('div', { class: 'screen' }, [tabs, body]);
+}
+
+/* ------------------------------------------------------------ MORE: TEMPLATES */
+function renderTemplates() {
+  const templates = STATE.scripts.filter(s => s.script_type === 'outreach_template');
+  const list = templates.length ? templates : [];
+  const kids = [h('div', { style: 'font-size:12px;line-height:17px;color:#4A5651;margin-bottom:14px;', text: 'Ready to send with light personalisation. Replace [name] / [mutual contact] / [X].' })];
+  const wrap = h('div', { style: 'display:flex;flex-direction:column;gap:12px;' });
+  (list.length ? list : []).forEach(t => {
+    const c = t.content || {};
+    const card = h('div', { class: 'card', style: 'padding:15px;' }, [
+      h('div', { style: 'display:flex;align-items:flex-start;justify-content:space-between;gap:10px;margin-bottom:8px;' }, [
+        h('div', { class: 'serif', style: 'font-size:15px;line-height:20px;', text: t.script_name || c.name || 'Template' }),
+        h('button', { class: 'btn btn-line', style: 'height:30px;padding:0 12px;font-size:11.5px;border-radius:9px;', onclick: async (e) => { try { await navigator.clipboard.writeText(templateText(t)); e.target.textContent = 'Copied!'; } catch { e.target.textContent = 'Copy failed'; } setTimeout(() => { e.target.textContent = 'Copy'; }, 1500); }, text: 'Copy' }),
+      ]),
+      c.subject ? h('div', { style: 'font-size:11.5px;color:#6E6A5E;margin-bottom:8px;' }, [h('strong', { style: 'color:#4A5651;', text: 'Subject: ' }), c.subject]) : null,
+      h('div', { style: 'font-size:12.5px;line-height:18px;color:#1F2A28;white-space:pre-line;', text: c.body || '' }),
+      c.ask ? h('div', { style: 'font-size:11.5px;color:#96501F;margin-top:10px;' }, [h('strong', { text: 'Ask: ' }), c.ask]) : null,
+    ]);
+    wrap.appendChild(card);
+  });
+  kids.push(list.length ? wrap : emptyCard('No templates yet', 'Outreach templates seed on first run.'));
+  return screenWrap(kids, '14px 16px 28px');
+}
+function templateText(t) { const c = t.content || {}; return (c.subject ? `Subject: ${c.subject}\n\n` : '') + (c.body || '') + (c.ask ? `\n\nAsk: ${c.ask}` : ''); }
+
+/* ------------------------------------------------------------ MORE: MANUAL */
+function renderManual() {
+  const secs = STATE.segment_cards.filter(c => c.card_type === 'manual');
+  const list = secs.length ? secs.map(s => ({ h: s.name, body: s.body || '' })) : MANUAL_FALLBACK;
+  return screenWrap(list.map(m => h('div', {}, [
+    h('div', { class: 'serif', style: 'font-size:16px;color:#3F5A4D;margin-bottom:6px;', text: m.h }),
+    h('div', { style: 'font-size:13px;line-height:20px;color:#1F2A28;white-space:pre-line;', text: m.body }),
+  ])), '16px 16px 28px', '18px');
+}
+const MANUAL_FALLBACK = [
+  { h: 'What this project is', body: 'A six-phase qualitative programme deciding whether a patient-side medical-tourism service (Kenya → India) is viable enough to build. This app is the tool that runs the decision, not the product itself.' },
+  { h: 'The same-day tag rule', body: 'Every interview must be tagged into the theme matrix the same day it happens. Untagged interviews are lost interviews — the red warnings never get weakened.' },
+  { h: 'Who does what', body: 'Young leads analysis and synthesis. Simon runs the field interviews. Owner and interviewer dropdowns come from these two names plus "Joint".' },
+  { h: 'How decisions get made', body: 'Hypotheses, kill criteria, and evidence links are first-class records. The AI argues; humans decide. Any AI-proposed write goes through human confirmation.' },
+  { h: 'Data & privacy', body: 'De-identify everything — initials, not names. Never upload consent forms or identity documents. The app is the sole repository the assistant can search.' },
+  { h: 'Phases & gating', body: 'The nav unlocks each group as the programme advances. The current phase is set in Settings.' },
+];
+
+/* ------------------------------------------------------------ MORE: REPORTS */
+function renderReports() {
+  const types = [
+    { name: 'Weekly field update', description: 'What moved this week — interviews, themes, and what needs attention.' },
+    { name: 'Phase-exit brief', description: 'Did we meet the exit criteria for the current phase? Evidence attached.' },
+    { name: 'Investor / partner memo', description: 'The decision so far, framed for someone who was not in the room.' },
+    { name: 'Full evidence dossier', description: 'Every hypothesis, kill criterion, and the evidence links behind them.' },
+  ];
+  const gen = h('div', { style: 'display:flex;flex-direction:column;gap:10px;margin-bottom:20px;' }, types.map(r => h('div', { class: 'card', style: 'padding:15px;' }, [
+    h('div', { class: 'serif', style: 'font-size:15px;margin-bottom:4px;', text: r.name }),
+    h('div', { style: 'font-size:12px;line-height:17px;color:#4A5651;margin-bottom:11px;', text: r.description }),
+    h('div', { style: 'display:flex;gap:8px;' }, [
+      h('button', { class: 'btn btn-primary', style: 'height:36px;', onclick: () => setState({ assistantOpen: true }), text: 'Draft with assistant' }),
+      h('button', { class: 'btn btn-line', style: 'height:36px;', onclick: () => {}, text: 'From template' }),
+    ]),
+  ])));
+  const generated = STATE.reports;
+  return screenWrap([
+    h('div', { class: 'micro', style: 'color:#6E6A5E;margin-bottom:8px;', text: 'Generate a report' }),
+    gen,
+    h('div', { class: 'micro', style: 'color:#6E6A5E;margin-bottom:8px;', text: 'Generated reports' }),
+    generated.length
+      ? h('div', { class: 'listcard' }, generated.map(r => h('div', { class: 'row' }, [
+          h('div', { style: 'font-size:13.5px;font-weight:500;color:#1F2A28;', text: (r.content && r.content.title) || r.title || r.report_type }),
+          h('div', { style: 'font-size:11px;color:#6E6A5E;margin-top:3px;', text: fmtDay(r.created_at) }),
+        ])))
+      : h('div', { class: 'card', style: 'padding:40px 24px;text-align:center;' }, [
+          h('div', { class: 'serif', style: 'font-size:16px;color:#4A5651;', text: 'No reports generated yet' }),
+          h('div', { style: 'font-size:12.5px;color:#6E6A5E;margin-top:4px;', text: 'Draft one above — it pulls live numbers from the workspace.' }),
+        ]),
+  ], '16px 16px 28px');
+}
+
+/* ------------------------------------------------------------ MORE: DOCUMENTS */
+function renderDocuments() {
+  const docs = STATE.documents;
+  const list = h('div', { class: 'listcard' });
+  docs.forEach(d => list.appendChild(h('div', { class: 'row', style: 'padding:14px 15px;' }, [
+    h('div', { style: 'display:flex;align-items:flex-start;justify-content:space-between;gap:10px;' }, [
+      h('div', { style: 'min-width:0;' }, [
+        h('div', { style: 'font-size:13.5px;font-weight:500;color:#1F2A28;', text: d.filename || '—' }),
+        h('div', { style: 'font-size:11px;color:#6E6A5E;margin-top:3px;', text: [d.segment, d.interview_id, fmtDay(d.created_at)].filter(Boolean).join(' · ') }),
+      ]),
+      h('button', { class: 'btn btn-line', style: 'height:30px;padding:0 11px;font-size:11.5px;border-radius:9px;', onclick: () => {}, text: 'View' }),
+    ]),
+    d.description ? h('div', { style: 'font-size:12px;line-height:17px;color:#4A5651;margin-top:8px;', text: d.description }) : null,
+  ])));
+  return screenWrap([
+    h('div', { class: 'banner info', style: 'margin-bottom:14px;', text: 'Upload field notes, price lists, photos and scans. De-identify first (initials, not names). Never upload consent forms or identity documents.' }),
+    docs.length ? list : emptyCard('No documents yet', 'Upload the files the field produced — they become searchable evidence.'),
+  ], '14px 16px 28px');
+}
+
+/* ------------------------------------------------------------ MORE: SETTINGS */
+function renderSettings() {
+  const team = getTeam();
+  const dataMode = isLocalMode ? 'Local demo' : 'Live backend';
+  const ai = aiAvailable ? 'Connected via worker' : 'Off';
+  const infoRow = (label, sub) => h('div', {}, [
+    h('div', { style: 'font-size:11.5px;color:#4A5651;margin-bottom:4px;', text: label }),
+    h('div', { style: 'height:42px;border-radius:10px;border:1px solid #E5DDD0;background:#fff;display:flex;align-items:center;padding:0 12px;font-size:14px;', text: sub }),
+  ]);
+  return screenWrap([
+    h('div', { class: 'card', style: 'padding:16px;' }, [
+      h('div', { class: 'micro', style: 'color:#6E6A5E;', text: 'Team' }),
+      h('div', { style: 'font-size:12.5px;line-height:18px;color:#4A5651;margin:6px 0 14px;', text: 'Display names used everywhere — interviewer and owner dropdowns. Changes apply immediately.' }),
+      h('div', { style: 'margin-bottom:12px;' }, [infoRow('Project lead (analysis & synthesis)', team.lead)]),
+      infoRow('Field coordinator (runs the interviews)', team.field),
+    ]),
+    h('div', { class: 'card', style: 'padding:16px;' }, [
+      h('div', { class: 'micro', style: 'color:#6E6A5E;margin-bottom:6px;', text: 'Current phase' }),
+      h('div', { class: 'serif', style: 'font-size:16px;', text: `Phase ${CURRENT_PHASE} — ${(PHASES.find(p => p.n === CURRENT_PHASE) || {}).long || ''}` }),
+      h('div', { style: 'font-size:11.5px;color:#6E6A5E;margin-top:6px;', text: 'The nav unlocks the matching group automatically as phases advance.' }),
+    ]),
+    h('div', { class: 'card', style: 'padding:16px;' }, [
+      h('div', { class: 'micro', style: 'color:#6E6A5E;margin-bottom:10px;', text: 'Data' }),
+      h('div', { style: 'display:flex;align-items:center;gap:8px;margin-bottom:8px;' }, [h('span', { style: 'font-size:12.5px;color:#4A5651;', text: 'Mode:' }), chip(dataMode, 'sage', 'sm')]),
+      h('div', { style: 'display:flex;align-items:center;gap:8px;' }, [h('span', { style: 'font-size:12.5px;color:#4A5651;', text: 'Assistant:' }), chip(ai, aiAvailable ? 'sage' : 'line', 'sm')]),
+    ]),
+    h('div', { class: 'card', style: 'padding:16px;' }, [
+      h('div', { class: 'micro', style: 'color:#6E6A5E;margin-bottom:6px;', text: 'Data management' }),
+      h('div', { style: 'font-size:12.5px;line-height:18px;color:#4A5651;margin-bottom:12px;', text: 'Back up, restore, or reset the workspace. Every export is a single JSON file.' }),
+      h('button', { class: 'btn btn-line', style: 'width:100%;height:42px;font-size:13px;color:#1F2A28;', onclick: () => {}, text: 'Export everything (backup)' }),
+    ]),
+  ], '16px 16px 28px', '14px');
+}
+
+/* ----------------------------------------------------------------- helpers */
+function emptyCard(title, sub) {
+  return h('div', { class: 'card', style: 'padding:40px 24px;text-align:center;' }, [
+    h('div', { class: 'serif', style: 'font-size:16px;color:#4A5651;', text: title }),
+    h('div', { style: 'font-size:12.5px;color:#6E6A5E;margin-top:4px;', text: sub }),
+  ]);
+}
+
+/* =====================================================================
+   INTERVIEW DETAIL OVERLAY
+   ===================================================================== */
+function renderDetail() {
+  const r = STATE.interviews.find(x => x.id === UI.selectedId);
+  if (!r) return h('div');
+  const tone = isTagged(r) ? 'sage' : 'rose';
+  const overlay = h('div', { class: 'overlay detail' }, [
+    h('div', { class: 'overlay-head', style: 'position:relative;' }, [
+      h('button', { class: 'btn-link', style: 'display:block;margin-bottom:8px;', onclick: () => setState({ selectedId: null }), text: '‹ Interviews' }),
+      h('span', { class: `chip ${tone}`, style: 'position:absolute;top:30px;right:16px;', text: isTagged(r) ? 'tagged' : 'untagged' }),
+      h('div', { class: 'serif', style: 'font-size:20px;line-height:25px;padding-right:80px;', text: `${r.interview_id || '—'} · ${r.segment || '—'}` }),
+      h('div', { style: 'font-size:11.5px;color:#6E6A5E;margin-top:6px;', text: `${fmtDay(r.date)} · ${r.format || '—'} · ${r.interviewer || '—'} · initials ${r.initials || '—'} · recorded ${r.recorded || '—'}` }),
+    ]),
+    h('div', { class: 'overlay-body mtscroll' }, [
+      isOverdue(r) ? h('div', { class: 'banner rose', style: 'justify-content:space-between;margin-bottom:14px;' }, [
+        h('span', { text: `Untagged ${daysSince(r.date)} days. Untagged interviews are lost interviews.` }),
+        h('button', { class: 'btn btn-line', style: 'height:30px;padding:0 11px;font-size:11.5px;border-radius:9px;border-color:#ECC9C9;color:#9A3F3F;', onclick: () => markTagged(r), text: 'Mark tagged' }),
+      ]) : null,
+      r.brief_topic ? h('div', {}, [
+        h('div', { class: 'micro', style: 'color:#6E6A5E;margin-bottom:4px;', text: 'Topic' }),
+        h('div', { style: 'font-size:13.5px;line-height:20px;color:#1F2A28;margin-bottom:16px;', text: r.brief_topic }),
+      ]) : null,
+      h('div', { class: 'micro', style: 'color:#6E6A5E;margin-bottom:6px;', text: 'Field notes' }),
+      h('div', { style: 'font-size:13px;line-height:21px;color:#4A5651;white-space:pre-line;', text: r.notes_markdown || 'No notes yet.' }),
+    ]),
+  ]);
+  return overlay;
+}
+async function markTagged(r) {
+  try { await data.update('interviews', r.id, { tagged_same_day: 'Y' }); STATE.interviews = await data.list('interviews'); render(); }
+  catch (e) { alert('Update failed: ' + e.message); }
+}
+
+/* =====================================================================
+   ASSISTANT OVERLAY
+   ===================================================================== */
+function renderAssistant() {
+  const msgs = h('div', { class: 'overlay-body mtscroll', style: 'display:flex;flex-direction:column;gap:11px;' });
+  UI.messages.forEach(m => {
+    const bot = m.role === 'bot';
+    msgs.appendChild(h('div', {
+      style: `max-width:86%;align-self:${bot ? 'flex-start' : 'flex-end'};background:${bot ? '#FAF7F1' : '#E6EDE7'};border:1px solid ${bot ? '#EFE9DD' : '#D4DFD5'};color:#1F2A28;padding:11px 13px;border-radius:14px;font-size:13.5px;line-height:20px;white-space:pre-wrap;`,
+      text: m.text,
+    }));
+  });
+  const quick = h('div', { style: 'padding:0 16px 8px;display:flex;flex-wrap:wrap;gap:7px;' },
+    ['Status check', 'What now?', 'Surface themes'].map(q => h('button', { class: 'pill', style: 'height:31px;font-size:11.5px;', onclick: () => sendChat(q), text: q })));
+  const input = h('input', { class: 'field', style: 'flex:1;height:42px;border-radius:12px;', placeholder: 'Ask about the project state…', value: UI.chatInput,
+    oninput: (e) => { UI.chatInput = e.target.value; } });
+  input.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); sendChat(input.value); } });
+
+  return h('div', { class: 'overlay rise' }, [
+    h('div', { class: 'overlay-head', style: 'display:flex;align-items:flex-start;justify-content:space-between;gap:10px;' }, [
+      h('div', {}, [
+        h('div', { class: 'serif', style: 'font-size:19px;line-height:24px;', text: 'Research assistant' }),
+        h('div', { style: 'font-size:11.5px;color:#6E6A5E;margin-top:2px;', text: 'Reads your data · advises next steps' }),
+      ]),
+      h('button', { class: 'icon-btn', style: 'width:34px;height:34px;color:#4A5651;font-size:15px;', onclick: () => setState({ assistantOpen: false }), text: '✕' }),
+    ]),
+    msgs, quick,
+    h('div', { style: 'padding:10px 16px 22px;border-top:1px solid #EFE9DD;display:flex;gap:8px;align-items:center;background:#F5F1EA;' }, [
+      input, h('button', { class: 'btn btn-primary', style: 'height:42px;padding:0 18px;border-radius:12px;font-size:13px;', onclick: () => sendChat(input.value), text: 'Send' }),
+    ]),
+  ]);
+}
+async function sendChat(text) {
+  const msg = (text || '').trim();
+  if (!msg) return;
+  UI.messages.push({ role: 'user', text: msg });
+  UI.chatInput = '';
+  if (!aiAvailable) {
+    UI.messages.push({ role: 'bot', text: "The assistant connects when AI_MODE is 'worker'. Everything else in the workspace works without it." });
+    render(); return;
+  }
+  UI.messages.push({ role: 'bot', text: '…' });
+  render();
+  try {
+    const res = await chatRequest({ message: msg, history: UI.messages.slice(0, -1), localData: aiDataSlices(STATE) });
+    UI.messages[UI.messages.length - 1] = { role: 'bot', text: res.reply || res.text || '(no reply)' };
+  } catch (e) {
+    UI.messages[UI.messages.length - 1] = { role: 'bot', text: 'The assistant is unavailable right now.' };
+  }
+  render();
+}
+
+/* =====================================================================
+   ENTRY FORM OVERLAY  (6 forms, segmented/pill controls per the spec)
+   ===================================================================== */
+function openForm(type) {
+  const team = getTeam();
+  UI.form = { interviewer: team.field, segment: '', format: '', recorded: 'N', tagged_same_day: 'N', channel: '', status: 'Cold', owner: '', interview_id: '', theme_tag: '', severity: '', wtp: '', confirmed: 'No', date: new Date().toISOString().slice(0, 10), killed_date: new Date().toISOString().slice(0, 10) };
+  setState({ formType: type, saving: false });
+}
+function closeForm() { setState({ formType: null }); }
+
+const FORM_TITLES = { interview: 'Log interview', contact: 'Add contact', quote: 'Add quote', kill: 'Kill a hypothesis', check: 'Add field check', upload: 'Upload document' };
+
+function fieldWrap(label, control) {
+  return h('div', {}, [h('div', { class: 'micro fieldlabel', style: 'color:#4A5651;', text: label }), control]);
+}
+function textField(key, placeholder, type = 'text') {
+  const el = h('input', { class: 'field', type, placeholder: placeholder || '', value: UI.form[key] || '', oninput: (e) => { UI.form[key] = e.target.value; } });
+  return el;
+}
+function areaField(key, placeholder, rows = 4) {
+  const el = h('textarea', { class: 'field', rows: String(rows), placeholder: placeholder || '' });
+  el.value = UI.form[key] || '';
+  el.addEventListener('input', (e) => { UI.form[key] = e.target.value; });
+  return el;
+}
+function segControl(key, options) {
+  const row = h('div', { class: 'seg' });
+  options.forEach(o => row.appendChild(h('button', { type: 'button', class: `seg-btn ${UI.form[key] === o ? 'active' : ''}`, onclick: () => { UI.form[key] = o; render(); }, text: o })));
+  return row;
+}
+function pillControl(key, options) {
+  const row = h('div', { class: 'mtscroll', style: 'display:flex;gap:7px;overflow-x:auto;padding-bottom:2px;' });
+  options.forEach(o => row.appendChild(h('button', { type: 'button', class: `pill tall ${UI.form[key] === o ? 'active' : ''}`, onclick: () => { UI.form[key] = o; render(); }, text: o })));
+  return row;
+}
+
+function renderForm() {
+  const type = UI.formType;
+  const body = h('div', { class: 'overlay-body mtscroll' }, [formBody(type)]);
+  return h('div', { class: 'overlay form' }, [
+    h('div', { class: 'overlay-head', style: 'display:flex;align-items:center;justify-content:space-between;gap:10px;padding:14px 14px 12px;' }, [
+      h('button', { class: 'btn-link lg', onclick: closeForm, text: 'Cancel' }),
+      h('div', { class: 'serif', style: 'font-size:17px;flex:1;text-align:center;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;', text: FORM_TITLES[type] }),
+      h('button', { class: 'btn btn-primary', style: 'height:36px;padding:0 15px;font-size:13px;', onclick: () => saveForm(type), text: UI.saving ? 'Saved ✓' : 'Save' }),
+    ]),
+    body,
+  ]);
+}
+
+function formBody(type) {
+  const col = (kids) => h('div', { style: 'display:flex;flex-direction:column;gap:16px;' }, kids);
+  const interviewers = interviewerOptions(), owners = ownerOptions();
+  const interviewIds = STATE.interviews.map(i => i.interview_id).filter(Boolean);
+  if (type === 'interview') return col([
+    h('div', { class: 'banner honey', text: 'Hard rule: tag this interview in the matrix the same day. Untagged interviews are lost interviews.' }),
+    fieldWrap('Date', textField('date', '', 'date')),
+    fieldWrap('Interviewer', segControl('interviewer', interviewers)),
+    fieldWrap('Segment', pillControl('segment', SEGMENT_NAMES)),
+    fieldWrap('Initials', textField('initials', 'e.g. AM')),
+    fieldWrap('Format', segControl('format', ['In-person', 'Video', 'Phone'])),
+    h('div', { style: 'display:flex;gap:12px;' }, [
+      h('div', { style: 'flex:1;' }, [fieldWrap('Recorded', segControl('recorded', ['Y', 'N']))]),
+      h('div', { style: 'flex:1;' }, [fieldWrap('Tagged same-day', segControl('tagged_same_day', ['Y', 'N']))]),
+    ]),
+    fieldWrap('Brief topic', textField('brief_topic', 'One line on the conversation')),
+    fieldWrap('Field notes — the assistant reads these', areaField('notes_markdown', 'Full debrief. Blank lines separate paragraphs.', 6)),
+  ]);
+  if (type === 'contact') return col([
+    fieldWrap('Name', textField('name', 'Full name')),
+    fieldWrap('Segment', pillControl('segment', SEGMENT_NAMES)),
+    h('div', { style: 'display:flex;gap:12px;' }, [
+      h('div', { style: 'flex:1;' }, [fieldWrap('Organisation', textField('organisation', 'Org / —'))]),
+      h('div', { style: 'flex:1;' }, [fieldWrap('Country', textField('country', 'Country'))]),
+    ]),
+    fieldWrap('Channel', pillControl('channel', CHANNELS)),
+    fieldWrap('Status', pillControl('status', OUTREACH_STATUSES)),
+    fieldWrap('Owner', segControl('owner', owners)),
+    fieldWrap('First contact', textField('first_contact', '', 'date')),
+    fieldWrap('Notes', areaField('notes', 'Context, referral source, next step', 4)),
+  ]);
+  if (type === 'quote') return col([
+    fieldWrap('Interview', pillControl('interview_id', interviewIds)),
+    fieldWrap('Quote / observation', areaField('quote', 'Paste the verbatim quote', 4)),
+    fieldWrap('Theme tag', pillControl('theme_tag', THEMES)),
+    fieldWrap('Segment', pillControl('segment', SEGMENT_NAMES)),
+    fieldWrap('Severity (1–5)', segControl('severity', ['1', '2', '3', '4', '5'])),
+    fieldWrap('Willingness to pay', segControl('wtp', ['Y', 'Maybe', 'N'])),
+  ]);
+  if (type === 'kill') return col([
+    h('div', { class: 'banner rose', text: 'Append-only. Once recorded, a killed hypothesis cannot be edited or removed — that is the point.' }),
+    fieldWrap('Hypothesis', areaField('hypothesis', 'The hypothesis the evidence has falsified', 3)),
+    fieldWrap('Evidence that killed it', areaField('evidence', 'Which interviews / data falsified it', 4)),
+    fieldWrap('Date', textField('killed_date', '', 'date')),
+  ]);
+  if (type === 'check') return col([
+    fieldWrap('Assumption', areaField('assumption', 'A fragile assumption that needs field verification', 3)),
+    fieldWrap('Confirmed?', segControl('confirmed', ['No', 'Yes'])),
+    fieldWrap('Confirmed by', segControl('confirmed_by', owners)),
+    fieldWrap('Notes', areaField('notes', 'How it was verified, or what is still needed', 4)),
+  ]);
+  if (type === 'upload') return col([
+    h('div', { class: 'banner info', text: 'De-identify first (initials, not names). PDF, text, CSV or image, up to 10 MB. Never upload consent forms or identity documents.' }),
+    h('div', { style: 'border:1.5px dashed #D4C7B4;border-radius:14px;background:#FAF7F1;padding:28px 16px;text-align:center;' }, [
+      h('div', { style: 'width:44px;height:44px;border-radius:12px;background:#fff;border:1px solid #E5DDD0;display:inline-flex;align-items:center;justify-content:center;color:#3F5A4D;margin-bottom:10px;', text: '↑' }),
+      h('div', { style: 'font-size:13.5px;font-weight:500;color:#1F2A28;', text: 'Tap to choose a file' }),
+      h('div', { style: 'font-size:11.5px;color:#6E6A5E;margin-top:3px;', text: 'or drop it here' }),
+    ]),
+    fieldWrap('Segment', pillControl('segment', SEGMENT_NAMES)),
+    fieldWrap('Linked interview (optional)', pillControl('interview_id', interviewIds)),
+    fieldWrap('Short description (searchable)', areaField('description', 'Say what this is', 3)),
+  ]);
+  return h('div');
+}
+
+async function saveForm(type) {
+  const f = UI.form;
+  try {
+    let table, record;
+    if (type === 'interview') { table = 'interviews'; record = pick(f, ['date', 'interviewer', 'segment', 'initials', 'format', 'recorded', 'tagged_same_day', 'brief_topic', 'notes_markdown']); }
+    else if (type === 'contact') { table = 'outreach'; record = pick(f, ['name', 'segment', 'organisation', 'country', 'channel', 'status', 'owner', 'first_contact', 'notes']); }
+    else if (type === 'quote') { table = 'matrix'; record = pick(f, ['interview_id', 'quote', 'theme_tag', 'segment', 'severity', 'wtp']); record.severity = record.severity ? Number(record.severity) : null; if (!record.wtp) record.wtp = null; }
+    else if (type === 'kill') { table = 'kill_list'; record = pick(f, ['hypothesis', 'evidence', 'killed_date']); if (!record.hypothesis || !record.evidence) { alert('Hypothesis and evidence are both required.'); return; } }
+    else if (type === 'check') { table = 'field_checks'; record = { assumption: f.assumption || '', confirmed: f.confirmed === 'Yes', confirmed_by: f.confirmed_by || null, notes: f.notes || '' }; }
+    else if (type === 'upload') { table = 'documents'; record = { filename: f.description ? f.description.slice(0, 40) : 'Document', segment: f.segment || null, interview_id: f.interview_id || null, description: f.description || '' }; }
+    else return;
+    // normalise blank date/enum fields to null
+    ['date', 'first_contact', 'killed_date'].forEach(k => { if (record[k] === '') record[k] = null; });
+    ['segment', 'interview_id', 'theme_tag', 'channel', 'owner', 'format', 'confirmed_by'].forEach(k => { if (record[k] === '') record[k] = null; });
+
+    await data.create(table, record);
+    const refresh = { interview: 'interviews', contact: 'outreach', quote: 'matrix', kill: 'kill_list', check: 'field_checks', upload: 'documents' }[type];
+    STATE[refresh] = await data.list(refresh);
+    UI.saving = true; render();
+    setTimeout(() => { UI.saving = false; UI.formType = null; render(); }, 650);
+  } catch (e) { alert('Save failed: ' + e.message); }
+}
+function pick(obj, keys) { const o = {}; keys.forEach(k => { o[k] = obj[k]; }); return o; }
