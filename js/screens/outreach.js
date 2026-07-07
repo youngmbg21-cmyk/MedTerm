@@ -93,12 +93,15 @@ function openOutreachForm(existing) {
   const r = existing || {};
   openModal(existing ? 'Edit contact' : 'Add contact', [
     formField('Name', 'name', 'input', r.name),
-    formField('Segment', 'segment', 'select', r.segment, SEGMENT_NAMES),
+    // Blank-first: an untouched select otherwise saves its first option, which
+    // for Owner misattributes a quick-add to the wrong teammate and for Segment
+    // misclassifies the contact in the outreach filter.
+    formField('Segment', 'segment', 'select', r.segment, ['', ...SEGMENT_NAMES]),
     formField('Organisation', 'organisation', 'input', r.organisation),
     formField('Country', 'country', 'input', r.country),
-    formField('Channel', 'channel', 'select', r.channel, CHANNELS),
+    formField('Channel', 'channel', 'select', r.channel, ['', ...CHANNELS]),
     formField('Status', 'status', 'select', r.status || 'Cold', OUTREACH_STATUSES),
-    formField('Owner', 'owner', 'select', r.owner, ownerOptions()),
+    formField('Owner', 'owner', 'select', r.owner, ['', ...ownerOptions()]),
     formField('First contact', 'first_contact', 'input', r.first_contact, null, 'date'),
     formField('Notes', 'notes', 'textarea', r.notes),
   ], async (form) => {

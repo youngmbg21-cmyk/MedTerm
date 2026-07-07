@@ -160,7 +160,11 @@ async function viewDocument(d) {
       const blob = await data.getFile(d.id, d);
       if (blob) {
         const img = h('img', { style: 'max-width:100%; border-radius:12px;' });
-        img.src = URL.createObjectURL(blob);
+        const objectUrl = URL.createObjectURL(blob);
+        // Free the blob URL once the image has decoded — otherwise each preview
+        // leaks one until the page unloads.
+        img.onload = () => URL.revokeObjectURL(objectUrl);
+        img.src = objectUrl;
         body.appendChild(img);
       }
     } catch { body.appendChild(h('div', { class: 'text-sm t-mute', text: 'Preview unavailable — use Download.' })); }

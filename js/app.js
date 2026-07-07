@@ -233,7 +233,15 @@ export function buildNav() {
       list.style.display = collapsed ? 'none' : '';
       chevron.style.transform = collapsed ? '' : 'rotate(90deg)';
     }
-    header.addEventListener('click', () => { collapsed = !collapsed; applyCollapsed(); });
+    // A locked group has no chevron and must not expand — otherwise clicking its
+    // header reveals routes the 🔒 badge says are inaccessible and lets you walk
+    // straight into a future phase. Keep it collapsed and inert.
+    if (locked) {
+      header.style.cursor = 'default';
+      header.setAttribute('aria-disabled', 'true');
+    } else {
+      header.addEventListener('click', () => { collapsed = !collapsed; applyCollapsed(); });
+    }
     applyCollapsed();
 
     group.appendChild(header);
@@ -241,9 +249,11 @@ export function buildNav() {
     nav.appendChild(group);
   });
 
-  // route clicks (delegated per element so .active toggling keeps working)
+  // route clicks (delegated per element so .active toggling keeps working).
+  // Guard locked groups so a route can never be entered from a locked section.
   nav.querySelectorAll('[data-route]').forEach(el => {
-    el.addEventListener('click', () => {
+    el.addEventListener('click', (e) => {
+      if (el.closest('.nav-group.locked')) { e.preventDefault(); return; }
       go(el.dataset.route);
       closeSidebar();
     });
