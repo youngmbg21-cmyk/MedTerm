@@ -152,6 +152,17 @@ function currentView() {
 /* ----------------------------------------------------------------- boot */
 export async function boot() {
   render(); // paint the shell immediately (empty lists)
+  // The synced backend (api data) and the worker assistant both require a
+  // signed-in Supabase session; without one every request 401s
+  // (UNAUTHORIZED_NO_AUTH_HEADER). A returning browser has the session cached,
+  // but a fresh/incognito visit does not — so prompt for the magic-link login
+  // here, exactly as the desktop shell does in boot-desktop.js.
+  if (!isLocalMode || aiAvailable) {
+    try {
+      const { requireLogin } = await import('./auth.js');
+      await requireLogin();
+    } catch (e) { console.error('login failed', e); }
+  }
   try {
     const results = await Promise.all(TABLES.map(t => data.list(t).catch(() => [])));
     TABLES.forEach((t, i) => { STATE[t] = results[i]; });
