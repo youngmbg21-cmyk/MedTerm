@@ -127,8 +127,14 @@ body {
   font-size: 14px; line-height: 22px;
 }
 /* While an overlay owns the screen (see lockScroll in js/app.js) the page
-   beneath is frozen, so dragging a finger can't scroll or jitter it. */
-body.scroll-locked { overflow: hidden; }
+   beneath is frozen, so dragging a finger can't scroll or jitter it.
+   position:fixed rather than overflow:hidden — the latter is advisory to
+   iOS Safari's touch handling; a pinned body is immovable everywhere.
+   lockScroll sets an inline top offset so the page doesn't jump to 0. */
+body.scroll-locked {
+  position: fixed; left: 0; right: 0; width: 100%;
+  overflow: hidden;
+}
 .serif { font-family: 'Fraunces', Georgia, serif; font-feature-settings: "ss01"; letter-spacing: -0.01em; }
 .micro { font-size: 11px; line-height: 16px; letter-spacing: 0.06em; text-transform: uppercase; font-weight: 500; }
 .num   { font-variant-numeric: tabular-nums; }
@@ -224,6 +230,15 @@ body.scroll-locked { overflow: hidden; }
   background: var(--surface-card); border: 1px solid var(--line);
   font-size: 14px; line-height: 22px; color: var(--ink);
   transition: border-color var(--ease), box-shadow var(--ease);
+}
+/* A scrollable notes textarea scrolls itself — the gesture never escapes. */
+.textarea { overscroll-behavior: contain; }
+@media (max-width: 768px) {
+  /* 16px is iOS Safari's no-auto-zoom threshold. Below it, focusing any field
+     (e.g. the interview-notes editor) zooms the whole page in, and a zoomed
+     viewport pans freely in every direction — the screen "dances". Form
+     controls therefore never go under 16px on phones. */
+  .input, .select, .textarea { font-size: 16px; }
 }
 .input:focus, .select:focus, .textarea:focus {
   outline: none; border-color: var(--sage);
@@ -492,6 +507,9 @@ table.data.sticky-head thead th { position: sticky; top: 0; background: var(--su
 .modal-bg {
   position: fixed; inset: 0; background: rgba(31, 42, 40, 0.4); z-index: 60;
   display: flex; align-items: center; justify-content: center; padding: 20px;
+  /* The dimmed backdrop is inert to gestures — a drag on it moves nothing.
+     Taps still fire click, so tap-outside-to-close keeps working. */
+  touch-action: none;
 }
 .modal {
   background: var(--surface-card); border-radius: var(--r-card);
