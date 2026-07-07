@@ -772,15 +772,20 @@ function renderBrief() {
   const rationale = (assessment && (assessment.summary_markdown || '').trim())
     ? String(assessment.summary_markdown).split(/\n\s*\n/)[0].replace(/[#*]/g, '').trim()
     : `No AI assessment has been run yet, and the kill criteria still have no numbers under them — so the honest current leaning is ${leaningLabel}. Regenerate to draft one from the evidence.`;
-  const leaning = h('div', { class: 'card', style: 'padding:17px;' }, [
-    h('button', { style: 'display:block;width:100%;text-align:left;background:none;border:none;padding:0;cursor:pointer;', onclick: assessment ? () => openReader(`Assessment · ${fmtDay(assessment.created_at)}`, () => assessmentReader(assessment)) : () => {} }, [
-      h('div', { style: 'display:flex;align-items:flex-start;justify-content:space-between;gap:8px;' }, [
-        h('div', { class: 'micro', style: 'color:#6E6A5E;', text: 'Current leaning · advisory, not a verdict' }),
-        assessment ? h('span', { style: 'color:#96501F;font-size:16px;', text: '›' }) : null,
-      ]),
-      h('div', { style: 'margin-top:10px;' }, [chip(leaningLabel, LEANING_TONE[leaningLabel] || 'honey', 'lg')]),
-      h('div', { style: 'font-size:13px;line-height:20px;color:#4A5651;margin-top:12px;', text: rationale }),
+  const leaningInner = [
+    h('div', { style: 'display:flex;align-items:flex-start;justify-content:space-between;gap:8px;' }, [
+      h('div', { class: 'micro', style: 'color:#6E6A5E;', text: 'Current leaning · advisory, not a verdict' }),
+      assessment ? h('span', { style: 'color:#96501F;font-size:16px;', text: '›' }) : null,
     ]),
+    h('div', { style: 'margin-top:10px;' }, [chip(leaningLabel, LEANING_TONE[leaningLabel] || 'honey', 'lg')]),
+    h('div', { style: 'font-size:13px;line-height:20px;color:#4A5651;margin-top:12px;', text: rationale }),
+  ];
+  const leaning = h('div', { class: 'card', style: 'padding:17px;' }, [
+    // Only a tappable button when there's an assessment to open — otherwise a
+    // plain div, so it isn't a dead pointer-cursor tap before one is generated.
+    assessment
+      ? h('button', { style: 'display:block;width:100%;text-align:left;background:none;border:none;padding:0;cursor:pointer;', onclick: () => openReader(`Assessment · ${fmtDay(assessment.created_at)}`, () => assessmentReader(assessment)) }, leaningInner)
+      : h('div', {}, leaningInner),
     h('div', { class: 'num', style: 'font-size:11px;color:#6E6A5E;margin-top:12px;padding-top:11px;border-top:1px solid #EFE9DD;', text: `Based on ${snap.interviews ?? STATE.interviews.length} interviews · ${snap.matrix_entries ?? STATE.matrix.length} matrix entries · phase ${CURRENT_PHASE}` }),
     regenControl(),
   ]);
@@ -946,10 +951,15 @@ async function saveMemo(patch) {
   render();
 }
 async function pickVerdict(key, v) {
+  // Guard: without this, two quick taps both read an empty decision_memos and
+  // each create() a second memo record — the seats race and one verdict is lost.
+  if (UI.savingMemo) return;
+  UI.savingMemo = true; render();
   const next = { ...memoContent(), [key]: v };
   next.verdict = agreedVerdict(next);
   try { await saveMemo({ content: next }); }
   catch (e) { alert('Save failed: ' + e.message); }
+  finally { UI.savingMemo = false; render(); }
 }
 function renderMemo() {
   const team = getTeam();
@@ -959,7 +969,7 @@ function renderMemo() {
     h('div', { class: 'micro', style: 'color:#6E6A5E;margin-bottom:6px;', text: `${who} · ${role}` }),
     h('div', { style: 'display:flex;gap:6px;flex-wrap:wrap;' }, VERDICTS.map(v => {
       const active = (content[key] || 'Undecided') === v;
-      return h('button', { style: `display:inline-flex;align-items:center;height:32px;padding:0 12px;border-radius:8px;font-size:12px;font-weight:500;cursor:pointer;${active ? 'background:#3F5A4D;color:#fff;border:1px solid #3F5A4D;' : 'background:#fff;border:1px solid #E5DDD0;color:#4A5651;'}`, onclick: () => pickVerdict(key, v), text: v });
+      return h('button', { disabled: UI.savingMemo ? '' : null, style: `display:inline-flex;align-items:center;height:38px;padding:0 13px;border-radius:8px;font-size:12px;font-weight:500;cursor:pointer;${UI.savingMemo ? 'opacity:.55;' : ''}${active ? 'background:#3F5A4D;color:#fff;border:1px solid #3F5A4D;' : 'background:#fff;border:1px solid #E5DDD0;color:#4A5651;'}`, onclick: () => pickVerdict(key, v), text: v });
     })),
   ]);
   const sections = [
@@ -1897,7 +1907,12 @@ async function sendChat(text) {
     UI.messages.push({ role: 'bot', text: "The assistant connects when AI_MODE is 'worker'. Everything else in the workspace works without it." });
     UI.chatToBottom = true; render(); return;
   }
-  UI.messages.push({ role: 'bot', text: TYPING });
+  // Hold the placeholder by identity, not index: if the user sends again or taps
+  // Clear while this request is in flight, index-based writes would attach the
+  // answer to the wrong bubble (or to a bogus `-1`). Replacing the exact object
+  // — and bailing if it's gone (cleared) — keeps answers with their questions.
+  const placeholder = { role: 'bot', text: TYPING };
+  UI.messages.push(placeholder);
   UI.chatToBottom = true; // reveal the user's message + the thinking indicator
   render();
   try {
@@ -1907,9 +1922,13 @@ async function sendChat(text) {
       .filter(m => m.text !== TYPING)
       .map(m => ({ role: m.role === 'bot' ? 'assistant' : 'user', content: m.text }));
     const res = await chatRequest({ messages: history, tools: true, localData: aiDataSlices(STATE) });
-    UI.messages[UI.messages.length - 1] = { role: 'bot', text: res.text || '(empty reply)' };
+    const idx = UI.messages.indexOf(placeholder);
+    if (idx === -1) return; // conversation was cleared mid-flight — drop the result
+    UI.messages[idx] = { role: 'bot', text: res.text || '(empty reply)' };
   } catch (e) {
-    UI.messages[UI.messages.length - 1] = { role: 'bot', text: `Couldn't reach the assistant. ${e.message}` };
+    const idx = UI.messages.indexOf(placeholder);
+    if (idx === -1) return;
+    UI.messages[idx] = { role: 'bot', text: `Couldn't reach the assistant. ${e.message}` };
   }
   render(); // leave scroll where it is so the answer is read from its top
 }
