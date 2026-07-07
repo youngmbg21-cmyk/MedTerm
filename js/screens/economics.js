@@ -85,6 +85,8 @@ function renderEconomics(page) {
     ]));
   });
   const saveBtn = h('button', { class: 'btn btn-primary mt-2', onclick: async () => {
+    if (saveBtn.disabled) return; // a fast double-click could otherwise create two `base` rows
+    saveBtn.disabled = true; saveBtn.textContent = 'Saving…';
     try {
       const wasNew = !saved;
       let record;
@@ -98,8 +100,8 @@ function renderEconomics(page) {
       // (gated on a persisted row) appears without navigating away and back.
       if (wasNew) { renderCurrentRoute(); return; }
       saveBtn.textContent = 'Saved';
-      setTimeout(() => { saveBtn.textContent = 'Save assumptions'; }, 1500);
-    } catch (e) { alert('Save failed: ' + e.message); }
+      setTimeout(() => { saveBtn.textContent = 'Save assumptions'; saveBtn.disabled = false; }, 1500);
+    } catch (e) { saveBtn.disabled = false; saveBtn.textContent = 'Save assumptions'; alert('Save failed: ' + e.message); }
   } }, 'Save assumptions');
   assumptionsCard.appendChild(saveBtn);
   if (saved) {

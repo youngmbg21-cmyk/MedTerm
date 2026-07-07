@@ -86,3 +86,15 @@ Note discovered (logged in DEFERRED): the mobile app writes the URL hash on rend
   - Divide-by-zero / misleading defaults: economics + wtpRate + saturation all guarded; only `buildWeekly` remained (fixed above).
   - Unguarded `[0].prop` / `.find().prop` / `.map`: all guarded (`stalled[0]` behind an `if`, split()[0] always defined, regex `m[0]` always present).
 - **Full console-error walk** (populated seed) across all 24 screens + reader/detail/assistant overlays and every More sub-screen: **zero console/page errors**.
+
+### Batch G — desktop pass (second-pass audit of js/screens/* + shared layers)
+The first pass was mobile-focused; this pass audited the desktop build.
+- **`reports.js printReport` crashed on a blocked pop-up** — `window.open()` returns null when blocked, then `.document.write` threw a TypeError and Print died silently. Fix: null-check + "allow pop-ups" alert.
+- **`overview.js` Same-day-tagged KPI showed 100% "Hard rule holding" (sage) with 0 interviews** — the desktop twin of the mobile false-100%. Fix: "—" / "No interviews logged yet" / neutral tone when empty. Verified: empty dashboard shows "—", no "100%".
+- **`reports.js taggedPct()` returned 100 for an empty ledger** — propagated "Same-day tagging: 100%" into Weekly/Executive reports. Fix: return null; guard the meter chart (omit when null) and both executive-briefing sentences ("n/a — no interviews logged yet").
+- **`economics.js` "Save assumptions" could create duplicate `base` rows** — no disable during the await; a fast double-click created two `base` models (downstream `.find` reads only the first). Fix: disable + "Saving…" for the request duration.
+- **Shared `openModal` submit had no in-flight guard** — a double-click could fire two `data.create`s (duplicate rows across every capture form). Fix: disable the submit button during `onSubmit`, restore it only if the modal stays open (validation/error).
+- **`chat.js sendChat` had no send guard** — two fast Enters launched concurrent requests. Fix: disable the send button while a request is in flight (re-enabled in `finally`).
+- **Modals had no Escape-to-close / focus** — added Escape handling (closes an open `modal-root` dialog before the sidebar) across every desktop modal. Verified: Escape closes an open modal.
+
+Deferred (see DEFERRED.md): desktop `loadAllData` per-table `.catch(()=>[])` (has an "Offline · using cache" banner — arguably by design); modal focus-trap/autofocus (larger a11y work).

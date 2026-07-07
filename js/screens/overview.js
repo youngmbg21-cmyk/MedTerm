@@ -32,15 +32,18 @@ function renderOverview(page) {
   /* ---- KPI strip ---- */
   const totalInterviews = STATE.interviews.length;
   const tagged = STATE.interviews.filter(r => r.tagged_same_day === 'Y').length;
-  const taggedPct = totalInterviews ? Math.round((tagged / totalInterviews) * 100) : 100;
+  // Null (not 100) with zero interviews — an empty ledger must not report the
+  // same-day hard rule as "holding".
+  const taggedPct = totalInterviews ? Math.round((tagged / totalInterviews) * 100) : null;
   const contacted = STATE.outreach.filter(r => ['Sent', 'Replied', 'Booked', 'Done'].includes(r.status)).length;
   const booked = STATE.outreach.filter(r => ['Booked', 'Done'].includes(r.status)).length;
   const themeCount = new Set(STATE.matrix.map(r => r.theme_tag).filter(Boolean)).size;
 
   page.appendChild(h('div', { class: 'grid grid-cols-2 md:grid-cols-4 gap-4 mb-4' }, [
     kpiCard('Interviews logged', totalInterviews, `target ${SEGMENTS.reduce((s, x) => s + x.target, 0)} by Phase 2 close`),
-    kpiCard('Same-day tagged', `${taggedPct}%`, taggedPct === 100 ? 'Hard rule holding' : 'Hard rule: must be 100%',
-      taggedPct === 100 ? 'sage' : taggedPct >= 80 ? 'honey' : 'rose'),
+    kpiCard('Same-day tagged', taggedPct == null ? '—' : `${taggedPct}%`,
+      taggedPct == null ? 'No interviews logged yet' : (taggedPct === 100 ? 'Hard rule holding' : 'Hard rule: must be 100%'),
+      taggedPct == null ? undefined : (taggedPct === 100 ? 'sage' : taggedPct >= 80 ? 'honey' : 'rose')),
     kpiCard('Outreach contacted', contacted, `${booked} booked or done`),
     kpiCard('Themes surfaced', themeCount, themeCount >= 8 ? 'Rich pool' : 'Build the matrix'),
   ]));

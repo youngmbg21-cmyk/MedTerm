@@ -307,7 +307,11 @@ export function closeSidebar() {
 }
 
 document.addEventListener('keydown', (e) => {
-  if (e.key === 'Escape') closeSidebar();
+  if (e.key !== 'Escape') return;
+  // Escape closes an open modal first (none had keyboard dismissal), then the sidebar.
+  const root = document.getElementById('modal-root');
+  if (root && root.innerHTML !== '') { root.innerHTML = ''; return; }
+  closeSidebar();
 });
 
 /* ------------------------------------------------------------
@@ -433,8 +437,10 @@ export function openModal(title, fields, onSubmit, submitLabel = 'Save', { dange
   const root = document.getElementById('modal-root');
   root.innerHTML = '';
 
-  const form = h('form', { onsubmit: (e) => {
+  const form = h('form', { onsubmit: async (e) => {
     e.preventDefault();
+    const submitBtn = form.querySelector('button[type="submit"]');
+    if (submitBtn && submitBtn.disabled) return; // in-flight — ignore a double submit
     const out = {};
     fields.forEach(f => {
       const el = form.querySelector(`[name="${f.key}"]`);
@@ -444,7 +450,16 @@ export function openModal(title, fields, onSubmit, submitLabel = 'Save', { dange
       out[f.key] = el.value === '' && (el.type === 'date' || el.type === 'number')
         ? null : el.value;
     });
-    onSubmit(out);
+    if (submitBtn) { submitBtn.disabled = true; submitBtn.dataset.label = submitBtn.textContent; submitBtn.textContent = 'Saving…'; }
+    try {
+      await onSubmit(out);
+    } finally {
+      // If the handler didn't close the modal (validation kept it open, or an
+      // error), restore the button so the user can retry — otherwise it's gone.
+      if (submitBtn && document.getElementById('modal-root').contains(form)) {
+        submitBtn.disabled = false; submitBtn.textContent = submitBtn.dataset.label || submitLabel;
+      }
+    }
   } });
   /* Destructive confirmations are visually distinct: rose header rule + rose action */
   form.appendChild(h('div', { class: `modal-title serif${danger ? ' modal-title-danger' : ''}`, text: title }));

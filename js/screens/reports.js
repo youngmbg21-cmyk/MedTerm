@@ -35,7 +35,7 @@ function themeFrequencyRows(n = 6) {
 
 function taggedPct() {
   const total = STATE.interviews.length;
-  if (!total) return 100;
+  if (!total) return null; // null (not 100) — an empty ledger isn't a satisfied rule
   return (STATE.interviews.filter(r => r.tagged_same_day === 'Y').length / total) * 100;
 }
 
@@ -62,7 +62,7 @@ function generateWeeklyStatus() {
       {
         title: 'Where we are',
         body: `Phase ${CURRENT_PHASE} — ${phase?.long}. ${STATE.interviews.length} interviews logged in total, ${STATE.matrix.length} quotes tagged in the matrix, ${STATE.outreach.length} contacts in the outreach pipeline.`,
-        chart: { type: 'meter', pct: taggedPct(), label: 'Same-day tagging rate (hard rule: must be 100%)' },
+        chart: taggedPct() == null ? null : { type: 'meter', pct: taggedPct(), label: 'Same-day tagging rate (hard rule: must be 100%)' },
       },
       { title: 'This week\'s interviews', body: recent.length ? recent.map(r => `${r.interview_id} · ${r.segment} · ${fmtDate(r.date)} — ${r.brief_topic || 'no topic recorded'}`).join('\n') : 'No interviews in the last 7 days.' },
       {
@@ -146,7 +146,7 @@ function generateExecutiveBriefing() {
   const derived = derive(assumptions);
   const brokenCount = BREAKPOINTS.filter(bp => bp.broken(assumptions, derived)).length;
 
-  const summaryRaw = `${verdictLine} The programme has completed ${total} interview${total === 1 ? '' : 's'} across ${new Set(STATE.interviews.map(r => r.segment)).size} of ${SEGMENTS.length} target segments, testing patient-side coordination for the Kenya→India medical-travel corridor. ${topTheme ? `The strongest signal so far is "${topTheme.tag}" (${topTheme.count} mentions, ${topTheme.wtpRate}% willingness-to-pay rate).` : 'Theme evidence is still accumulating.'} The unit-economics model currently ${brokenCount === 0 ? 'clears all three break-point checks' : `fails ${brokenCount} of 3 break-point checks`} under current assumptions. Same-day interview tagging stands at ${Math.round(taggedPercent)}%. Sample sizes remain small; findings should be read as directional, not conclusive, until Phase 2 saturation.`;
+  const summaryRaw = `${verdictLine} The programme has completed ${total} interview${total === 1 ? '' : 's'} across ${new Set(STATE.interviews.map(r => r.segment)).size} of ${SEGMENTS.length} target segments, testing patient-side coordination for the Kenya→India medical-travel corridor. ${topTheme ? `The strongest signal so far is "${topTheme.tag}" (${topTheme.count} mentions, ${topTheme.wtpRate}% willingness-to-pay rate).` : 'Theme evidence is still accumulating.'} The unit-economics model currently ${brokenCount === 0 ? 'clears all three break-point checks' : `fails ${brokenCount} of 3 break-point checks`} under current assumptions. Same-day interview tagging stands at ${taggedPercent == null ? 'n/a — no interviews logged yet' : Math.round(taggedPercent) + '%'}. Sample sizes remain small; findings should be read as directional, not conclusive, until Phase 2 saturation.`;
   const summary = wordLimit(summaryRaw, 150);
 
   const dates = STATE.interviews.map(r => r.date).filter(Boolean).sort();
@@ -201,7 +201,7 @@ function generateExecutiveBriefing() {
       { title: 'Executive summary', body: summary },
       {
         title: 'Field research methodology',
-        body: `Period covered: ${period}.\nSame-day tagging rate: ${Math.round(taggedPercent)}% (hard rule requires 100%).\nInterviews by segment vs target:\n${SEGMENTS.map(s => `  ${s.name}: ${STATE.interviews.filter(r => r.segment === s.name).length}/${s.target}`).join('\n')}`,
+        body: `Period covered: ${period}.\nSame-day tagging rate: ${taggedPercent == null ? 'n/a — no interviews logged yet' : Math.round(taggedPercent) + '% (hard rule requires 100%)'}.\nInterviews by segment vs target:\n${SEGMENTS.map(s => `  ${s.name}: ${STATE.interviews.filter(r => r.segment === s.name).length}/${s.target}`).join('\n')}`,
         chart: { type: 'bar', rows: segmentCoverageRows() },
       },
       {
@@ -461,6 +461,7 @@ function printReport(report) {
   }).join('');
 
   const w = window.open('', '_blank');
+  if (!w) { alert('Couldn’t open the print window — allow pop-ups for this site and try again.'); return; }
   w.document.write(`<!DOCTYPE html>
 <html><head><title>${escapeHtml(report.title || 'Report')}</title>
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600&family=Inter:wght@400;500&display=swap" rel="stylesheet">

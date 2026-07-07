@@ -257,6 +257,8 @@ search before answering — never say you lack access to the team's notes.`;
 
 export async function sendChat(userText) {
   if (!aiAvailable) return;
+  const sendBtn = document.getElementById('send-chat-btn');
+  if (sendBtn && sendBtn.disabled) return; // a request is already in flight — no double-send
   const input = document.getElementById('chat-input');
   const text = (userText || input.value || '').trim();
   if (!text) return;
@@ -265,6 +267,7 @@ export async function sendChat(userText) {
   addChatMessage('user', text);
   STATE.chatHistory.push({ role: 'user', content: text });
   setTyping(true);
+  if (sendBtn) sendBtn.disabled = true;
 
   try {
     const res = await chatRequest({
@@ -287,6 +290,8 @@ export async function sendChat(userText) {
   } catch (e) {
     setTyping(false);
     addChatMessage('bot', `Couldn't reach the assistant. ${e.message}`);
+  } finally {
+    if (sendBtn) sendBtn.disabled = false;
   }
 }
 
