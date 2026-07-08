@@ -411,8 +411,50 @@ const apiAdapter = {
   async startFresh() {
     throw new Error('Starting fresh is only available in local demo mode. On the live backend, clearing team data is a deliberate operation performed directly in Supabase — it must not be one click in the app, since it would affect the whole team.');
   },
-  async importAll() {
-    throw new Error('Import is only available in local demo mode. On the live backend, data is already shared and backed up by Supabase — importing a file here could silently overwrite live team data.');
+  /* Live-mode replace-all, orchestrated entirely from the desktop client (no
+     dedicated Supabase/worker endpoint). It wipes the shared team data and
+     rebuilds it from the backup, so the caller MUST download a safety export
+     first (settings.js does) and gate it behind a typed confirmation.
+       - Delete children before parents and create parents before children so
+         foreign keys never block (matrix/documents → interviews;
+         evidence_links → hypotheses).
+       - Preserve every id so cross-record references survive (a matrix row's
+         id, a document's blob id, a hypothesis id an evidence link points at).
+       - ai_assessments are append-only (the worker refuses to delete them), so
+         they are deliberately left untouched — the assessment sequence is
+         itself evidence and must not be duplicated or dropped by an import.
+     NOT atomic: a mid-way failure leaves partial state — the safety export is
+     the recovery. Deleting non-document rows needs the lead role, so a partner
+     import stops at the first delete with nothing changed. */
+  async importAll(dump) {
+    const delOrder = ['evidence_links', 'matrix', 'documents', 'interviews',
+      'hypotheses', 'outreach', 'deliverables', 'scripts', 'kill_list',
+      'field_checks', 'economics', 'segment_cards', 'decision_memos', 'reports'];
+    const createOrder = ['interviews', 'hypotheses', 'outreach', 'deliverables',
+      'scripts', 'kill_list', 'field_checks', 'economics', 'segment_cards',
+      'decision_memos', 'reports', 'matrix', 'documents', 'evidence_links'];
+
+    for (const table of delOrder) {
+      const existing = await apiAdapter.list(table);
+      for (const row of existing) {
+        if (row && row.id != null) await apiAdapter.remove(table, row.id);
+      }
+    }
+    for (const table of createOrder) {
+      const rows = Array.isArray(dump.tables?.[table]) ? dump.tables[table] : [];
+      for (const row of rows) {
+        const clean = { ...row };
+        const b64 = clean.file_base64;
+        const mime = clean.file_mime || clean.mime_type;
+        delete clean.file_base64;
+        delete clean.file_mime;
+        const created = await apiAdapter.create(table, clean); // id preserved in the body
+        if (table === 'documents' && b64) {
+          const docId = (created && created.id) || clean.id;
+          if (docId) await apiAdapter.putFile(docId, base64ToBlob(b64, mime));
+        }
+      }
+    }
   },
 
   /* Files go to Supabase Storage through the Worker (base64 JSON keeps the

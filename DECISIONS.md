@@ -574,3 +574,29 @@ Dated 2026-07-04. Each entry is a decision the brief left open, plus the reasoni
     an earlier setup") and a confirmed, explicit Remove control that deletes
     the whole lineage. Config-segment scripts never show it: they are the
     canonical set and would only be recreated.
+
+## Desktop JSON import enabled in live (api) mode — client-orchestrated replace-all
+
+Import was previously local-mode only; the lead asked to be able to restore a
+backup from the desktop app in live mode too (not as a Supabase-admin task).
+
+Decisions:
+- **No new worker/Supabase endpoint.** The restore is orchestrated entirely from
+  the desktop client via the existing CRUD (`apiAdapter.importAll`): delete all
+  current rows, then recreate from the file. Keeps it "in the app", not a
+  backend operation.
+- **Replace-all, not merge** (per the lead) — matches the existing local flow and
+  its guards: a safety export downloads first + typed `IMPORT` confirmation.
+- **FK-safe ordering + id preservation.** Delete children before parents and
+  create parents before children (matrix/documents → interviews; evidence_links
+  → hypotheses), preserving every id so references and document-blob links
+  survive.
+- **Assessments are preserved, never wiped or duplicated.** The worker refuses to
+  delete `ai_assessments` (append-only — the sequence is evidence), so live
+  import leaves them untouched rather than duplicating them.
+- **Not atomic; lead-only.** A mid-way failure leaves partial state — the safety
+  export is the recovery. Deleting non-document rows needs the lead role, so a
+  partner import aborts at the first delete with nothing changed.
+- **Resets stay disabled in live mode** — only import was requested; wiping
+  shared team data remains a deliberate backend-side operation. Mobile is
+  unchanged (import is desktop-only).

@@ -97,28 +97,33 @@ function buildDataManagementCard() {
   ]));
   card.appendChild(h('div', { class: 'text-xs mb-5 t-mute', text: 'Includes binary files (PDFs, images) embedded as base64, so the download is fully self-contained. Do this weekly until the backend is live.' }));
 
-  if (isLocalMode) {
-    /* Import */
-    card.appendChild(h('div', { class: 'pt-4 border-t b-soft' }, [
-      h('div', { class: 'label mb-1', text: 'Import a backup' }),
-      h('div', { class: 'text-xs mb-3 t-mute', text: 'Replaces ALL current data with the contents of a previously exported file. Nothing is merged. A safety export of your current data downloads automatically first.' }),
-    ]));
-    const importInput = h('input', { class: 'input', type: 'file', accept: '.json,application/json' });
-    const importMsg = h('div', { class: 'text-xs mt-2', style: 'display:none;' });
-    importInput.addEventListener('change', () => handleImportFile(importInput, importMsg));
-    card.appendChild(h('div', { class: 'mb-1' }, [importInput]));
-    card.appendChild(importMsg);
+  /* Import — available in both modes. In live mode it rewrites the shared
+     backend (lead-only, with a safety export + typed confirmation), so the copy
+     is explicit about the blast radius. */
+  card.appendChild(h('div', { class: 'pt-4 border-t b-soft' }, [
+    h('div', { class: 'label mb-1', text: 'Import a backup' }),
+    h('div', { class: 'text-xs mb-3 t-mute', text: isLocalMode
+      ? 'Replaces ALL current data with the contents of a previously exported file. Nothing is merged. A safety export of your current data downloads automatically first.'
+      : 'Replaces ALL data on the shared live backend with a previously exported file — this changes what the whole team sees. Nothing is merged; append-only assessment history is preserved. A safety export downloads first, you confirm by typing, and it needs lead permissions.' }),
+  ]));
+  const importInput = h('input', { class: 'input', type: 'file', accept: '.json,application/json' });
+  const importMsg = h('div', { class: 'text-xs mt-2', style: 'display:none;' });
+  importInput.addEventListener('change', () => handleImportFile(importInput, importMsg));
+  card.appendChild(h('div', { class: 'mb-1' }, [importInput]));
+  card.appendChild(importMsg);
 
-    /* Resets */
+  /* Resets — local mode only (wiping shared team data stays a deliberate,
+     backend-side operation). */
+  if (isLocalMode) {
     card.appendChild(h('div', { class: 'pt-4 mt-4 border-t flex flex-wrap gap-2 b-soft' }, [
       h('button', { class: 'btn btn-line', onclick: () => confirmStartFresh() }, 'Start fresh for real fieldwork'),
       h('button', { class: 'btn btn-line', onclick: () => confirmDemoReset() }, 'Reset to demo data'),
     ]));
     card.appendChild(h('div', { class: 'text-xs mt-2 t-mute', text: '"Start fresh" wipes every outreach contact, interview, quote, document, and report — but keeps the three stock interview scripts and resets the six phases\' checklist to Not started, ready for real data. "Reset to demo data" restores the original sample research for exploring the app.' }));
   } else {
-    card.appendChild(h('div', { class: 'pt-4 border-t text-sm', style: 'border-color:var(--line-soft); color:var(--ink-soft);' }, [
-      h('div', { class: 'mb-1' }, [h('strong', { text: 'Import and resets are disabled in live mode.' })]),
-      'Data is shared across the whole team on the live backend. Replacing or wiping it from this screen would affect everyone at once, so those operations are deliberately not one click here — they are performed directly against Supabase by whoever administers the backend.',
+    card.appendChild(h('div', { class: 'pt-4 mt-4 border-t text-sm', style: 'border-color:var(--line-soft); color:var(--ink-soft);' }, [
+      h('div', { class: 'mb-1' }, [h('strong', { text: 'Resets are disabled in live mode.' })]),
+      'Wiping the shared team data is a deliberate operation performed directly against Supabase by whoever administers the backend — not a one-click action here.',
     ]));
   }
 
@@ -219,7 +224,9 @@ function openImportPreview(dump, filename, onDone) {
   ]);
 
   const warning = h('div', { class: 'banner banner-honey mb-4' }, [
-    h('span', { text: 'This will REPLACE all current data — nothing is merged. A safety export of what you have now downloads automatically before anything is touched.' }),
+    h('span', { text: isLocalMode
+      ? 'This will REPLACE all current data — nothing is merged. A safety export of what you have now downloads automatically before anything is touched.'
+      : 'This REPLACES all data on the shared live backend — it changes what the whole team sees, and cannot be undone except by re-importing the safety export that downloads first. Append-only assessment history is left untouched. Requires lead permissions.' }),
   ]);
 
   const confirmInput = h('input', { class: 'input', placeholder: 'Type IMPORT to confirm' });
