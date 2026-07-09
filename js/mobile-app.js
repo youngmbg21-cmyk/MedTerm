@@ -256,6 +256,9 @@ function render() {
   const frame = document.getElementById('frame');
   const view = currentView();
   syncHash(view); // keep the URL on the current page so a refresh returns here
+  // Opening the assistant clears the "reply waiting" badge — whatever route
+  // opened it (icon, "Draft…" buttons), and before the header renders the dot.
+  if (UI.assistantOpen) UI.assistantUnread = false;
   const oKey = overlayKey();
   // Preserve scroll across re-renders so tapping a control, saving, or toggling
   // an overlay never snaps the screen/form back to the top. Only restore when
@@ -319,7 +322,8 @@ function renderHeader(view, title, question) {
         h('span', { style: 'font-size:15px;margin-top:-1px;', text: '+' }),
         action[0].replace('+ ', ''),
       ]) : null,
-      h('button', { class: 'icon-btn', 'aria-label': 'Assistant', onclick: () => setState({ assistantOpen: true }) }, [assistantIcon()]),
+      h('button', { class: 'icon-btn', style: 'position:relative;', 'aria-label': UI.assistantUnread ? 'Assistant — reply ready' : 'Assistant', onclick: () => setState({ assistantOpen: true }) },
+        UI.assistantUnread ? [assistantIcon(), h('span', { class: 'chat-badge' })] : [assistantIcon()]),
     ]),
   ]);
 
@@ -1931,6 +1935,9 @@ async function sendChat(text) {
     if (idx === -1) return;
     UI.messages[idx] = { role: 'bot', text: `Couldn't reach the assistant. ${e.message}` };
   }
+  // If the panel was closed while the assistant was thinking, badge the header
+  // icon so it's clear a reply (or error) is waiting to be read.
+  if (!UI.assistantOpen) UI.assistantUnread = true;
   render(); // leave scroll where it is so the answer is read from its top
 }
 

@@ -86,6 +86,9 @@ button:disabled, .btn:disabled { cursor: default; }
 .hdr-q { font-size: 12px; line-height: 16px; color: var(--ink-soft); margin-top: 3px; }
 .hdr-actions { display: flex; align-items: center; gap: 7px; flex-shrink: 0; }
 .icon-btn { width: 40px; height: 40px; border-radius: 10px; border: 1px solid var(--line); background: #fff; color: var(--sage); cursor: pointer; display: inline-flex; align-items: center; justify-content: center; }
+/* "A reply is waiting" dot on the minimized assistant icon. */
+.chat-badge { position: absolute; top: 5px; right: 5px; width: 9px; height: 9px; border-radius: 50%; background: var(--solid-rose, #C15C4E); border: 1.5px solid #fff; box-shadow: 0 0 0 0 rgba(193,92,78,0.5); animation: chatBadgePulse 1.6s ease-out 3; }
+@keyframes chatBadgePulse { 0% { box-shadow: 0 0 0 0 rgba(193,92,78,0.5); } 70% { box-shadow: 0 0 0 7px rgba(193,92,78,0); } 100% { box-shadow: 0 0 0 0 rgba(193,92,78,0); } }
 .moreback { padding: 0 18px 11px; }
 .subnav { display: flex; gap: 7px; overflow-x: auto; padding: 0 18px 11px; }
 

@@ -63,12 +63,20 @@ function syncChatScrollLock(isOpen) {
   else if (!overlay && chatScrollLocked) { unlockScroll(); chatScrollLocked = false; }
 }
 
+/* Badge the sidebar "Assistant" button when a reply lands while the panel is
+   closed, so you know to reopen it. Cleared whenever the panel is opened. */
+function setChatUnread(on) {
+  document.getElementById('open-chat-btn')?.classList.toggle('has-unread', on);
+}
+
 export function toggleChat(forceOpen) {
   const panel = document.getElementById('chat-panel');
   if (forceOpen === true) panel.classList.remove('closed');
   else if (forceOpen === false) panel.classList.add('closed');
   else panel.classList.toggle('closed');
-  syncChatScrollLock(!panel.classList.contains('closed'));
+  const isOpen = !panel.classList.contains('closed');
+  if (isOpen) setChatUnread(false);
+  syncChatScrollLock(isOpen);
 
   if (!panel.classList.contains('closed') && document.getElementById('chat-messages').children.length === 0) {
     if (!aiAvailable) {
@@ -292,6 +300,8 @@ export async function sendChat(userText) {
     addChatMessage('bot', `Couldn't reach the assistant. ${e.message}`);
   } finally {
     if (sendBtn) sendBtn.disabled = false;
+    // Panel closed while the assistant was thinking → flag the reply is waiting.
+    if (document.getElementById('chat-panel')?.classList.contains('closed')) setChatUnread(true);
   }
 }
 
