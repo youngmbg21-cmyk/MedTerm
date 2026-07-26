@@ -1,50 +1,68 @@
-# MedTerminal — Research Workspace
+# HaTi Research
 
-An internal tool for a 2-person team running a six-phase qualitative research programme.
-The programme decides whether a medical-tourism concierge for Kenyan families seeking
-treatment abroad (mainly the Kenya → India corridor) is worth building.
+A go-to-market research workspace for two people: **Young** and **Simon**.
 
-**This is not the patient-facing product.** It is the workspace used to decide whether to
-build that product.
+It exists to answer the five questions standing between HaTi — a contract lifecycle
+management platform for the Kenyan market — and its first paying customers. Those five
+questions are set out in [`RESEARCH_BRIEF.md`](RESEARCH_BRIEF.md), and every screen in the
+app exists to move one of them.
 
-## Run it
+## Start it
 
-Open `index.html` in any modern browser. That's it — no build step, no credentials.
+The app is plain HTML, CSS and JavaScript. There is nothing to install and nothing to
+build. It does need to be *served* over HTTP rather than opened from the file system,
+because browsers refuse to load JavaScript modules from a `file://` address.
 
-The app starts in **local demo mode**: data is seeded with realistic sample research,
-persists in `localStorage`, and every screen is populated and editable. Use
-**Settings → Reset demo data** to restore the seed.
+From this folder:
 
-## What's inside
+```bash
+python3 -m http.server 8000
+```
 
-- **Overview** — command center: phase rail, KPIs, current-phase exit criteria,
-  saturation, and a needs-attention panel (untagged interviews, stalled outreach).
-- **Fieldwork** (phases 1–2) — Outreach pipeline, Interviews (master–detail with linked
-  quotes and the same-day-tag hard rule), Theme matrix, Saturation.
-- **Sense-making** (phase 3) — Theme analysis, Segment cards, Top-3 pains, append-only
-  Kill list, State of the field.
-- **Economics** (phase 4) — Unit economics with break-point checks, Alternate models,
-  Field checks.
-- **Decision** (phase 5) — Verdict-first decision memo with co-sign, MVP scope,
-  Confirmatory tests.
-- **Reference** — Interview scripts (versioned), outreach templates, operating manual.
-- **Reports** — print-ready weekly status / phase exit / investor briefing, generated
-  from live data.
+Then open **http://localhost:8000** in Chrome, Safari or Edge. It works on a phone browser
+at 375px wide just as well as on a laptop.
 
-The sidebar is gated by the current phase: future phases are dimmed but still openable.
+## What is in it
 
-## Stack
+| Screen | The one question it answers |
+|---|---|
+| **Overview** | What should we do today? |
+| **The five questions** | What do we still not know, and what would answer it? |
+| **Competitors** | Who else could they buy instead of us — including nobody? |
+| **Market & rules** | What is true about Kenya, and who says so? |
+| **Prospects** | Who are we talking to, and who is going cold? |
+| **Conversations** | What did people actually tell us? |
+| **Pricing** | What will they actually pay, and for what shape? |
+| **Insights** | What have we learned, and what does it change? |
 
-Vanilla JS ES modules, Tailwind via CDN, one `css/theme.css`. No framework, no build
-step, no npm. Data access goes through `js/data.js`, which has two adapters selected by
-`DATA_MODE` in `js/config.js`:
+The **assistant** (the button at the bottom of the sidebar) reads the whole workspace and
+argues with you about it. It can propose things to write down, but nothing is ever saved
+without you tapping Confirm.
 
-- `local` (default) — localStorage, seeded, zero credentials.
-- `api` — Cloudflare Worker (`worker.js`) → Supabase (`sql/schema.sql`) → Claude, with
-  magic-link login.
+## Two rules the app enforces
 
-## Going live
+These are what make the workspace worth trusting, and the app will not stop nagging about
+either one:
 
-See `HANDOFF.md` for the full checklist. Short version: stand up Supabase with
-`sql/schema.sql`, deploy `worker.js` with its secrets, set `WORKER_URL` and
-`DATA_MODE = 'api'` in `js/config.js`.
+1. **A conversation nobody wrote a finding from is a lost conversation.** Log a
+   conversation and it is flagged in red until at least one finding is attached to it.
+2. **A fact with no source link is a rumour.** The Market & rules form refuses to save a
+   fact without a link to where it came from.
+
+## Where the data lives
+
+Out of the box, everything is saved **in the browser you typed it into**. That means
+Young's laptop and Simon's phone would each hold a separate copy. It works immediately,
+with no setup, which is why it is the default.
+
+To put both of you on one shared workspace, follow [`HANDOFF.md`](HANDOFF.md). It is three
+steps and the app tells you the same thing on the Settings screen.
+
+Whichever mode you are in, **Settings → Download a backup** gives you one file containing
+everything. Do that before anything risky, and keep a copy somewhere that is not your
+laptop.
+
+## For whoever works on the code next
+
+[`CLAUDE.md`](CLAUDE.md) is the contract: what this project is, the rules that govern every
+change, and the design system. Read it before touching anything.

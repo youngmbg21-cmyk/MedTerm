@@ -81,6 +81,7 @@ const SHELL = `
     </div>
   </div>
 </aside>
+<button id="chat-fab" class="chat-fab" aria-label="Open the research assistant">💬</button>
 <div id="modal-root"></div>`;
 
 async function boot() {

@@ -1,125 +1,143 @@
-# CLAUDE.md — MedTerminal Research Workspace
+# CLAUDE.md — HaTi Research
 
 Read this first. It defines what this project is and the rules that govern every change.
 
 ## What this is
 
-A **research workspace** used by a 2-person team (a project lead on desktop, a field
-coordinator on a 375px phone) to run a six-phase qualitative research programme. The
-programme decides whether a patient-side medical-tourism service (Kenya → India) is
-viable enough to build. **This app is not that product** — it is the tool used to decide
-whether to build it.
+A **go-to-market research workspace** used by two co-founders — Young and Simon, neither
+of them a developer — to answer the five business questions standing between **HaTi** and
+its first paying customers.
 
-Read `docs/project-overview.md` for research intent and `docs/features.md` for screen
-detail. `sql/schema.sql` and `worker.js` define the real data model.
+HaTi (repo: `youngmbg21-cmyk/mkataba-clm`) is the product: a contract lifecycle management
+platform for the Kenyan market, at working-MVP status, never sold to anyone, with no
+billing. **This app is not that product** — it is the tool used to decide how to sell it.
+
+Read `RESEARCH_BRIEF.md` for what HaTi is, who might buy it, what it could charge, and the
+five questions. That brief is the source of everything in here. `sql/schema.sql` and
+`supabase/functions/claude-proxy/index.ts` define the real data model.
 
 ## Architecture in one paragraph
 
-`index.html` loads vanilla ES modules from `js/`. All configuration (data mode, AI mode,
-current phase, segments + targets, themes, team display names) lives in `js/config.js`.
-All data access goes through `js/data.js` — one interface (`list/create/update/remove`),
-two adapters: `local` (localStorage, seeded from `js/seed.js`, the default) and `api`
-(Cloudflare Worker `worker.js` → Supabase, Bearer JWT from Supabase magic-link auth in
-`js/auth.js`). Records are flat snake_case matching `sql/schema.sql`. `js/app.js` holds
-state, the hash router, the phase-gated nav, and the shared component kit. One screen per
-file in `js/screens/`. AI availability is governed by `AI_MODE` in `js/config.js`, not by
-the data mode: `'worker'` enables the assistant, assessments, link proposals, and every
-AI-first drafting surface (memo sections, MVP scope, state of the field, report
-narratives — all through the shared `js/ai-draft.js` control row and the worker's one
-`/api/draft-section` seam; drafts always land in an edit modal or preview, never
-auto-saved) in either data mode (with local data, the client sends the worker the
-workspace slices it needs in the request body); `'off'` (default) shows calm disabled
-states. The
-decision spine — hypotheses, kill criteria, evidence links, versioned AI assessments —
-lives in ordinary tables and flows through `js/evidence.js` helpers; AI-proposed writes
-go through the Confirm/Skip pattern in `js/actions.js`.
+`index.html` loads vanilla ES modules from `js/`, starting at `js/boot.js`. One app for
+laptop and phone — the sidebar becomes a drawer below 900px, and nothing branches on
+screen size. All configuration (data mode, AI mode, pipeline stages, segments, categories,
+team names) lives in `js/config.js`. All data access goes through `js/data.js` — one
+interface (`list/create/update/remove`), two adapters: `local` (localStorage, seeded from
+`js/seed.js`, **the default**) and `api` (Supabase Edge Function `claude-proxy` → Supabase,
+Bearer JWT from Supabase magic-link auth in `js/auth.js`). Records are flat snake_case
+matching `sql/schema.sql`. `js/app.js` holds state, the hash router, the nav, and the
+shared component kit. One screen per file in `js/screens/`. AI availability is governed by
+`AI_MODE` in `js/config.js`, not by the data mode: `'worker'` (the current setting) enables
+the assistant and the AI-drafted writing surfaces through the shared `js/ai-draft.js`
+control row and the one `/api/draft-section` seam in the Edge Function; drafts always land
+in an edit box, never auto-saved. With local data the client sends the backend the
+workspace slices it needs in the request body. The decision spine — the five questions,
+insights linked to them, and the source each insight came from — lives in ordinary tables
+and flows through `js/evidence.js`; AI-proposed writes go through the Confirm/Skip pattern
+in `js/actions.js`.
 
 ## Core rules — never violate
 
 1. **No frameworks, no build step, no npm for the app.** Vanilla JS ES modules; Tailwind
-   via CDN; one `css/theme.css`. Opens directly in a browser.
-2. **Screens never call `fetch`, `localStorage`, or IndexedDB directly.** Everything —
-   records AND file blobs (`putFile/getFile`) — goes through `js/data.js`.
-3. **One canonical record shape**: flat snake_case (`interview_id`, `tagged_same_day`,
-   `theme_tag`, `first_contact`). No `.fields` wrapper, ever.
-4. **Config has one home.** Segments, themes, current phase, stall threshold, and team
-   names come from `js/config.js`. Never redefine them in a screen. Never hardcode a
-   person's name — use `getTeam()/interviewerOptions()/ownerOptions()`.
+   via CDN; one `css/theme.css`. Served over HTTP, opens in a browser.
+2. **Screens never call `fetch` or `localStorage` directly.** Everything goes through
+   `js/data.js`.
+3. **One canonical record shape**: flat snake_case (`question_id`, `source_kind`,
+   `next_step_date`, `wtp_signal`). No `.fields` wrapper, ever.
+4. **Config has one home.** Pipeline stages, segments, categories, and team names come
+   from `js/config.js`. Never redefine them in a screen. Never hardcode a person's name —
+   use `getTeam()/teamOptions()/ownerOptions()`.
 5. **Never render user-supplied text via `innerHTML`.** Use the `h()` helper /
    `textContent`. `innerHTML` is allowed only for clearing (`= ''`).
-6. **Respect the same-day-tag rule.** The red warnings for untagged interviews are the
-   app's most important data-quality mechanism. Never weaken them.
-   The app is the team's **sole repository**: interview field notes live in
-   `notes_markdown`, files live in Documents. Never add features that push content into
-   external docs the assistant cannot search.
-7. **Keep the aesthetic**: warm/editorial, sage + clay palette, Fraunces for headings and
-   quotes, Inter for UI. Semantic colours: sage=done, honey=attention, rose=breach,
-   info-blue=informational, plum=theme tags. Use the existing component classes
-   (`.card`, `.chip`, `.banner`, `.quote-block`, `.bar-wrap`, `.btn`) before inventing new ones.
-8. **Mobile-first.** Every screen must be fully usable at 375px. Test both 375px and
+6. **Respect the two data-quality rules.** They are this workspace's most important
+   mechanism and must never be weakened:
+   - **A conversation nobody wrote a finding from is a lost conversation.**
+     `conversationUnmined()` in `js/app.js` flags it in red, on the Conversations screen
+     and on the Overview, and keeps flagging it.
+   - **A fact with no source link is a rumour.** The Market & rules form refuses to save
+     one; `factNeedsSource()` flags any that got in another way; `source_url` is `NOT NULL`
+     in the schema.
+   This app is the team's sole repository for the research. Never add a feature that pushes
+   content into an external document the assistant cannot read.
+7. **Never seed invented evidence.** `js/seed.js` may contain reference material (real
+   competitors, real regulations with real links) and our own ideas (pricing models,
+   target companies) — clearly labelled as unverified. It must never contain a fabricated
+   conversation, quote, insight or pricing reaction. The assistant would cite them, and a
+   research tool that invents findings is worse than an empty one.
+8. **Keep the aesthetic**: HaTi's own family — Space Grotesk headings, Inter interface,
+   deep green with a gold accent. Semantic colours: green=confirmed/supports,
+   gold=attention/leaning, rose=challenges/risk, info=neutral, violet=tags,
+   bronze=editorial accent. Use the existing component classes (`.card`, `.chip`,
+   `.banner`, `.inset-block`, `.quote-block`, `.bar-wrap`, `.btn`) before inventing new ones.
+9. **Mobile-first.** Every screen must be fully usable at 375px. Test both 375px and
    1280px before committing.
-9. **Every screen answers one question**, shown as its subheader (the fourth argument to
-   `registerRoute`). List screens lead with the exception, not the totals.
-10. **No API keys in the frontend.** The Worker (or Supabase Edge Function) holds all
-    secrets in `api` mode.
-11. **Hypotheses, kill criteria, evidence links, and AI assessments are first-class
-    records.** No screen or prompt may hardcode them — the Worker injects the live
-    hypothesis board into every prompt from the `hypotheses` table (or the client's
-    copy in local data mode). Assessments are append-only: never updated, never
-    deleted; the sequence over time is itself evidence. The AI argues; it never
-    decides — every AI-originated write goes through human confirmation, a diverging
-    human verdict requires a written override rationale, and no numeric confidence
-    scores appear anywhere.
+10. **Every screen answers one question**, shown as its subheader (the fourth argument to
+    `registerRoute`). List screens lead with the exception, not the totals.
+11. **No API keys in the frontend.** The Edge Function holds the Claude key, read from the
+    `settings` table that `admin.html` writes. **Do not move, rename or restructure how
+    that key is loaded.**
+12. **The five questions, insights, and their links are first-class records.** No screen or
+    prompt may hardcode them — the Edge Function reads the live question board from the
+    `questions` table (or the client's copy in local data mode). The AI argues; it never
+    decides — every AI-originated write goes through human confirmation, and no numeric
+    confidence scores appear anywhere.
+13. **Write for two non-developers.** Every message, empty state and error in the app is
+    read by someone who does not code. Plain English, no jargon, and say what to do next.
 
 ## Design system — how the app must look
 
-All visual decisions live in `css/theme.css` as documented design tokens; screens
-consume tokens and component classes, never restyle ad hoc. The full contract is the
-comment block at the top of `css/theme.css`; the load-bearing rules:
+All visual decisions live in `css/theme.css` as documented design tokens; screens consume
+tokens and component classes, never restyle ad hoc. The full contract is the comment block
+at the top of `css/theme.css`; the load-bearing rules:
 
-- **Type scale** (two weights per family — Inter 400/500, Fraunces 400/600 + italic):
+- **Type scale** (two weights per family — Inter 400/500, Space Grotesk 500/700):
   display 28/34 · page title 22/28 · card title 17/24 · body 14/22 · secondary 13/20 ·
   micro-label 11/16 uppercase. Numerals always tabular (`.num`, automatic in `table.data`).
+  `.serif` is the display-face class — a legacy name meaning "set this in the heading face".
 - **Spacing**: 4px base scale (4/8/12/16/24/32/48). Card padding is one value app-wide
   (`--card-pad`: 24px desktop / 16px mobile, applied via `.card-pad`).
 - **Color roles, never raw hex at point of use**: `--ink/-soft/-mute`, `--line/-soft`,
-  `--surface-page/-card/-inset`, and tone trios (bg/border/text) for sage, honey, rose,
-  info, plum, clay. Every tone's text color clears WCAG AA (≥4.5:1) on its own tint —
-  keep it that way; `js/charts.js` PALETTE mirrors these by hand. Use the utilities
-  `.t-mute .t-soft .t-sage .t-honey .t-rose .t-info .t-clay .t-plum .b-line .b-soft`
-  instead of inline `style=` — inline styles are for dynamic values only.
+  `--surface-page/-card/-inset`, and tone trios (bg/border/text) for green, gold, rose,
+  info, violet, bronze. Every tone's text colour clears WCAG AA (≥4.5:1) on its own tint —
+  keep it that way. Use the utilities `.t-mute .t-soft .t-green .t-gold .t-rose .t-info
+  .t-violet .t-bronze .b-line .b-soft` instead of inline `style=` — inline styles are for
+  dynamic values only.
 - **Elevation**: two levels only — flat cards (hairline border, no shadow) and floating
   layers (modal/drawer/chat, `--shadow-float`). **Radii**: `--r-ctl` 10px controls,
-  `--r-card` 14px cards (chips/pills are round by identity).
+  `--r-card` 14px cards (chips are round by identity).
 - **Motion**: 150ms ease-out on hover/focus/press and modal/menu enter only;
   `prefers-reduced-motion` honored globally.
 - **One primary action per screen**, placed in the app header via `setPageActions()`;
-  everything else is `.btn-line`/`.btn-ghost` in a quiet tools row. Buttons/inputs have
+  everything else is `.btn-line`/`.btn-ghost` in a quiet tools row. Buttons and inputs have
   40px hit targets and `:focus-visible` rings.
 - **States are designed**: `emptyState(title, sub, action?)`, `loadingState()` skeleton,
-  banners for errors, and the calm-disabled pattern for AI-off (visible + muted +
-  a tap explains — `aria-disabled`, never hidden, never a dead click).
+  banners for errors, and the calm-disabled pattern for AI-off (visible + muted + a tap
+  explains — `aria-disabled`, never hidden, never a dead click).
 - **The shell never depends on the Tailwind CDN.** Sidebar/drawer/header layout and
-  stacking live in owned classes in theme.css — utility classes are for in-screen
-  layout only. The mobile drawer must stay above the overlay (z 45 > 35).
+  stacking live in owned classes in theme.css — utility classes are for in-screen layout
+  only. Any grid a screen depends on carries `display:grid` in its own inline style so it
+  survives the CDN being slow or blocked.
 
 ## File map
 
 | Path | Purpose |
 |------|---------|
-| `index.html` | Shell: sidebar, header, chat panel, boot script |
+| `index.html` | Page shell: fonts, one import of `js/boot.js` |
+| `js/boot.js` | Builds the app shell, loads screens, starts the router |
 | `css/theme.css` | The entire design system |
-| `js/config.js` | All configuration — single source of truth |
-| `js/data.js` | Data interface + local/api adapters |
-| `js/seed.js` | Demo seed data (dates relative to today) |
-| `js/app.js` | State, router, phase-gated nav, component kit |
-| `js/auth.js` | Magic-link login (api mode / AI worker mode, lazy-loaded) |
+| `js/config.js` | All configuration — single source of truth. Holds the Supabase credentials block; do not restructure it |
+| `js/data.js` | Data interface + local/api adapters + the AI request functions |
+| `js/seed.js` | The starting workspace — reference material only, never invented evidence |
+| `js/app.js` | State, router, nav, component kit, the two data-quality rules |
+| `js/auth.js` | Magic-link login (lazy-loaded) |
 | `js/chat.js` | Assistant panel |
 | `js/actions.js` | Shared Confirm/Skip pattern for AI-proposed writes |
-| `js/evidence.js` | Hypothesis board, evidence links, assessments, link modal |
+| `js/evidence.js` | Insights: the link between a finding and a question |
+| `js/ai-draft.js` | The one AI-drafts-you-edit control row |
 | `js/export.js` | CSV exports |
-| `js/screens/*.js` | One screen per file (incl. `decision-brief.js`, `documents.js`) |
-| `worker.js` | Cloudflare Worker backend (api mode + all AI endpoints) |
-| `sql/schema.sql` | Supabase schema + RLS |
-| `HANDOFF.md` | How to go live |
-| `DECISIONS.md` | Judgment calls made during the rebuild |
+| `js/screens/*.js` | One screen per file |
+| `admin.html` | Where the Claude API key is set. Reached by five taps on the wordmark |
+| `supabase/functions/claude-proxy/index.ts` | The backend: AI endpoints + shared-data CRUD |
+| `sql/schema.sql` | Supabase schema + RLS, for when the workspace goes shared |
+| `RESEARCH_BRIEF.md` | What HaTi is and the five questions. The source of everything here |
+| `HANDOFF.md` | How to run it, and how to move from local to shared data |

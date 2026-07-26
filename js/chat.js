@@ -21,6 +21,7 @@ const QUICK_PROMPTS = [
 
 export function initChat() {
   document.getElementById('open-chat-btn').addEventListener('click', () => toggleChat());
+  document.getElementById('chat-fab')?.addEventListener('click', () => toggleChat(true));
   document.getElementById('close-chat-btn').addEventListener('click', () => toggleChat(false));
   document.getElementById('clear-chat-btn').addEventListener('click', clearChat);
   document.getElementById('send-chat-btn').addEventListener('click', () => sendChat());
@@ -67,6 +68,7 @@ function syncChatScrollLock(isOpen) {
    closed, so you know to reopen it. Cleared whenever the panel is opened. */
 function setChatUnread(on) {
   document.getElementById('open-chat-btn')?.classList.toggle('has-unread', on);
+  document.getElementById('chat-fab')?.classList.toggle('has-unread', on);
 }
 
 export function toggleChat(forceOpen) {

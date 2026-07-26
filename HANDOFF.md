@@ -1,176 +1,125 @@
-# HANDOFF.md — for Young
+# HANDOFF — running it, and going shared
 
-Written 2026-07-04, at the end of the autonomous rebuild. Everything below is live on
-this branch and verified in a real browser at 1280px and 375px.
+Written for two people who do not write code. Nothing here needs a developer.
 
-## What you can do tomorrow, with zero setup
+---
 
-Open `index.html` in a browser. The workspace runs in **local demo mode**: no accounts,
-no keys, no server. It is seeded with realistic sample research (20 outreach contacts,
-12 interviews, 18 tagged quotes, all six phases' deliverables, 3 scripts, 2 killed
-hypotheses, 4 field checks) so every screen is populated and explorable.
+## 1 · Running it, every day
 
-Everything works: add/edit outreach contacts, log interviews (IDs auto-assigned),
-tag quotes into the matrix, watch saturation fill, cycle exit-criteria statuses from the
-Overview, kill hypotheses, run the unit-economics model, draft the decision memo, and
-print a weekly status report. Data persists in your browser across reloads.
+From the project folder:
 
-Two things to know:
+```bash
+python3 -m http.server 8000
+```
 
-- **Settings** (sidebar footer): set the display names for the project lead and field
-  coordinator (defaults: Young, Simon). Names update everywhere instantly and are never
-  hardcoded. Data management (export, import, resets) also lives here — see below.
-- **The assistant ships off by default** (`AI_MODE = 'off'` in `js/config.js`) — it
-  needs the Claude API key, which lives server-side. Everything else works without it,
-  including the Decision Brief (it renders the seeded assessments) and all manual
-  evidence linking. See "Turning on the AI" below — the AI no longer requires the
-  live data backend.
+Open **http://localhost:8000**.
 
-## What was built
+That is the whole thing. Leave the command running in the terminal window while you use the
+app; close the window when you are done.
 
-See `PROGRESS.md` for the full list and `DECISIONS.md` for every judgment call. The
-short version:
+**Why not just double-click `index.html`?** Browsers block the kind of JavaScript this app
+uses when it is opened straight from a folder. Serving it on a local address is a
+one-command workaround, and it is why the command above exists.
 
-- **One data layer** (`js/data.js`): screens are storage-agnostic. Local mode and the
-  real backend use the same flat snake_case records as `sql/schema.sql`, so flipping to
-  the backend changes no screen code.
-- **Pipeline navigation**: the sidebar mirrors the six phases. The current phase's group
-  is expanded; future phases are dimmed with "🔒 phase N" but still openable. Change
-  `CURRENT_PHASE` in `js/config.js` to advance — everything follows.
-- **Overview command center**: phase rail with % of exit criteria met, KPI strip,
-  this phase's exit criteria (tap to cycle status), saturation, and a needs-attention
-  panel that leads with the same-day-tag breaches, then stalled outreach.
-- **Interviews are master–detail**: pick an interview, see its details, its tag status,
-  and every matrix quote linked to it. Untagged-past-24h interviews are red everywhere.
-- **Old defects fixed**: the Airtable-vs-Supabase data-shape mismatch that blanked
-  screens, the `/api/Outreach` casing 404s, missing auth headers, three competing
-  segment lists, XSS via innerHTML, and hardcoded names.
+---
 
-## To go live (multi-user sync + AI assistant)
+## 2 · Where your data lives right now
 
-About 30–45 minutes:
+Everything is saved **inside the browser you typed it into** — technically, in something
+called local storage. That has three consequences worth knowing:
 
-1. **Supabase**: create a project → SQL editor → run `sql/schema.sql`. Then insert you
-   and the field coordinator into `team_members` with `status = 'active'` and roles
-   `lead` / `partner` (use your login emails). Also create a **private Storage bucket
-   named `field-documents`** (Dashboard → Storage → New bucket, public OFF) — uploaded
-   field documents live there.
-2. **Worker**: `wrangler deploy worker.js` with secrets `SUPABASE_URL`,
-   `SUPABASE_SERVICE_KEY`, `SUPABASE_ANON_KEY`, `CLAUDE_API_KEY`, `ALLOWED_ORIGIN`
-   (`wrangler.toml` is already in the repo).
-3. **Frontend**: in `js/supabase.js` set your Supabase URL + anon key; in `js/config.js`
-   set `WORKER_URL`, `DATA_MODE = 'api'`, and `AI_MODE = 'worker'`.
-4. Open the app → magic-link login appears → sign in. Done: shared data, and the
-   assistant panel comes alive (it reads live project state and can propose actions you
-   confirm).
+- Young's laptop and Simon's phone each keep their **own separate copy**. Nothing syncs.
+- If you clear your browsing data, the workspace goes with it.
+- Nobody else can see it, which is fine while you are getting started.
 
-Note: local demo data does not migrate automatically. The demo is a sandbox; you start
-the real programme clean (or ask Claude to write a one-off migration from the
-localStorage blob if you've entered real data locally).
+**So: download a backup regularly.** Settings → *Download a backup* gives you one file with
+everything in it — questions, competitors, prospects, conversations, pricing, facts and
+findings. Email it to yourself. It takes ten seconds and it is the only safety net local
+storage has.
 
-## Turning on the AI — with or without the live backend
+---
 
-`AI_MODE` in `js/config.js` decouples the assistant from the data mode:
+## 3 · Going shared (both of you, one workspace)
 
-- `'off'` (default) — no AI anywhere. Calm disabled states; everything else works.
-- `'worker'` — the assistant, Decision Brief assessments ("Regenerate brief"),
-  evidence-link proposals after saves, phase-exit reviews, and every AI-first
-  drafting surface (decision-memo sections, MVP scope, state of the field,
-  assistant-drafted report narratives) all come alive — **in either data mode**.
-  Every draft lands in an edit modal or preview for human review; nothing an
-  AI writes is saved without a human tap.
+Do this when you start having real conversations and it matters that you both see the same
+thing. It is three steps and takes about twenty minutes.
 
-**The intended production setup is local-first data + live AI**: keep
-`DATA_MODE = 'local'` and set `AI_MODE = 'worker'`. Records stay in the browser;
-each AI request carries the relevant workspace slices in the request body; new
-assessments and confirmed links are persisted back through `js/data.js` locally.
+### Step 1 — Create the tables in Supabase
 
-Exact steps (~20 minutes if the Worker isn't deployed yet):
+1. Go to **supabase.com**, sign in, open your project.
+2. Left sidebar → **SQL Editor** → **New query**.
+3. Open the file `sql/schema.sql` from this project, copy all of it, paste it in, and press
+   **Run**.
 
-1. **Supabase (identity only in this setup)**: create a project, run
-   `sql/schema.sql`, insert the two of you into `team_members` (`status='active'`,
-   roles `lead`/`partner`). The Worker authenticates every AI call with a
-   Supabase magic-link JWT — that's why this is needed even with local data. No
-   research data is stored server-side in this mode.
-2. **Worker**: `wrangler deploy worker.js` with secrets `SUPABASE_URL`,
-   `SUPABASE_SERVICE_KEY`, `SUPABASE_ANON_KEY`, `CLAUDE_API_KEY`, `ALLOWED_ORIGIN`.
-3. **Frontend**: in `js/supabase.js` set the Supabase URL + anon key; in
-   `js/config.js` set `WORKER_URL` and `AI_MODE = 'worker'`.
-4. Open the app → magic-link sign-in appears once → the assistant panel, the
-   Decision Brief's Regenerate button, and the memo's Draft-from-evidence buttons
-   are live against your local data.
+It is safe to run twice. It does not delete anything, and it deliberately does not touch
+the `settings` table where your Claude API key lives.
 
-Going fully live later (team sync) is unchanged: also set `DATA_MODE = 'api'` —
-the AI endpoints then read Supabase directly instead of the request body.
+### Step 2 — Add yourselves to the team
 
-One caveat of local-first AI: binary documents (images, PDFs without extracted
-text) can't be read by the assistant, since the files live only in the browser's
-IndexedDB. Text, markdown, and CSV uploads ride along fully.
+At the very bottom of `sql/schema.sql` there are two lines that are commented out (they
+start with `--`). Copy those two lines into a new SQL query, remove the `--` from the front
+of each line, replace the two example email addresses with your real ones, and Run.
 
-## The sole-repository upgrade (notes + documents + assistant access)
+This matters: signing in is not enough on its own. The backend checks that your email is on
+that list before it will show you anything. That is what keeps the workspace private.
 
-Added after the initial rebuild, working in both modes:
+### Step 3 — Redeploy the assistant, then flip the switch
 
-- **Field notes live inside each interview** — a full-debrief text area on the log form
-  and in the interview detail. Four seeded interviews show the expected depth.
-- **Documents screen** (sidebar, above Reports): upload PDFs, text/markdown, CSVs and
-  images (10 MB each). Files are stored in the browser (IndexedDB) in demo mode and in
-  the `field-documents` Supabase bucket when live. Text contents are fully searchable in
-  the screen's search box. The upload form blocks Word files (save as PDF) and reminds
-  the team never to upload consent forms or identity documents.
-- **The assistant reaches everything** (live mode): a `search_notes` tool covers every
-  notes field and document contents across the whole database; `read_document` returns a
-  document's full text — PDFs are transcribed by Claude on first read and cached, images
-  are shown to the model directly; sharing works via 60-minute signed links.
-- **Backups**: Settings → "Export everything" downloads one JSON with every record,
-  including full notes and document text. A storage meter shows demo-mode headroom.
-  Do the export weekly until the backend is live.
+1. **Redeploy the function.** The file
+   `supabase/functions/claude-proxy/index.ts` has been rewritten so the assistant knows
+   about HaTi rather than the old project. Deploy it the same way you deployed it the first
+   time. *(Until you do this, the assistant still works — it just talks about the wrong
+   business, and it cannot read the new tables.)*
+2. **Flip the switch.** Open `js/config.js` in any text editor. The thirteenth line reads:
 
-## Data portability, safer resets, and the executive briefing report
+   ```js
+   export const DATA_MODE = 'local';
+   ```
 
-Added after the sole-repository upgrade, in Settings → Data management:
+   Change `'local'` to `'api'`, save, and reload the app.
 
-- **Export everything** now stamps a `schema_version` and embeds any uploaded binary
-  files (images, PDFs) as base64, so the single JSON file is a complete, restorable
-  backup — not just a record dump.
-- **Import a backup**: choose a previously exported file; it's checked against the
-  app and schema version (a mismatch is refused with a specific reason, not a silent
-  failure), then a preview shows exactly how many records of each type will come in.
-  Importing REPLACES all current data — nothing is merged — and always downloads a
-  safety export of what you had first. Type IMPORT to confirm. **Local mode only** —
-  on the live backend this would silently overwrite the whole team's shared data, so
-  it's deliberately not available there.
-- **Start fresh for real fieldwork**: a second, more specific reset. Wipes every
-  outreach contact, interview, matrix quote, document, report, kill-list entry, field
-  check, economics model, and decision memo — but keeps the three stock interview
-  scripts and resets the six phases' deliverables checklist to "Not started". This is
-  the button to use the day real fieldwork begins, once you're done exploring the
-  demo. Type RESET to confirm; a safety export downloads first. Local mode only.
-- **Reset to demo data** still works as before, now behind the same typed
-  confirmation and safety export.
-- **A fourth report type, "Executive briefing"**, in Reports: a verdict-first
-  executive summary, methodology with a segment-coverage chart, core findings citing
-  interview IDs (thin-evidence themes flagged explicitly), data-driven strategic
-  implications, a 2×2 risk-assessment matrix built from the unit-economics
-  break-points and unverified field checks, and next steps with real owners (from
-  Settings' team names) and concrete target dates. The three existing reports each
-  gained one small chart too (tagging-rate meter, coverage bars, WTP-by-segment
-  bars). All charts are dependency-free inline SVG — no charting library — and print
-  identically to how they look on screen.
+You will now be asked to sign in with your email. Supabase sends you a link; click it and
+you are in. From then on, whatever one of you types, the other sees.
 
-## Alternative backend (optional)
+**Before you flip the switch**, download a backup — the shared workspace starts empty, and
+you can restore your local work into it from Settings → *Restore from a backup*.
 
-An earlier iteration built a Supabase-only path: an Edge Function
-(`supabase/functions/claude-proxy/`) that reads the Claude key from a `settings` table,
-plus a hidden `admin.html` page for managing that key (password gate + Supabase auth,
-schema in `supabase/schema.sql`). It is not wired into the app. If you'd rather run
-without Cloudflare entirely, that's the starting point — but the wired, documented path
-is the Worker (step list above).
+---
 
-## Where to look
+## 4 · The Claude API key
 
-- `README.md` — what this is, how to run it
-- `CLAUDE.md` — rules for any future Claude Code session
-- `docs/tech-stack.md` — architecture in detail
-- `DECISIONS.md` — every judgment call and improvement, with reasoning
-- `PROGRESS.md` — milestone-by-milestone status + how it was verified
+This has not changed and should not be changed.
+
+The key lives in your Supabase database, in the `settings` table, and only the backend ever
+reads it. It is never in the app, never in the browser, never in this repository.
+
+To see or replace it: open the app, **tap the HaTi Research logo in the top-left corner
+five times quickly**. That opens the admin page, where you can check the key is active,
+replace it, or test the connection.
+
+If the assistant ever says the key is not configured, that page is where you fix it.
+
+---
+
+## 5 · If something goes wrong
+
+**The page is blank or looks unstyled.**
+The app loads its fonts and some layout helpers from the internet. On a bad connection it
+can look plain for a moment. Reload. If it stays broken, hold Shift and reload — that
+forces the browser to stop using an old cached copy.
+
+**"Not authorised" when using the assistant.**
+You are signed in, but your email is not on the team list in Supabase. See Step 2 above.
+
+**The assistant answers about medical tourism, patients, or interviews.**
+The Supabase function has not been redeployed yet. See Step 3, part 1.
+
+**You lost data.**
+Settings → *Restore from a backup*, and pick your most recent backup file. This is the
+reason to download one regularly.
+
+**You want to start over.**
+Settings, at the bottom, has two options. *Clear our research* keeps the questions,
+competitors, market facts and pricing ideas and deletes everything you have recorded.
+*Reset* puts the workspace back exactly as it arrived. Both ask you to type a word to
+confirm, and neither can be undone — download a backup first.
