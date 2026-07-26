@@ -1,340 +1,176 @@
-/* Settings — one question: "Who is on the team, and how is the workspace configured?" */
-import { registerRoute, renderCurrentRoute, h, chip, loadAllData } from '../app.js';
-import { getTeam, setTeam, CURRENT_PHASE, PHASES, DATA_MODE, AI_MODE, SCHEMA_VERSION } from '../config.js';
-import { data, isLocalMode, aiAvailable, blobToBase64 } from '../data.js';
+/* Settings — one question: "How is this workspace set up, and how do I back it up?" */
+import {
+  STATE, registerRoute, renderCurrentRoute, h, chip, sectionCard,
+  openModal, closeModal, formField, setPageActions, loadAllData,
+} from '../app.js';
+import {
+  DATA_MODE, AI_MODE, SCHEMA_VERSION, getTeam, setTeam, STAGES, CURRENT_STAGE,
+} from '../config.js';
+import { data, isLocalMode, aiAvailable, KNOWN_TABLES } from '../data.js';
 
 function renderSettings(page) {
+  setPageActions();
+
+  /* ---- Who we are ---- */
   const team = getTeam();
-  const wrap = h('div', { class: 'max-w-xl flex flex-col gap-4' });
-
-  /* Team names */
-  const teamCard = h('div', { class: 'card p-6' });
-  teamCard.appendChild(h('div', { class: 'micro mb-1 t-mute', text: 'Team' }));
-  teamCard.appendChild(h('div', { class: 'text-sm mb-4 t-soft', text: 'Display names used everywhere — interviewer and owner dropdowns, and any name shown in the UI. Changes apply immediately.' }));
-
-  const leadInput = h('input', { class: 'input', value: team.lead });
-  const fieldInput = h('input', { class: 'input', value: team.field });
-  const savedNote = h('span', { class: 'chip chip-sage', text: 'Saved', style: 'display:none;' });
-
-  function save() {
-    setTeam({ lead: leadInput.value.trim() || 'Lead', field: fieldInput.value.trim() || 'Field' });
-    savedNote.style.display = '';
-    setTimeout(() => { savedNote.style.display = 'none'; }, 1500);
-  }
-  leadInput.addEventListener('change', save);
-  fieldInput.addEventListener('change', save);
-
-  teamCard.appendChild(h('div', { class: 'mb-3' }, [
-    h('label', { class: 'label', text: 'Project lead (desktop, analysis & synthesis)' }), leadInput,
-  ]));
-  teamCard.appendChild(h('div', { class: 'mb-3' }, [
-    h('label', { class: 'label', text: 'Field coordinator (mobile, runs the interviews)' }), fieldInput,
-  ]));
-  teamCard.appendChild(savedNote);
-  wrap.appendChild(teamCard);
-
-  /* Phase */
-  const phase = PHASES.find(p => p.n === CURRENT_PHASE);
-  const phaseCard = h('div', { class: 'card p-6' }, [
-    h('div', { class: 'micro mb-1 t-mute', text: 'Current phase' }),
-    h('div', { class: 'serif text-lg', text: `Phase ${CURRENT_PHASE} — ${phase?.long || ''}` }),
-    h('div', { class: 'text-xs mt-2 t-mute', text: 'To advance the phase, edit CURRENT_PHASE in js/config.js. The nav unlocks the matching group automatically.' }),
+  const teamBody = h('div', { class: 'flex flex-col gap-3' }, [
+    nameRow('Lead', team.lead, v => setTeam({ lead: v })),
+    nameRow('Partner', team.partner, v => setTeam({ partner: v })),
+    h('div', { class: 'text-xs t-mute', text: 'These names fill every "who did this" dropdown in the app. Changing one here changes it everywhere; records already saved keep the old name.' }),
   ]);
-  wrap.appendChild(phaseCard);
+  page.appendChild(sectionCard('The two of you', 'Names used across the workspace', teamBody));
 
-  /* Data mode */
-  const modeCard = h('div', { class: 'card p-6' });
-  modeCard.appendChild(h('div', { class: 'micro mb-1 t-mute', text: 'Data' }));
-  modeCard.appendChild(h('div', { class: 'flex items-center gap-2 mb-3' }, [
-    h('span', { class: 'text-sm', text: 'Mode:' }),
-    chip(DATA_MODE === 'api' ? 'Live backend' : 'Local demo', DATA_MODE === 'api' ? 'sage' : 'info'),
-  ]));
-  modeCard.appendChild(h('div', { class: 'flex items-center gap-2 mb-3' }, [
-    h('span', { class: 'text-sm', text: 'Assistant:' }),
-    chip(aiAvailable ? `Connected via worker (AI_MODE '${AI_MODE}')` : 'Off', aiAvailable ? 'sage' : 'line'),
-  ]));
+  /* ---- How it is running ---- */
+  const stage = STAGES.find(s => s.n === CURRENT_STAGE) || STAGES[0];
+  const modeBody = h('div', { class: 'flex flex-col gap-3' }, [
+    row('Where the data lives', isLocalMode
+      ? 'This browser only'
+      : 'Shared through Supabase — both of you see the same workspace', isLocalMode ? 'gold' : 'green'),
+    row('Assistant', aiAvailable ? 'On — through your Supabase function' : 'Off', aiAvailable ? 'green' : 'line'),
+    row('Stage', `${stage.n} · ${stage.name}`, 'info'),
+    row('Backup format version', String(SCHEMA_VERSION), 'line'),
+    isLocalMode ? h('div', { class: 'inset-block' }, [
+      h('div', { class: 'micro t-bronze mb-1', text: 'To share this workspace between the two of you' }),
+      h('div', { class: 'text-sm', text: 'Right now everything is saved in whichever browser you typed it into — Young\'s laptop and Simon\'s phone would each have their own copy. To put you both on one shared workspace: run sql/schema.sql in Supabase, redeploy the claude-proxy function, then change one word in js/config.js from \'local\' to \'api\'. HANDOFF.md has the steps in order.' }),
+    ]) : null,
+  ].filter(Boolean));
+  page.appendChild(sectionCard('How this is running',
+    `Data mode: ${DATA_MODE} · AI mode: ${AI_MODE}`, modeBody));
 
+  /* ---- Backup ---- */
+  const backupBody = h('div', { class: 'flex flex-col gap-3' }, [
+    h('div', { class: 'text-sm t-soft', text: 'A backup is a single file with everything in it: questions, competitors, prospects, conversations, pricing, facts and findings. Download one before anything risky, and keep one somewhere that is not this laptop.' }),
+    h('div', { class: 'flex flex-wrap gap-2' }, [
+      h('button', { class: 'btn btn-primary', onclick: exportEverything }, '↓ Download a backup'),
+      h('button', { class: 'btn btn-line', onclick: importBackup }, '↑ Restore from a backup'),
+    ]),
+  ]);
+  page.appendChild(sectionCard('Backup and restore', 'One file, everything in it', backupBody));
+
+  /* ---- Storage meter (local mode) ---- */
+  const storageCard = sectionCard('Storage', 'How much room is left', h('div', { class: 'text-sm t-mute', text: 'Checking…' }));
+  page.appendChild(storageCard);
+  data.storageInfo().then(info => {
+    const body = storageCard.lastChild;
+    body.innerHTML = '';
+    if (info.recordsBytes == null) {
+      body.appendChild(h('div', { class: 'text-sm t-soft', text: 'Data is stored in Supabase, which has far more room than this app will ever need.' }));
+      return;
+    }
+    const kb = Math.round(info.recordsBytes / 1024);
+    const limitKb = Math.round((info.recordsLimit || 0) / 1024);
+    const pct = limitKb ? Math.min(100, (kb / limitKb) * 100) : 0;
+    body.appendChild(h('div', { class: 'text-sm', text: `${kb} KB of about ${limitKb} KB used by your records.` }));
+    const bar = h('div', { class: 'bar-wrap mt-2' }, [h('i')]);
+    bar.firstChild.style.width = `${pct}%`;
+    if (pct > 80) bar.firstChild.style.background = 'var(--rose)';
+    body.appendChild(bar);
+    if (pct > 80) body.appendChild(h('div', { class: 'text-sm t-rose mt-2', text: 'Getting full. Download a backup and move to the shared Supabase workspace.' }));
+  }).catch(() => {});
+
+  /* ---- Dangerous things, last and quiet ---- */
   if (isLocalMode) {
-    modeCard.appendChild(h('div', { class: 'text-sm mb-4 t-soft', text: 'Data lives in this browser and persists across reloads. The assistant works in this mode too — set AI_MODE = \'worker\' in js/config.js once the worker is deployed. For team sync, set DATA_MODE = \'api\' and add the backend secrets — see HANDOFF.md.' }));
-
-    /* Storage meter — the app is the sole repository, so show headroom */
-    const meter = h('div', { class: 'mb-4' });
-    data.storageInfo().then(info => {
-      if (info.recordsBytes != null) {
-        const pct = Math.min(100, Math.round((info.recordsBytes / info.recordsLimit) * 100));
-        meter.appendChild(h('div', { class: 'flex justify-between text-xs mb-1' }, [
-          h('span', { text: 'Records (notes, quotes, contacts)' }),
-          h('span', { class: 'num t-mute', text: `${(info.recordsBytes / 1024).toFixed(0)} KB of ~5 MB` }),
-        ]));
-        const fill = h('i');
-        fill.style.width = `${pct}%`;
-        if (pct >= 80) fill.style.background = 'var(--honey)';
-        meter.appendChild(h('div', { class: 'bar-wrap mb-2' }, [fill]));
-      }
-      if (info.filesBytes != null) {
-        meter.appendChild(h('div', { class: 'text-xs t-mute', text: `Browser storage in use (incl. uploaded files): ${(info.filesBytes / 1024 / 1024).toFixed(1)} MB${info.quota ? ` of ${(info.quota / 1024 / 1024 / 1024).toFixed(1)} GB available` : ''}` }));
-      }
-    }).catch(() => {});
-    modeCard.appendChild(meter);
-  } else {
-    modeCard.appendChild(h('div', { class: 'text-sm t-soft', text: 'Connected to the live backend. Data is shared across the team and backed up by Supabase.' }));
+    const dangerBody = h('div', { class: 'flex flex-col gap-3' }, [
+      h('div', { class: 'text-sm t-soft', text: 'Both of these throw away work. Download a backup first — neither can be undone.' }),
+      h('div', { class: 'flex flex-wrap gap-2' }, [
+        h('button', { class: 'btn btn-line', onclick: () => confirmWipe('startFresh') }, 'Clear our research, keep the reference material'),
+        h('button', { class: 'btn btn-line t-rose', onclick: () => confirmWipe('reset') }, 'Reset to the starting workspace'),
+      ]),
+      h('div', { class: 'text-xs t-mute', text: '"Clear our research" keeps the five questions, the competitor set, the market facts and the pricing ideas, and deletes every prospect, conversation, reaction and finding. "Reset" puts everything back exactly as it arrived.' }),
+    ]);
+    page.appendChild(sectionCard('Starting over', 'Neither of these can be undone', dangerBody));
   }
-  wrap.appendChild(modeCard);
-
-  /* Data management — export, import, resets */
-  wrap.appendChild(buildDataManagementCard());
-
-  page.appendChild(wrap);
 }
 
-function buildDataManagementCard() {
-  const card = h('div', { class: 'card p-6' });
-  card.appendChild(h('div', { class: 'micro mb-1 t-mute', text: 'Data management' }));
-  card.appendChild(h('div', { class: 'text-sm mb-4 t-soft', text: 'Back up, restore, or reset the workspace. Every export is a single JSON file — every record, full field notes, document text, and uploaded files.' }));
-
-  card.appendChild(h('div', { class: 'flex flex-wrap gap-2 mb-2' }, [
-    h('button', { class: 'btn btn-line', onclick: () => exportEverything() }, 'Export everything (backup)'),
-  ]));
-  card.appendChild(h('div', { class: 'text-xs mb-5 t-mute', text: 'Includes binary files (PDFs, images) embedded as base64, so the download is fully self-contained. Do this weekly until the backend is live.' }));
-
-  /* Import — available in both modes. In live mode it rewrites the shared
-     backend (lead-only, with a safety export + typed confirmation), so the copy
-     is explicit about the blast radius. */
-  card.appendChild(h('div', { class: 'pt-4 border-t b-soft' }, [
-    h('div', { class: 'label mb-1', text: 'Import a backup' }),
-    h('div', { class: 'text-xs mb-3 t-mute', text: isLocalMode
-      ? 'Replaces ALL current data with the contents of a previously exported file. Nothing is merged. A safety export of your current data downloads automatically first.'
-      : 'Replaces ALL data on the shared live backend with a previously exported file — this changes what the whole team sees. Nothing is merged; append-only assessment history is preserved. A safety export downloads first, you confirm by typing, and it needs lead permissions.' }),
-  ]));
-  const importInput = h('input', { class: 'input', type: 'file', accept: '.json,application/json' });
-  const importMsg = h('div', { class: 'text-xs mt-2', style: 'display:none;' });
-  importInput.addEventListener('change', () => handleImportFile(importInput, importMsg));
-  card.appendChild(h('div', { class: 'mb-1' }, [importInput]));
-  card.appendChild(importMsg);
-
-  /* Resets — local mode only (wiping shared team data stays a deliberate,
-     backend-side operation). */
-  if (isLocalMode) {
-    card.appendChild(h('div', { class: 'pt-4 mt-4 border-t flex flex-wrap gap-2 b-soft' }, [
-      h('button', { class: 'btn btn-line', onclick: () => confirmStartFresh() }, 'Start fresh for real fieldwork'),
-      h('button', { class: 'btn btn-line', onclick: () => confirmDemoReset() }, 'Reset to demo data'),
-    ]));
-    card.appendChild(h('div', { class: 'text-xs mt-2 t-mute', text: '"Start fresh" wipes every outreach contact, interview, quote, document, and report — but keeps the three stock interview scripts and resets the six phases\' checklist to Not started, ready for real data. "Reset to demo data" restores the original sample research for exploring the app.' }));
-  } else {
-    card.appendChild(h('div', { class: 'pt-4 mt-4 border-t text-sm', style: 'border-color:var(--line-soft); color:var(--ink-soft);' }, [
-      h('div', { class: 'mb-1' }, [h('strong', { text: 'Resets are disabled in live mode.' })]),
-      'Wiping the shared team data is a deliberate operation performed directly against Supabase by whoever administers the backend — not a one-click action here.',
-    ]));
-  }
-
-  return card;
+/* ------------------------------------------------------------ helpers */
+function row(label, value, tone) {
+  return h('div', { class: 'flex flex-wrap items-center justify-between gap-2 py-2 border-b b-soft' }, [
+    h('span', { class: 'text-sm t-soft', text: label }),
+    chip(value, tone || 'line'),
+  ]);
 }
 
-/* ------------------------------------------------------------
-   Export — one JSON file, every table, binary files embedded.
-   ------------------------------------------------------------ */
+function nameRow(label, value, onSave) {
+  const input = h('input', { class: 'input', value: value || '' });
+  input.addEventListener('change', () => {
+    const v = input.value.trim();
+    if (v) { onSave(v); renderCurrentRoute(); }
+  });
+  return h('div', {}, [h('label', { class: 'label', text: label }), input]);
+}
+
 async function exportEverything() {
-  const tables = ['outreach', 'interviews', 'matrix', 'deliverables', 'scripts',
-    'kill_list', 'field_checks', 'economics', 'segment_cards', 'decision_memos',
-    'reports', 'documents', 'hypotheses', 'evidence_links', 'ai_assessments'];
-  const dump = { schema_version: SCHEMA_VERSION, app: 'MedTerminal', exported_at: new Date().toISOString(), tables: {} };
-
-  for (const t of tables) {
-    dump.tables[t] = await data.list(t).catch(() => []);
-  }
-
-  // Embed binary (non-text) documents as base64 so the file is a complete backup.
-  // Text-based documents already carry their full content in text_content — no
-  // need to duplicate them as base64 too.
-  for (const doc of dump.tables.documents || []) {
-    if (doc.text_content != null) continue;
-    try {
-      const blob = await data.getFile(doc.id, doc);
-      if (blob && blob.size > 0) {
-        doc.file_base64 = await blobToBase64(blob);
-        doc.file_mime = blob.type || doc.mime_type;
-      }
-    } catch { /* best-effort — a missing blob shouldn't fail the whole export */ }
-  }
-
-  downloadJson(dump, `medterminal-backup-${new Date().toISOString().slice(0, 10)}.json`);
-  return dump;
-}
-
-function downloadJson(obj, filename) {
-  const blob = new Blob([JSON.stringify(obj, null, 2)], { type: 'application/json' });
+  const tables = {};
+  for (const t of KNOWN_TABLES) tables[t] = await data.list(t);
+  const dump = {
+    app: 'hati-research',
+    schema_version: SCHEMA_VERSION,
+    exported_at: new Date().toISOString(),
+    tables,
+  };
+  const blob = new Blob([JSON.stringify(dump, null, 2)], { type: 'application/json' });
   const url = URL.createObjectURL(blob);
-  const a = h('a', { href: url, download: filename });
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `hati-research-backup-${new Date().toISOString().slice(0, 10)}.json`;
   a.click();
-  URL.revokeObjectURL(url);
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
-/* ------------------------------------------------------------
-   Import — validate, preview, typed confirmation, safety export first.
-   ------------------------------------------------------------ */
-async function handleImportFile(inputEl, msgEl) {
-  const file = inputEl.files[0];
-  if (!file) return;
-  const showError = (t) => { msgEl.style.display = 'block'; msgEl.style.color = 'var(--rose)'; msgEl.textContent = t; };
-  msgEl.style.display = 'none';
-
-  let dump;
-  try {
-    dump = JSON.parse(await file.text());
-  } catch {
-    showError('That file is not valid JSON.');
-    inputEl.value = '';
-    return;
-  }
-
-  if (dump.app !== 'MedTerminal') {
-    showError('This file was not exported from MedTerminal (missing or wrong "app" field). Refusing to import.');
-    inputEl.value = '';
-    return;
-  }
-  if (typeof dump.tables !== 'object' || dump.tables == null) {
-    showError('This file has no "tables" section — it is not a valid MedTerminal backup.');
-    inputEl.value = '';
-    return;
-  }
-  if (dump.schema_version !== SCHEMA_VERSION) {
-    showError(`Schema version mismatch: this file is v${dump.schema_version ?? 'unknown'}, this app expects v${SCHEMA_VERSION}. Importing a backup from a different app version could corrupt data, so this has been blocked. Open the file with a matching app version, or ask for help upgrading it.`);
-    inputEl.value = '';
-    return;
-  }
-
-  openImportPreview(dump, file.name, () => { inputEl.value = ''; });
-}
-
-function openImportPreview(dump, filename, onDone) {
-  const root = document.getElementById('modal-root');
-  root.innerHTML = '';
-
-  const counts = Object.entries(dump.tables)
-    .map(([t, rows]) => [t, Array.isArray(rows) ? rows.length : 0])
-    .filter(([, n]) => n > 0);
-  const totalRecords = counts.reduce((s, [, n]) => s + n, 0);
-
-  const summary = h('div', { class: 'mb-4 p-3 rounded-lg', style: 'background:var(--bg-soft); border:1px solid var(--line-soft);' }, [
-    h('div', { class: 'text-sm font-medium mb-2', text: `${filename} — ${totalRecords} records` }),
-    ...counts.map(([t, n]) => h('div', { class: 'flex justify-between text-xs py-0.5' }, [
-      h('span', { class: 't-soft', text: t }),
-      h('span', { class: 'num t-mute', text: String(n) }),
-    ])),
-  ]);
-
-  const warning = h('div', { class: 'banner banner-honey mb-4' }, [
-    h('span', { text: isLocalMode
-      ? 'This will REPLACE all current data — nothing is merged. A safety export of what you have now downloads automatically before anything is touched.'
-      : 'This REPLACES all data on the shared live backend — it changes what the whole team sees, and cannot be undone except by re-importing the safety export that downloads first. Append-only assessment history is left untouched. Requires lead permissions.' }),
-  ]);
-
-  const confirmInput = h('input', { class: 'input', placeholder: 'Type IMPORT to confirm' });
-  const errMsg = h('div', { class: 'text-xs mt-2', style: 'color:var(--rose); display:none;' });
-
-  const form = h('form', { onsubmit: async (e) => {
-    e.preventDefault();
-    if (confirmInput.value.trim() !== 'IMPORT') {
-      errMsg.style.display = 'block';
-      errMsg.textContent = 'Type IMPORT exactly (all capitals) to confirm.';
+function importBackup() {
+  const input = h('input', { type: 'file', accept: 'application/json' });
+  input.addEventListener('change', async () => {
+    const file = input.files && input.files[0];
+    if (!file) return;
+    let dump;
+    try { dump = JSON.parse(await file.text()); }
+    catch { alert('That file is not a backup this app can read.'); return; }
+    if (dump.app !== 'hati-research') {
+      alert('That backup was made by a different app. Restoring it would put the wrong data in here.');
       return;
     }
-    const submitBtn = form.querySelector('button[type="submit"]');
-    submitBtn.disabled = true;
-    submitBtn.textContent = 'Backing up current data…';
-    try {
-      await exportEverything(); // safety export of what's about to be replaced
-      submitBtn.textContent = 'Importing…';
-      await data.importAll(dump);
-      root.innerHTML = '';
-      onDone();
-      await loadAllData();
-      renderCurrentRoute();
-    } catch (err) {
-      submitBtn.disabled = false;
-      submitBtn.textContent = 'Replace all data';
-      errMsg.style.display = 'block';
-      errMsg.textContent = 'Import failed: ' + err.message;
-    }
-  } }, [
-    h('div', { class: 'serif text-xl mb-4', text: 'Import backup' }),
-    summary,
-    warning,
-    h('label', { class: 'label', text: 'Confirm' }), confirmInput, errMsg,
-    h('div', { class: 'flex gap-3 mt-5 justify-end pt-4 border-t b-soft' }, [
-      h('button', { type: 'button', class: 'btn btn-line', onclick: () => { root.innerHTML = ''; onDone(); } }, 'Cancel'),
-      h('button', { type: 'submit', class: 'btn btn-primary' }, 'Replace all data'),
-    ]),
-  ]);
-
-  root.appendChild(h('div', { class: 'modal-bg fade-in' }, [h('div', { class: 'modal' }, [form])]));
-}
-
-/* ------------------------------------------------------------
-   Resets — typed confirmation, safety export first.
-   ------------------------------------------------------------ */
-function openTypedConfirm({ title, body, word, onConfirm, dangerText }) {
-  const root = document.getElementById('modal-root');
-  root.innerHTML = '';
-
-  const confirmInput = h('input', { class: 'input', placeholder: `Type ${word} to confirm` });
-  const errMsg = h('div', { class: 'text-xs mt-2', style: 'color:var(--rose); display:none;' });
-
-  const form = h('form', { onsubmit: async (e) => {
-    e.preventDefault();
-    if (confirmInput.value.trim() !== word) {
-      errMsg.style.display = 'block';
-      errMsg.textContent = `Type ${word} exactly (all capitals) to confirm.`;
+    if (Number(dump.schema_version) !== SCHEMA_VERSION) {
+      alert(`That backup was made by a different version of this app (format ${dump.schema_version}, this app expects ${SCHEMA_VERSION}). Restoring it could scramble your data, so it has been refused.`);
       return;
     }
-    const submitBtn = form.querySelector('button[type="submit"]');
-    submitBtn.disabled = true;
-    submitBtn.textContent = 'Backing up current data…';
+    const counts = KNOWN_TABLES.map(t => `${(dump.tables?.[t] || []).length} ${t.replace(/_/g, ' ')}`).join(', ');
+    const confirmField = formField('Type REPLACE to confirm', 'confirm', 'input', '');
+    openModal('Replace everything with this backup?', [
+      { key: '_', el: h('div', { class: 'text-sm t-soft mb-3' }, [
+        h('div', { text: `The backup holds: ${counts}.` }),
+        h('div', { class: 'mt-2', text: 'Everything currently in the workspace will be deleted and replaced. This cannot be undone — download a backup of what is here now if you have not already.' }),
+      ]) },
+      confirmField,
+    ], async (form) => {
+      if (form.confirm !== 'REPLACE') { alert('Type REPLACE exactly to confirm.'); return; }
+      try {
+        await data.importAll(dump);
+        closeModal();
+        await loadAllData();
+        alert('Restored.');
+      } catch (e) { alert('Restore failed: ' + e.message); }
+    }, 'Replace everything', { danger: true });
+  });
+  input.click();
+}
+
+function confirmWipe(kind) {
+  const isReset = kind === 'reset';
+  const confirmField = formField('Type ERASE to confirm', 'confirm', 'input', '');
+  openModal(isReset ? 'Reset to the starting workspace?' : 'Clear our research?', [
+    { key: '_', el: h('div', { class: 'text-sm t-soft mb-3', text: isReset
+      ? 'Everything goes back to how it arrived: the five questions, the competitor set, the market facts, the pricing ideas and the starter target list. Every prospect, conversation, reaction and finding you have added is deleted.'
+      : 'The five questions, competitors, market facts and pricing ideas stay. Every prospect, contact, conversation, pricing reaction and finding is deleted.' }) },
+    confirmField,
+  ], async (form) => {
+    if (form.confirm !== 'ERASE') { alert('Type ERASE exactly to confirm.'); return; }
     try {
-      await exportEverything(); // safety export before any destructive action
-      submitBtn.textContent = 'Working…';
-      await onConfirm();
-      root.innerHTML = '';
+      if (isReset) await data.reset(); else await data.startFresh();
+      closeModal();
       await loadAllData();
-      renderCurrentRoute();
-    } catch (err) {
-      submitBtn.disabled = false;
-      submitBtn.textContent = dangerText;
-      errMsg.style.display = 'block';
-      errMsg.textContent = 'Failed: ' + err.message;
-    }
-  } }, [
-    h('div', { class: 'serif text-xl mb-3', text: title }),
-    h('div', { class: 'text-sm mb-4 t-soft', text: body }),
-    h('label', { class: 'label', text: 'Confirm' }), confirmInput, errMsg,
-    h('div', { class: 'flex gap-3 mt-5 justify-end pt-4 border-t b-soft' }, [
-      h('button', { type: 'button', class: 'btn btn-line', onclick: () => { root.innerHTML = ''; } }, 'Cancel'),
-      h('button', { type: 'submit', class: 'btn btn-primary' }, dangerText),
-    ]),
-  ]);
-
-  root.appendChild(h('div', { class: 'modal-bg fade-in' }, [h('div', { class: 'modal' }, [form])]));
-}
-
-function confirmStartFresh() {
-  openTypedConfirm({
-    title: 'Start fresh for real fieldwork',
-    body: 'Wipes every outreach contact, interview, matrix quote, document, report, kill-list entry, field check, economics model, and decision memo. Keeps the three stock interview scripts and resets the six phases\' deliverables checklist to "Not started". A safety export of your current data downloads first. This cannot be undone from within the app.',
-    word: 'RESET',
-    dangerText: 'Wipe and start fresh',
-    onConfirm: () => data.startFresh(),
-  });
-}
-
-function confirmDemoReset() {
-  openTypedConfirm({
-    title: 'Reset to demo data',
-    body: 'Replaces all current data with the original sample research used to explore the app. A safety export of your current data downloads first.',
-    word: 'RESET',
-    dangerText: 'Reset to demo data',
-    onConfirm: () => data.reset(),
-  });
+    } catch (e) { alert('Failed: ' + e.message); }
+  }, isReset ? 'Reset' : 'Clear', { danger: true });
 }
 
 registerRoute('settings', 'Settings', renderSettings,
-  'Who is on the team, and how is the workspace configured?');
+  'How is this workspace set up, and how do I back it up?');

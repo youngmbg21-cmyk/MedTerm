@@ -1,27 +1,28 @@
 /* ============================================================
-   APP CORE — state, router, phase-gated nav, shared components.
+   APP CORE — state, router, nav, shared components.
    Data access lives in data.js. Config lives in config.js.
    ============================================================ */
-import { CURRENT_PHASE, PHASES, STALL_DAYS, SEGMENTS } from './config.js';
+import { CURRENT_STAGE, STAGES, STALL_DAYS, SEGMENTS, PIPELINE_NAMES } from './config.js';
 import { data, isLocalMode } from './data.js';
 
-export { CURRENT_PHASE, PHASES };
+export { CURRENT_STAGE, STAGES };
 
 /* ------------------------------------------------------------
    STATE — in-memory cache, loaded once, refreshed on demand.
    ------------------------------------------------------------ */
 export const STATE = {
-  outreach: [], interviews: [], matrix: [], deliverables: [],
-  scripts: [], kill_list: [], field_checks: [], economics: [],
-  segment_cards: [], decision_memos: [], reports: [], documents: [],
-  hypotheses: [], evidence_links: [], ai_assessments: [],
+  questions: [], insights: [],
+  competitors: [], competitor_updates: [],
+  prospects: [], contacts: [], conversations: [],
+  pricing_ideas: [], pricing_reactions: [],
+  market_facts: [],
   chatHistory: [],
   loaded: false,
 };
 
-const TABLES = ['outreach', 'interviews', 'matrix', 'deliverables', 'scripts',
-  'kill_list', 'field_checks', 'economics', 'segment_cards', 'decision_memos', 'reports',
-  'documents', 'hypotheses', 'evidence_links', 'ai_assessments'];
+const TABLES = ['questions', 'insights', 'competitors', 'competitor_updates',
+  'prospects', 'contacts', 'conversations', 'pricing_ideas', 'pricing_reactions',
+  'market_facts'];
 
 export async function loadAllData() {
   setSync('Loading…');
@@ -40,13 +41,13 @@ export async function loadAllData() {
 export function setSync(text, tone = 'line') {
   const el = document.getElementById('sync-status');
   if (!el) return;
-  el.className = `chip chip-${tone === 'rose' ? 'rose' : tone === 'sage' ? 'sage' : 'line'}`;
+  el.className = `chip chip-${tone === 'rose' ? 'rose' : tone === 'green' ? 'green' : 'line'}`;
   el.textContent = text;
   if (text === 'Synced') {
     setTimeout(() => {
-      el.className = 'chip chip-sage';
-      const n = STATE.outreach.length + STATE.interviews.length + STATE.matrix.length;
-      el.textContent = isLocalMode ? `✓ ${n} records · demo` : `✓ ${n} records`;
+      el.className = 'chip chip-green';
+      const n = STATE.prospects.length + STATE.conversations.length + STATE.insights.length;
+      el.textContent = isLocalMode ? `\u2713 ${n} records · this browser` : `\u2713 ${n} records · shared`;
     }, 500);
   }
 }
@@ -56,59 +57,105 @@ export function setSync(text, tone = 'line') {
    ------------------------------------------------------------ */
 export function daysSince(dateStr) {
   if (!dateStr) return null;
-  const then = new Date(dateStr + 'T00:00:00');
+  const then = new Date(String(dateStr).slice(0, 10) + 'T00:00:00');
+  if (isNaN(then)) return null;
   return Math.floor((Date.now() - then.getTime()) / 86400000);
 }
 
 export function fmtDate(dateStr) {
   if (!dateStr) return '—';
-  const d = new Date(dateStr.slice(0, 10) + 'T00:00:00');
+  const d = new Date(String(dateStr).slice(0, 10) + 'T00:00:00');
   if (isNaN(d)) return dateStr;
   return d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
 }
 
-/* The single most important data-quality signal in the app. */
-export function isUntaggedOverdue(interview) {
-  return interview.tagged_same_day !== 'Y' && (daysSince(interview.date) ?? 0) >= 1;
-}
+export const today = () => new Date().toISOString().slice(0, 10);
 
-export function isStalled(contact) {
-  return ['Sent', 'Replied'].includes(contact.status) &&
-    (daysSince(contact.first_contact) ?? 0) >= STALL_DAYS;
+/* Kenyan shillings, written the way the founders write them. */
+export function fmtKES(n) {
+  const v = Number(n);
+  if (!Number.isFinite(v) || v === 0) return '—';
+  if (Math.abs(v) >= 1e6) return `KES ${(v / 1e6).toFixed(v % 1e6 === 0 ? 0 : 1)}M`;
+  if (Math.abs(v) >= 1000) return `KES ${(v / 1000).toFixed(v % 1000 === 0 ? 0 : 1)}K`;
+  return `KES ${v.toLocaleString('en-KE')}`;
 }
 
 /* ------------------------------------------------------------
-   SHARED ANALYSIS HELPERS — one formula, one rollup, used by
-   sensemaking, matrix, and reports so their numbers never disagree.
+   THE TWO DATA-QUALITY RULES
+   These are the equivalent of a lab notebook rule. They are the
+   reason this workspace is trustworthy, and nothing may weaken
+   them: the app shows them in red, on the Overview, every day.
    ------------------------------------------------------------ */
 
-/** Rank theme tags by evidence weight: count × avg severity × (1 + WTP-Y share). */
-export function rankThemes(rows = STATE.matrix) {
-  const data = {};
-  rows.forEach(r => {
-    const tag = r.theme_tag;
-    if (!tag) return;
-    if (!data[tag]) data[tag] = { tag, count: 0, totalSev: 0, wtpY: 0, quotes: [] };
-    const d = data[tag];
-    d.count++;
-    d.totalSev += +r.severity || 0;
-    if (r.wtp === 'Y') d.wtpY++;
-    d.quotes.push(r);
-  });
-  return Object.values(data).map(d => ({
-    tag: d.tag,
-    count: d.count,
-    avgSev: d.count ? d.totalSev / d.count : 0,
-    wtpRate: d.count ? Math.round((d.wtpY / d.count) * 100) : 0,
-    score: d.count * (d.totalSev / (d.count || 1)) * (1 + d.wtpY / (d.count || 1)),
-    quotes: d.quotes,
-  })).sort((a, b) => b.score - a.score);
+/* 1 · A market or regulatory fact with no source link is a rumour.
+       The form refuses to save one; this catches anything that got
+       in another way (an import, an older record). */
+export function factNeedsSource(fact) {
+  return !fact || !String(fact.source_url || '').trim();
 }
 
-/** Interviews logged per segment vs. recruitment target, in config order. */
-export function segmentCoverageRows() {
-  return SEGMENTS.map(s => ({ label: s.name, value: STATE.interviews.filter(r => r.segment === s.name).length, target: s.target }));
+/* 2 · A conversation nobody wrote a finding from is a wasted
+       conversation. After a day, say so. */
+export function conversationUnmined(conv, insights = STATE.insights) {
+  if (!conv) return false;
+  const has = insights.some(i => i.source_kind === 'Conversation' && String(i.source_id) === String(conv.id));
+  return !has && (daysSince(conv.date) ?? 0) >= 1;
 }
+
+/* A prospect we said we would chase and then didn't. */
+export function isStalled(prospect) {
+  return ['Contacted', 'Talked', 'Interested'].includes(prospect.status) &&
+    (daysSince(prospect.last_touch || prospect.first_contact) ?? 0) >= STALL_DAYS;
+}
+
+/* ------------------------------------------------------------
+   SHARED ANALYSIS HELPERS — one formula, one rollup, so no two
+   screens ever disagree about the same number.
+   ------------------------------------------------------------ */
+
+/* Every insight attached to a question, split by which way it points. */
+export function evidenceFor(questionId, insights = STATE.insights) {
+  const mine = insights.filter(i => String(i.question_id) === String(questionId));
+  return {
+    all: mine,
+    supports:   mine.filter(i => i.direction === 'Supports'),
+    challenges: mine.filter(i => i.direction === 'Challenges'),
+    context:    mine.filter(i => i.direction === 'Context'),
+  };
+}
+
+/* Where a question stands, in words. Never a score — the whole point is that
+   two founders read the same sentence and argue about the evidence, not the
+   number. "Thin" is the honest default. */
+export function evidenceWeight(questionId, insights = STATE.insights) {
+  const e = evidenceFor(questionId, insights);
+  const n = e.supports.length + e.challenges.length;
+  if (n === 0) return { label: 'No evidence', tone: 'line' };
+  if (n < 3)  return { label: 'Thin', tone: 'gold' };
+  if (e.supports.length && e.challenges.length &&
+      Math.min(e.supports.length, e.challenges.length) / n >= 0.34) {
+    return { label: 'Contested', tone: 'violet' };
+  }
+  return { label: 'Building', tone: 'green' };
+}
+
+/* Prospects per pipeline stage, in config order. */
+export function pipelineCounts(rows = STATE.prospects) {
+  return PIPELINE_NAMES.map(name => ({ label: name, value: rows.filter(r => r.status === name).length }));
+}
+
+/* Conversations logged per segment vs. the target we set ourselves. */
+export function segmentCoverageRows() {
+  const byProspect = Object.fromEntries(STATE.prospects.map(p => [String(p.id), p]));
+  return SEGMENTS.map(s => ({
+    label: s.name,
+    value: STATE.conversations.filter(c => (byProspect[String(c.prospect_id)] || {}).segment === s.name).length,
+    target: s.target,
+  }));
+}
+
+export const prospectName = (id) => (STATE.prospects.find(p => String(p.id) === String(id)) || {}).company || '—';
+export const questionShort = (id) => (STATE.questions.find(q => String(q.id) === String(id)) || {}).short || '—';
 
 /* ------------------------------------------------------------
    ROUTER — routes carry a group and the one question they answer.
@@ -133,15 +180,23 @@ export function setPageActions(...nodes) {
   nodes.filter(Boolean).forEach(n => slot.appendChild(n));
 }
 
+/* A route may carry a query — `#conversations?prospect=abc` — so one screen
+   can hand off to another with context. Screens read it through routeParams(). */
+let currentParams = new URLSearchParams();
+export function routeParams() { return currentParams; }
+
 export function renderCurrentRoute() {
-  let route = (location.hash || '#overview').slice(1);
-  if (route === 'dashboard') route = 'overview'; // legacy hash
+  const raw = (location.hash || '#overview').slice(1);
+  const qi = raw.indexOf('?');
+  let route = qi < 0 ? raw : raw.slice(0, qi);
+  currentParams = new URLSearchParams(qi < 0 ? '' : raw.slice(qi + 1));
   const r = ROUTES[route] || ROUTES.overview;
   if (!r) return;
   document.getElementById('page-title').textContent = r.title;
   const q = document.getElementById('page-question');
   if (q) q.textContent = r.question || '';
   setPageActions(); // screens re-add their primary action during render
+  if (!ROUTES[route]) route = 'overview';
   document.querySelectorAll('[data-route]').forEach(el => {
     el.classList.toggle('active', el.dataset.route === route);
   });
@@ -157,37 +212,18 @@ export function renderCurrentRoute() {
    ------------------------------------------------------------ */
 const NAV = [
   { type: 'route', route: 'overview', label: 'Overview' },
-  // Available from Phase 0 onward by design: early on, the honest brief
-  // says INSUFFICIENT — showing that is the point.
-  { type: 'route', route: 'decision-brief', label: 'Decision Brief' },
-  {
-    type: 'group', id: 'fieldwork', label: 'Fieldwork', phaseLabel: 'phase 1–2',
-    unlockAt: 1, activeThrough: 2,
-    routes: [['outreach', 'Outreach'], ['interviews', 'Interviews'], ['matrix', 'Theme matrix'], ['saturation', 'Saturation']],
-  },
-  {
-    type: 'group', id: 'sensemaking', label: 'Sense-making', phaseLabel: 'phase 3',
-    unlockAt: 3, activeThrough: 3,
-    routes: [['theme-analysis', 'Theme analysis'], ['segment-cards', 'Segment cards'], ['top-pains', 'Top-3 pains'], ['kill-list', 'Kill list'], ['state-of-field', 'State of the field']],
-  },
-  {
-    type: 'group', id: 'economics', label: 'Economics', phaseLabel: 'phase 4',
-    unlockAt: 4, activeThrough: 4,
-    routes: [['economics', 'Unit economics'], ['alt-models', 'Alternate models'], ['field-checks', 'Field checks']],
-  },
-  {
-    type: 'group', id: 'decision', label: 'Decision', phaseLabel: 'phase 5',
-    unlockAt: 5, activeThrough: 5,
-    routes: [['decision-memo', 'Decision memo'], ['mvp-scope', 'MVP scope'], ['confirmatory-tests', 'Confirmatory tests']],
-  },
+  { type: 'route', route: 'questions', label: 'The five questions' },
   { type: 'divider' },
   {
-    type: 'group', id: 'reference', label: 'Reference', phaseLabel: '',
-    unlockAt: 0, activeThrough: 99, startCollapsed: true,
-    routes: [['scripts', 'Scripts'], ['templates', 'Templates'], ['manual', 'Operating manual']],
+    type: 'group', id: 'market', label: 'The market', open: true,
+    routes: [['competitors', 'Competitors'], ['market', 'Market & rules']],
   },
-  { type: 'route', route: 'documents', label: 'Documents' },
-  { type: 'route', route: 'reports', label: 'Reports' },
+  {
+    type: 'group', id: 'customers', label: 'Customers', open: true,
+    routes: [['prospects', 'Prospects'], ['conversations', 'Conversations'], ['pricing', 'Pricing']],
+  },
+  { type: 'divider' },
+  { type: 'route', route: 'insights', label: 'Insights' },
 ];
 
 export function buildNav() {
@@ -206,21 +242,14 @@ export function buildNav() {
       return;
     }
 
-    const locked = CURRENT_PHASE < item.unlockAt;
-    const isCurrent = CURRENT_PHASE >= item.unlockAt && CURRENT_PHASE <= item.activeThrough;
-    let collapsed = item.startCollapsed || !isCurrent;
-
-    const group = h('div', { class: `nav-group${locked ? ' locked' : ''}` });
+    /* Groups tidy the sidebar; nothing is ever locked. Research does not run
+       in a straight line, so every screen is reachable at every stage. */
+    let collapsed = !item.open;
+    const group = h('div', { class: 'nav-group' });
     const chevron = h('span', { class: 'nav-chevron', text: '›' });
-    /* Label left; phase badge + chevron (or lock) as a right-aligned column */
     const header = h('button', { class: 'nav-group-header', type: 'button' }, [
       h('span', { class: 'micro', text: item.label }),
-      h('span', { class: 'nav-group-right' }, [
-        locked
-          ? h('span', { class: 'nav-lock', title: `Ahead of the current phase — opens early`, text: `🔒 phase ${item.unlockAt}` })
-          : (item.phaseLabel ? h('span', { class: 'nav-phase-badge', text: item.phaseLabel }) : null),
-        chevron,
-      ].filter(Boolean)),
+      h('span', { class: 'nav-group-right' }, [chevron]),
     ]);
     const list = h('div', { class: 'nav-group-list' });
     item.routes.forEach(([route, label]) => {
@@ -233,9 +262,6 @@ export function buildNav() {
       list.style.display = collapsed ? 'none' : '';
       chevron.style.transform = collapsed ? '' : 'rotate(90deg)';
     }
-    // Every group — including phases ahead of the current one — expands on tap.
-    // The 🔒 badge stays as a hint that the section is ahead of schedule, but it
-    // never blocks access: the lead can work or review any phase early.
     header.addEventListener('click', () => { collapsed = !collapsed; applyCollapsed(); });
     applyCollapsed();
 
@@ -343,8 +369,8 @@ export function h(tag, attrs = {}, children = []) {
 
 /* 1 · Metric card */
 export function kpiCard(label, value, sub, tone) {
-  const toneColor = { rose: 'var(--rose)', honey: 'var(--honey-deep)', sage: 'var(--sage-deep)', info: 'var(--info)' }[tone];
-  const num = h('div', { class: 'kpi-num', text: String(value) });
+  const toneColor = { rose: 'var(--rose-text)', gold: 'var(--gold-text)', green: 'var(--green-text)', info: 'var(--info-text)', violet: 'var(--violet-text)' }[tone];
+  const num = h('div', { class: 'kpi-num num', text: String(value) });
   if (toneColor) num.style.color = toneColor;
   const card = h('div', { class: 'card kpi' }, [num, h('div', { class: 'kpi-label', text: label })]);
   if (sub) card.appendChild(h('div', { class: 'text-xs mt-2 t-mute', text: sub }));
@@ -356,13 +382,6 @@ export function chip(text, tone = 'line') {
   return h('span', { class: `chip chip-${tone}`, text });
 }
 
-export function statusTone(status) {
-  return {
-    Cold: 'line', Sent: 'info', Replied: 'honey', Booked: 'sage', Done: 'sage', Declined: 'rose',
-    'Not started': 'line', 'In progress': 'honey', Complete: 'sage', Blocked: 'rose',
-  }[status] || 'line';
-}
-
 /* 3 · Progress bar */
 export function progressBar(pct, color) {
   const fill = h('i');
@@ -371,26 +390,26 @@ export function progressBar(pct, color) {
   return h('div', { class: 'bar-wrap' }, [fill]);
 }
 
-/* 4 · Serif quote block — quotes must look different from UI chrome */
-export function quoteBlock(entry, { showEdit } = {}) {
-  const sevTone = entry.severity >= 4 ? 'rose' : entry.severity >= 3 ? 'honey' : 'line';
-  const chips = h('div', { class: 'flex flex-wrap gap-1.5' }, [
-    entry.theme_tag ? chip(entry.theme_tag, 'plum') : null,
-    entry.segment ? chip(entry.segment, 'line') : null,
-    entry.severity ? chip(`Sev ${entry.severity}`, sevTone) : null,
-    entry.wtp ? chip(`WTP ${entry.wtp}`, entry.wtp === 'Y' ? 'sage' : 'line') : null,
-    entry.interview_id ? chip(entry.interview_id, 'info') : null,
-  ].filter(Boolean));
-
-  const head = h('div', { class: 'flex items-start justify-between gap-3 mb-2' }, [chips]);
-  if (showEdit) head.appendChild(showEdit);
-
-  const block = h('div', { class: 'quote-block' }, [
-    head,
-    h('div', { class: 'quote-text', text: entry.quote ? `“${entry.quote}”` : '(no quote)' }),
-  ]);
-  if (entry.notes) block.appendChild(h('div', { class: 'text-xs mt-2 t-mute', text: entry.notes }));
+/* 4 · Quote block — what somebody actually said, set apart from UI chrome.
+   Evidence should never look like a form field. */
+export function quoteBlock(quote, cite, chips = []) {
+  const block = h('div', { class: 'quote-block' });
+  if (chips.length) block.appendChild(h('div', { class: 'flex flex-wrap gap-1.5 mb-2' }, chips.filter(Boolean)));
+  block.appendChild(h('div', { class: 'quote-text', text: quote ? `\u201c${quote}\u201d` : '(no quote recorded)' }));
+  if (cite) block.appendChild(h('div', { class: 'quote-cite mt-2', text: cite }));
   return block;
+}
+
+/* A titled card with an optional right-hand tools slot. The one card shape. */
+export function sectionCard(title, sub, body, tools) {
+  const head = h('div', { class: 'flex items-start justify-between gap-3 mb-3' }, [
+    h('div', {}, [
+      h('div', { class: 'card-title', text: title }),
+      sub ? h('div', { class: 'text-2nd t-mute mt-0.5', text: sub }) : null,
+    ].filter(Boolean)),
+    tools || null,
+  ].filter(Boolean));
+  return h('div', { class: 'card card-pad' }, [head, body].filter(Boolean));
 }
 
 /* 5a · Loading state — the one loading pattern app-wide */

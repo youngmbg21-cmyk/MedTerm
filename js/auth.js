@@ -1,9 +1,8 @@
 /* ============================================================
-   AUTH — Supabase magic-link login. Only loaded in 'api' mode
-   (data.js imports it lazily at request time).
+   AUTH — Supabase magic-link login. Loaded lazily — in 'api'
+   data mode at boot, otherwise the first time the assistant runs.
 
-   Self-contained on purpose: it must NOT import the app shell.
-   The mobile front end has no `#modal-root` / desktop kit, so
+   Self-contained on purpose: it must NOT import the app shell —
    pulling app.js in here would run incompatible top-level code
    and crash the save path (circular import via data.js).
    ============================================================ */
@@ -42,8 +41,7 @@ export async function getSession() {
   return session;
 }
 
-/* Full-screen magic-link login styled for the mobile shell (css/mobile.css).
-   Resolves when signed in. */
+/* Full-screen magic-link login. Resolves when signed in. */
 export async function requireLogin() {
   const session = await getSession();
   if (session) return session;
@@ -62,19 +60,19 @@ export async function requireLogin() {
         msg.style.display = 'block';
         try {
           const { error } = await supabase.auth.signInWithOtp({ email: email.value.trim() });
-          if (error) { msg.style.color = '#9A3F3F'; msg.textContent = error.message; }
-          else { msg.style.color = '#3F5A4D'; msg.textContent = 'Check your email for the sign-in link.'; }
+          if (error) { msg.style.color = '#94382F'; msg.textContent = error.message; }
+          else { msg.style.color = '#0E4E34'; msg.textContent = 'Check your email for the sign-in link.'; }
         } catch (err) {
           // Network failure (offline) rejects the call — surface it instead of
           // leaving the button looking inert with an unhandled rejection.
-          msg.style.color = '#9A3F3F';
+          msg.style.color = '#94382F';
           msg.textContent = 'Couldn’t reach sign-in. Check your connection and try again.';
         }
       },
     }, [
-      el('div', { class: 'serif', style: 'font-size:22px;margin-bottom:4px;', text: 'MedTerminal' }),
-      el('div', { style: 'font-size:13px;line-height:19px;color:#6E6A5E;margin-bottom:18px;', text: 'Sign in with your team email to continue.' }),
-      el('div', { class: 'micro', style: 'color:#4A5651;margin-bottom:6px;', text: 'Email' }),
+      el('div', { class: 'serif', style: 'font-size:22px;margin-bottom:4px;', text: 'HaTi Research' }),
+      el('div', { style: 'font-size:13px;line-height:19px;color:#64736A;margin-bottom:18px;', text: 'Sign in with your team email to continue.' }),
+      el('div', { class: 'micro', style: 'color:#42544A;margin-bottom:6px;', text: 'Email' }),
       email,
       msg,
       el('button', { class: 'btn btn-primary tall', type: 'submit', style: 'width:100%;', text: 'Send magic link' }),
@@ -82,7 +80,7 @@ export async function requireLogin() {
 
     const overlay = el('div', {
       id: 'login-overlay',
-      style: 'position:fixed;inset:0;z-index:100;display:flex;align-items:center;justify-content:center;padding:20px;background:#F5F1EA;',
+      style: 'position:fixed;inset:0;z-index:100;display:flex;align-items:center;justify-content:center;padding:20px;background:#F3F5F2;',
     }, [form]);
     document.body.appendChild(overlay);
 

@@ -5,15 +5,15 @@
    saves. Drafts never auto-save (the AI argues; it never
    decides). With AI off the draft path is calm-disabled:
    visible, muted, a tap explains — never hidden, never a dead
-   click. Used by the decision memo, MVP scope, state of the
-   field, and reports.
+   click. Used by the question board and the
+   competitor and pricing write-ups.
    ============================================================ */
 import { h } from './app.js';
 import { aiAvailable } from './data.js';
 
 /* One shared string each — never copied per screen. */
-export const AI_DRAFT_HELPER = 'The assistant drafts this from the evidence ledger; you edit and save. Or write it manually.';
-export const AI_OFF_NOTE = 'Connect the assistant to draft this from your tagged quotes, hypothesis links, and economics. See HANDOFF.md → go-live.';
+export const AI_DRAFT_HELPER = 'The assistant drafts this from what is in the workspace; you edit and save. Or write it yourself.';
+export const AI_OFF_NOTE = 'Connect the assistant to draft this from your conversations, competitor notes and market facts. See HANDOFF.md.';
 
 /**
  * Build the AI-first action row.
@@ -26,8 +26,8 @@ export const AI_OFF_NOTE = 'Connect the assistant to draft this from your tagged
  */
 export function aiDraftControls({
   filled = false,
-  draftLabel = 'Draft from evidence',
-  redraftLabel = 'Redraft from evidence',
+  draftLabel = 'Draft from the evidence',
+  redraftLabel = 'Redraft from the evidence',
   manualLabel = 'Write manually',
   editLabel = 'Edit',
   onDraft,

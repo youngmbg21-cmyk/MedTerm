@@ -1,248 +1,154 @@
 /* ============================================================
-   EVIDENCE HELPERS — shared by the Decision Brief, the Decision
-   memo, and the capture screens' "Link to hypothesis" affordance.
-   Hypotheses, kill criteria, evidence links, and AI assessments
-   are first-class records; everything here reads them from STATE
-   and writes them through data.js.
+   EVIDENCE — the link between something we found out and one of
+   the five questions. This module is the single place that link
+   is created, rendered and counted, so no screen invents its own
+   version of "does this support or challenge Q2?".
+
+   An insight record:
+     question_id   which of the five questions it bears on
+     direction     Supports · Challenges · Context
+     finding       one sentence, in plain words
+     quote         what somebody actually said, if anything
+     source_kind   Conversation · Competitor · Market fact ·
+                   Pricing test · Our own thinking
+     source_id     the id of that record, when there is one
+     source_label  a human label kept alongside the id, so an
+                   insight still reads correctly if the source
+                   record is later deleted
+     owner         who wrote it down
+     date          when
    ============================================================ */
-import {
-  STATE, h, chip, openModal, closeModal, formField, renderCurrentRoute,
-} from './app.js';
-import { CURRENT_PHASE, SEGMENTS } from './config.js';
-import { data, aiAvailable, assessmentRequest, proposeLinksRequest, aiDataSlices } from './data.js';
-import { actionConfirmation } from './actions.js';
+import { STATE, h, chip, openModal, closeModal, formField, renderCurrentRoute, today, evidenceFor } from './app.js';
+import { data } from './data.js';
+import { DIRECTION_NAMES, directionTone, EVIDENCE_KINDS, ownerOptions } from './config.js';
 
-/* Semantic tones — sage=GO, honey=PIVOT, rose=NO-GO, line=INSUFFICIENT. */
-export const LEANING_TONE = { GO: 'sage', PIVOT: 'honey', 'NO-GO': 'rose', INSUFFICIENT: 'line' };
-
-export const HYP_STATUS_TONE = {
-  open: 'line', strengthening: 'sage', weakening: 'honey', dead: 'rose',
-  unknown: 'line', holding: 'sage', breached: 'rose',
+/* Questions as dropdown options: "Q1 — Who is the buyer…" */
+export function questionOptions() {
+  return [...STATE.questions]
+    .sort((a, b) => (a.sort || 0) - (b.sort || 0))
+    .map(q => `${q.ref} — ${q.short}`);
+}
+const questionIdFromOption = (label) => {
+  const ref = String(label || '').split(' — ')[0];
+  return (STATE.questions.find(q => q.ref === ref) || {}).id || '';
+};
+const optionForQuestion = (id) => {
+  const q = STATE.questions.find(x => String(x.id) === String(id));
+  return q ? `${q.ref} — ${q.short}` : '';
 };
 
-export const DIRECTION_ARROW = { strengthening: '↑', weakening: '↓', unclear: '→' };
+/**
+ * The one modal for writing an insight down. Callers pass whatever they
+ * already know about the source; the human fills in the rest.
+ * Nothing about this is AI-only — writing a finding by hand is the
+ * normal path, and the assistant simply proposes the same shape.
+ */
+export function insightModal({
+  insight = null,
+  sourceKind = 'Our own thinking',
+  sourceId = '',
+  sourceLabel = '',
+  questionId = '',
+  quote = '',
+  afterSave,
+} = {}) {
+  const editing = !!insight;
+  const src = insight || {};
+  const fields = [
+    formField('Which question does this bear on?', 'question_option', 'select',
+      optionForQuestion(src.question_id || questionId) || questionOptions()[0], questionOptions()),
+    formField('Does it support or challenge it?', 'direction', 'select',
+      src.direction || 'Supports', DIRECTION_NAMES),
+    formField('The finding, in one sentence', 'finding', 'textarea', src.finding || ''),
+    formField('What they actually said (optional)', 'quote', 'textarea', src.quote || quote),
+    formField('Where it came from', 'source_kind', 'select',
+      src.source_kind || sourceKind, EVIDENCE_KINDS),
+    formField('Source', 'source_label', 'text', src.source_label || sourceLabel),
+    formField('Written down by', 'owner', 'select', src.owner || ownerOptions()[0], ownerOptions()),
+    formField('Date', 'date', 'text', src.date || today(), null, 'date'),
+  ];
 
-/* Sorted views of the hypothesis board. */
-export function hypothesesSorted() {
-  return [...STATE.hypotheses].sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
-}
-export function buyerHypotheses() {
-  return hypothesesSorted().filter(x => x.kind === 'buyer_hypothesis');
-}
-export function killCriteria() {
-  return hypothesesSorted().filter(x => x.kind === 'kill_criterion');
-}
-
-/* Assessments are append-only; the newest is the live one. */
-export function latestAssessment() {
-  return [...STATE.ai_assessments]
-    .sort((a, b) => String(b.created_at).localeCompare(String(a.created_at)))[0] || null;
-}
-export function assessmentsOldestFirst() {
-  return [...STATE.ai_assessments]
-    .sort((a, b) => String(a.created_at).localeCompare(String(b.created_at)));
-}
-
-/* Run the structured assessment pipeline and persist the result.
-   In local data mode the worker returns the record and we persist it here
-   through data.js; in api mode the worker inserted it already. Either way
-   assessments are append-only — this only ever creates. */
-export async function runAssessment(trigger) {
-  const res = await assessmentRequest({
-    trigger,
-    phase: CURRENT_PHASE,
-    segments: SEGMENTS,
-    localData: aiDataSlices(STATE),
-  });
-  let record = res.assessment;
-  if (!res.persisted) record = await data.create('ai_assessments', record);
-  STATE.ai_assessments = await data.list('ai_assessments');
-  return record;
-}
-
-export function linksFor(hypothesisId) {
-  return STATE.evidence_links.filter(l => l.hypothesis_id === hypothesisId);
-}
-export function linksForEvidence(evidenceType, evidenceId) {
-  return STATE.evidence_links.filter(l => l.evidence_type === evidenceType && l.evidence_id === evidenceId);
-}
-
-/* When a record is deleted, its hypothesis links must go too — the board
-   never cites evidence that no longer exists (rule 11). Deletes every link
-   pointing at the record and returns how many were removed. Caller reloads
-   STATE.evidence_links afterwards. */
-export async function removeLinksForEvidence(evidenceType, evidenceId) {
-  const links = linksForEvidence(evidenceType, evidenceId);
-  for (const l of links) await data.remove('evidence_links', l.id);
-  return links.length;
-}
-
-/* Resolve a link to its underlying record: { cite, text, record }. */
-export function resolveLink(link) {
-  switch (link.evidence_type) {
-    case 'interview': {
-      const r = STATE.interviews.find(i => i.interview_id === link.evidence_id);
-      return { cite: link.evidence_id, text: r ? (r.brief_topic || 'interview') : '(interview not found)', record: r || null };
-    }
-    case 'matrix': {
-      const r = STATE.matrix.find(m => m.id === link.evidence_id);
-      return { cite: r?.interview_id || 'matrix', text: r ? r.quote : '(matrix entry not found)', record: r || null };
-    }
-    case 'field_check': {
-      const r = STATE.field_checks.find(f => f.id === link.evidence_id);
-      return { cite: 'field check', text: r ? r.assumption : '(field check not found)', record: r || null };
-    }
-    case 'document': {
-      const r = STATE.documents.find(d => d.id === link.evidence_id);
-      return { cite: r?.filename || 'document', text: r ? (r.description || r.filename) : '(document not found)', record: r || null };
-    }
-    case 'economics': {
-      const r = STATE.economics.find(e => e.id === link.evidence_id);
-      return { cite: r ? `economics · ${r.model_name}` : 'economics', text: r ? `Unit-economics model "${r.model_name}"` : '(economics record not found)', record: r || null };
-    }
-    default:
-      return { cite: link.evidence_type, text: link.evidence_id, record: null };
-  }
-}
-
-/* ------------------------------------------------------------
-   Manual "Link to hypothesis" modal — works fully in local mode
-   with AI off. source is always 'human' here.
-   ------------------------------------------------------------ */
-const STRENGTH_ORDER = { strong: 0, moderate: 1, weak: 2 };
-
-export function openLinkModal({ evidence_type, evidence_id, cite }, onSaved) {
-  const hyps = hypothesesSorted();
-  if (!hyps.length) { alert('No hypotheses defined yet.'); return; }
-  const labels = hyps.map(x => `${x.code} — ${x.title}`);
-  openModal(`Link ${cite || evidence_type} to a hypothesis`, [
-    formField('Hypothesis or kill criterion', 'hypothesis', 'select', labels[0], labels),
-    formField('Direction (for kill criteria, "supports" = pushes toward breach)', 'direction', 'select', 'supports', ['supports', 'contradicts', 'neutral']),
-    formField('Strength', 'strength', 'select', 'moderate', ['strong', 'moderate', 'weak']),
-    formField('Why this evidence bears on it (one line)', 'note', 'textarea', ''),
-  ], async (form) => {
-    const hyp = hyps[labels.indexOf(form.hypothesis)];
-    if (!hyp) { alert('Pick a hypothesis.'); return; }
-    try {
-      await data.create('evidence_links', {
-        hypothesis_id: hyp.id,
-        evidence_type,
-        evidence_id,
-        direction: form.direction,
-        strength: form.strength,
-        note: form.note,
-        source: 'human',
-      });
-      STATE.evidence_links = await data.list('evidence_links');
-      closeModal();
-      renderCurrentRoute();
-      onSaved?.();
-    } catch (e) { alert('Link failed: ' + e.message); }
-  }, 'Link evidence');
-}
-
-/* Small chips showing a record's existing hypothesis links. */
-export function existingLinkChips(evidenceType, evidenceId) {
-  return linksForEvidence(evidenceType, evidenceId).map(l => {
-    const hyp = STATE.hypotheses.find(x => x.id === l.hypothesis_id);
-    const tone = l.direction === 'supports' ? 'sage' : l.direction === 'contradicts' ? 'rose' : 'line';
-    const c = chip(`${hyp?.code || '?'} ${l.direction}`, tone);
-    c.title = l.note || '';
-    return c;
-  });
-}
-
-/* Best displayable quotes for a hypothesis: matrix-linked evidence first,
-   strongest first, up to n. Returns matrix records. */
-export function topQuotesFor(hypothesisId, n = 2) {
-  return linksFor(hypothesisId)
-    .filter(l => l.evidence_type === 'matrix')
-    .sort((a, b) => (STRENGTH_ORDER[a.strength] ?? 3) - (STRENGTH_ORDER[b.strength] ?? 3))
-    .map(l => resolveLink(l).record)
-    .filter(Boolean)
-    .slice(0, n);
-}
-
-/* ------------------------------------------------------------
-   Quiet AI link proposals after a save. One skippable card at the
-   top of the screen — never a blocking modal, never an error. The
-   human confirms each proposal through the shared actions.js
-   pattern; confirmed links are stamped source: 'ai_confirmed'.
-   ------------------------------------------------------------ */
-export async function maybeProposeLinks(entryType, entry) {
-  if (!aiAvailable || !entry?.id) return;
-  try {
-    const { proposals } = await proposeLinksRequest({
-      entry_type: entryType,
-      entry,
-      localData: aiDataSlices(STATE),
-    });
-    if (!proposals?.length) return;
-    const page = document.getElementById('page');
-    if (!page) return;
-
-    let remaining = proposals.length;
-    const wrap = h('div', { class: 'card p-4 mb-4 fade-in', style: 'border-color:var(--info);' });
-    wrap.appendChild(h('div', { class: 'micro mb-2 t-info', text: 'The assistant suggests linking what you just saved — confirm or skip' }));
-    proposals.forEach(p => {
-      wrap.appendChild(actionConfirmation({
-        action_type: 'add_evidence_link',
-        description: `Link to ${p.hypothesis_code} · ${p.hypothesis_title} — ${p.direction} (${p.strength}): ${p.note}`,
-        payload: {
-          hypothesis_id: p.hypothesis_id,
-          evidence_type: p.evidence_type,
-          evidence_id: p.evidence_id,
-          direction: p.direction,
-          strength: p.strength,
-          note: p.note,
-        },
-      }, {
-        rerender: false, // keep sibling proposals on screen
-        onDone: () => {
-          remaining -= 1;
-          if (remaining === 0) setTimeout(() => renderCurrentRoute(), 900);
-        },
-      }));
-    });
-    page.prepend(wrap);
-  } catch { /* fail soft — a proposal is a nicety, never worth an error after a save */ }
-}
-
-/* ------------------------------------------------------------
-   Minimal markdown for assessment briefs: ### headings, - bullets,
-   **bold**, paragraphs. Built with h()/textContent — user- and
-   model-supplied text never touches innerHTML.
-   ------------------------------------------------------------ */
-function inlineBold(text) {
-  const parts = [];
-  text.split(/\*\*(.+?)\*\*/g).forEach((part, i) => {
-    if (!part) return;
-    if (i % 2 === 1) parts.push(h('strong', { text: part }));
-    else parts.push(document.createTextNode(part));
-  });
-  return parts;
-}
-
-export function renderMarkdown(text) {
-  const root = h('div', { class: 'flex flex-col gap-3' });
-  const blocks = String(text || '').split(/\n\s*\n/);
-  blocks.forEach(block => {
-    const lines = block.split('\n').map(s => s.trim()).filter(Boolean);
-    if (!lines.length) return;
-    if (lines.every(s => s.startsWith('- '))) {
-      const ul = h('ul', { class: 'text-sm leading-relaxed', style: 'list-style:disc; padding-left:1.2em;' });
-      lines.forEach(s => ul.appendChild(h('li', {}, inlineBold(s.slice(2)))));
-      root.appendChild(ul);
+  openModal(editing ? 'Edit insight' : 'Write down a finding', fields, async (out) => {
+    if (!String(out.finding || '').trim()) {
+      alert('An insight needs its one sentence. That sentence is the whole record — everything else is supporting detail.');
       return;
     }
-    const m = lines[0].match(/^(#{1,4})\s+(.*)$/);
-    if (m) {
-      root.appendChild(h('div', { class: 'serif text-base mt-1', text: m[2] }));
-      const rest = lines.slice(1).join(' ');
-      if (rest) root.appendChild(h('p', { class: 'text-sm leading-relaxed' }, inlineBold(rest)));
-      return;
-    }
-    root.appendChild(h('p', { class: 'text-sm leading-relaxed' }, inlineBold(lines.join(' '))));
-  });
-  return root;
+    const row = {
+      question_id: questionIdFromOption(out.question_option),
+      direction: out.direction,
+      finding: out.finding.trim(),
+      quote: (out.quote || '').trim(),
+      source_kind: out.source_kind,
+      source_id: editing ? (src.source_id || sourceId) : sourceId,
+      source_label: (out.source_label || '').trim(),
+      owner: out.owner,
+      date: out.date || today(),
+    };
+    if (editing) await data.update('insights', insight.id, row);
+    else await data.create('insights', { ...row, source: 'human' });
+    STATE.insights = await data.list('insights');
+    closeModal();
+    if (afterSave) afterSave();
+    else renderCurrentRoute();
+  }, editing ? 'Save' : 'Save insight');
+}
+
+/* Every insight drawn from one particular record. */
+export function insightsForSource(kind, id, insights = STATE.insights) {
+  return insights.filter(i => i.source_kind === kind && String(i.source_id) === String(id));
+}
+
+/* One insight, rendered. Compact enough for a list, complete enough to
+   argue with: direction, the sentence, the quote, and where it came from. */
+export function insightCard(insight, { showQuestion = true, onEdit, onDelete } = {}) {
+  const q = STATE.questions.find(x => String(x.id) === String(insight.question_id));
+  const head = h('div', { class: 'flex flex-wrap items-center gap-1.5 mb-2' }, [
+    chip(insight.direction || 'Context', directionTone(insight.direction)),
+    showQuestion && q ? chip(q.ref, 'info') : null,
+    insight.source_kind ? chip(insight.source_kind, 'violet') : null,
+    insight.source === 'ai_confirmed' ? chip('AI-proposed, confirmed', 'line') : null,
+  ].filter(Boolean));
+
+  const body = h('div', {}, [
+    h('div', { class: 'text-sm', text: insight.finding || '' }),
+    insight.quote ? h('div', { class: 'quote-text mt-2', text: `“${insight.quote}”` }) : null,
+    h('div', { class: 'text-xs mt-2 t-mute', text: [insight.source_label, insight.owner, insight.date].filter(Boolean).join(' · ') || '—' }),
+  ].filter(Boolean));
+
+  const tools = (onEdit || onDelete) ? h('div', { class: 'flex gap-2 mt-2' }, [
+    onEdit ? h('button', { class: 'btn btn-ghost text-xs', onclick: onEdit }, 'Edit') : null,
+    onDelete ? h('button', { class: 'btn btn-ghost text-xs t-rose', onclick: onDelete }, 'Delete') : null,
+  ].filter(Boolean)) : null;
+
+  return h('div', { class: 'card card-pad' }, [head, body, tools].filter(Boolean));
+}
+
+/* The "attach a finding" button every source screen shows. One shape,
+   one label, everywhere. */
+export function addInsightButton(opts, label = 'Write down a finding') {
+  return h('button', { class: 'btn btn-line text-xs', onclick: () => insightModal(opts) }, label);
+}
+
+/* A compact "2 support · 1 challenges" line for a question. */
+export function evidenceTally(questionId) {
+  const e = evidenceFor(questionId);
+  const row = h('div', { class: 'flex flex-wrap gap-1.5' });
+  row.appendChild(chip(`${e.supports.length} support`, e.supports.length ? 'green' : 'line'));
+  row.appendChild(chip(`${e.challenges.length} challenge`, e.challenges.length ? 'rose' : 'line'));
+  if (e.context.length) row.appendChild(chip(`${e.context.length} context`, 'info'));
+  return row;
+}
+
+export async function deleteInsight(insight, after) {
+  openModal('Delete this insight?', [
+    { key: '_', el: h('div', { class: 'text-sm t-soft' }, [
+      h('div', { text: insight.finding || '' }),
+      h('div', { class: 'text-xs mt-2 t-mute', text: 'Deleting it removes it from the question it was attached to. This cannot be undone.' }),
+    ]) },
+  ], async () => {
+    await data.remove('insights', insight.id);
+    STATE.insights = await data.list('insights');
+    closeModal();
+    (after || renderCurrentRoute)();
+  }, 'Delete', { danger: true });
 }

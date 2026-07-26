@@ -1,202 +1,125 @@
-/* Overview — the command center.
-   One question: "Where does the project stand right now, and what needs me?" */
+/* Overview — one question: "What should we do today?"
+
+   It leads with what is wrong, not with what is going well. The totals are
+   there, but underneath. A dashboard that opens with a green number is a
+   dashboard nobody acts on. */
 import {
-  STATE, registerRoute, h, kpiCard, chip, statusTone, progressBar, emptyState,
-  loadingState, isUntaggedOverdue, isStalled, daysSince, fmtDate, go, loadAllData,
+  STATE, registerRoute, h, chip, kpiCard, emptyState, setPageActions,
+  evidenceFor, evidenceWeight, isStalled, conversationUnmined, factNeedsSource,
+  fmtDate, daysSince, prospectName, go,
 } from '../app.js';
-import { CURRENT_PHASE, PHASES, SEGMENTS } from '../config.js';
-import { data, aiAvailable } from '../data.js';
-import { latestAssessment, LEANING_TONE, buyerHypotheses, runAssessment } from '../evidence.js';
+import { CURRENT_STAGE, STAGES, PIPELINE_LIVE, questionTone, STALL_DAYS } from '../config.js';
+import { insightModal } from '../evidence.js';
 
 function renderOverview(page) {
-  if (!STATE.loaded) {
-    page.appendChild(h('div', { class: 'card' }, [loadingState()]));
-    return;
-  }
+  setPageActions(h('button', { class: 'btn btn-primary', onclick: () => insightModal({}) }, '+ Write down a finding'));
 
-  /* ---- Phase rail: 0→5, current highlighted, % of exit criteria met ---- */
-  const rail = h('div', { class: 'phase-rail mb-6' });
-  PHASES.forEach(p => {
-    const dels = STATE.deliverables.filter(d => d.phase === p.n);
-    const done = dels.filter(d => d.status === 'Complete').length;
-    const pct = dels.length ? Math.round((done / dels.length) * 100) : 0;
-    const cls = p.n < CURRENT_PHASE ? 'done' : p.n === CURRENT_PHASE ? 'current' : '';
-    rail.appendChild(h('div', { class: `phase-step ${cls}` }, [
-      h('div', { class: 'micro', text: `Phase ${p.n}` }),
-      h('div', { class: 'text-sm font-medium mt-0.5', text: p.name }),
-      h('div', { class: 'text-xs mt-1 num', text: dels.length ? `${pct}%` : '—' }),
-    ]));
-  });
-  page.appendChild(rail);
-
-  /* ---- KPI strip ---- */
-  const totalInterviews = STATE.interviews.length;
-  const tagged = STATE.interviews.filter(r => r.tagged_same_day === 'Y').length;
-  // Null (not 100) with zero interviews — an empty ledger must not report the
-  // same-day hard rule as "holding".
-  const taggedPct = totalInterviews ? Math.round((tagged / totalInterviews) * 100) : null;
-  const contacted = STATE.outreach.filter(r => ['Sent', 'Replied', 'Booked', 'Done'].includes(r.status)).length;
-  const booked = STATE.outreach.filter(r => ['Booked', 'Done'].includes(r.status)).length;
-  const themeCount = new Set(STATE.matrix.map(r => r.theme_tag).filter(Boolean)).size;
-
-  page.appendChild(h('div', { class: 'grid grid-cols-2 md:grid-cols-4 gap-4 mb-4' }, [
-    kpiCard('Interviews logged', totalInterviews, `target ${SEGMENTS.reduce((s, x) => s + x.target, 0)} by Phase 2 close`),
-    kpiCard('Same-day tagged', taggedPct == null ? '—' : `${taggedPct}%`,
-      taggedPct == null ? 'No interviews logged yet' : (taggedPct === 100 ? 'Hard rule holding' : 'Hard rule: must be 100%'),
-      taggedPct == null ? undefined : (taggedPct === 100 ? 'sage' : taggedPct >= 80 ? 'honey' : 'rose')),
-    kpiCard('Outreach contacted', contacted, `${booked} booked or done`),
-    kpiCard('Themes surfaced', themeCount, themeCount >= 8 ? 'Rich pool' : 'Build the matrix'),
+  const stage = STAGES.find(s => s.n === CURRENT_STAGE) || STAGES[0];
+  page.appendChild(h('div', { class: 'flex flex-wrap items-center gap-2 mb-4' }, [
+    chip(`Stage ${stage.n} · ${stage.name}`, 'green'),
+    h('span', { class: 'text-sm t-mute', text: stage.long }),
   ]));
 
-  /* ---- Decision pulse — judgment lives on the Decision Brief; this is a pointer ---- */
-  const latest = latestAssessment();
-  const strengthening = buyerHypotheses().filter(x => x.status === 'strengthening').length;
-  const weakening = buyerHypotheses().filter(x => x.status === 'weakening').length;
-  const pulse = h('div', { class: 'card p-4 mb-6 flex flex-wrap items-center gap-3' }, [
-    h('span', { class: 'micro t-mute', text: 'If we decided today' }),
-    latest
-      ? chip(latest.leaning, LEANING_TONE[latest.leaning] || 'line')
-      : chip('No assessment yet', 'line'),
-    h('span', { class: 'text-xs num t-mute', text: `${strengthening} strengthening · ${weakening} weakening` }),
-    h('button', { class: 'btn btn-ghost text-xs ml-auto', onclick: () => go('decision-brief') }, 'Open Decision Brief →'),
+  /* ---- 1 · What needs attention. The exceptions, first. ---- */
+  const unmined  = STATE.conversations.filter(c => conversationUnmined(c));
+  const stalled  = STATE.prospects.filter(isStalled);
+  const noSource = STATE.market_facts.filter(factNeedsSource);
+  const noNext   = STATE.prospects.filter(p => PIPELINE_LIVE.includes(p.status) && p.status !== 'To contact' && !String(p.next_step || '').trim());
+  const dueSoon  = STATE.prospects.filter(p => p.next_step_date && (daysSince(p.next_step_date) ?? -99) >= 0);
+  const emptyQs  = STATE.questions.filter(q => evidenceFor(q.id).all.length === 0 && q.status !== 'Parked');
+
+  const items = [];
+  if (unmined.length) items.push({ tone: 'rose', route: 'conversations',
+    text: `${unmined.length} conversation${unmined.length === 1 ? '' : 's'} with no finding written down. This is the one that costs you most — write them up before the memory goes.` });
+  if (noSource.length) items.push({ tone: 'rose', route: 'market',
+    text: `${noSource.length} market fact${noSource.length === 1 ? ' has' : 's have'} no source link. Fix or delete — an unsourced fact will eventually be quoted as if it were true.` });
+  if (dueSoon.length) items.push({ tone: 'gold', route: 'prospects',
+    text: `${dueSoon.length} next step${dueSoon.length === 1 ? ' is' : 's are'} due or overdue: ${dueSoon.slice(0, 3).map(p => p.company).join(', ')}${dueSoon.length > 3 ? '…' : ''}.` });
+  if (stalled.length) items.push({ tone: 'gold', route: 'prospects',
+    text: `${stalled.length} prospect${stalled.length === 1 ? ' has' : 's have'} gone quiet for ${STALL_DAYS}+ days. Chase or close them.` });
+  if (noNext.length) items.push({ tone: 'gold', route: 'prospects',
+    text: `${noNext.length} live prospect${noNext.length === 1 ? ' has' : 's have'} no next step written down.` });
+  if (emptyQs.length) items.push({ tone: 'info', route: 'questions',
+    text: `${emptyQs.map(q => q.ref).join(', ')} ${emptyQs.length === 1 ? 'has' : 'have'} no evidence at all. Aim the next conversation there.` });
+
+  const attention = h('div', { class: 'card card-pad mb-4' }, [
+    h('div', { class: 'card-title mb-3', text: 'What needs attention' }),
   ]);
-  page.appendChild(pulse);
-
-  /* ---- Three panels ---- */
-  const grid = h('div', { class: 'grid lg:grid-cols-3 gap-4' });
-
-  /* Panel 1 — this phase's exit criteria (a filtered view of deliverables) */
-  const phase = PHASES.find(p => p.n === CURRENT_PHASE);
-  const criteria = STATE.deliverables.filter(d => d.phase === CURRENT_PHASE);
-  const critPanel = h('div', { class: 'card' });
-  critPanel.appendChild(h('div', { class: 'px-5 pt-4 pb-3 border-b b-soft' }, [
-    h('div', { class: 'micro t-mute', text: `Phase ${CURRENT_PHASE} exit criteria` }),
-    h('div', { class: 'serif text-base mt-0.5', text: phase?.long || '' }),
-  ]));
-  const critList = h('div', { class: 'px-5 py-2' });
-  if (!criteria.length) {
-    critList.appendChild(emptyState('No deliverables defined for this phase.'));
+  if (!items.length) {
+    attention.appendChild(h('div', { class: 'text-sm t-soft', text: 'Nothing is flagged. Every conversation has a finding attached, every fact has a source, and every live prospect has a next step. Go and have another conversation.' }));
   } else {
-    criteria.forEach(d => {
-      const row = h('div', { class: 'py-2.5 border-b flex items-start justify-between gap-3 b-soft' }, [
-        h('div', { class: 'text-sm', text: d.deliverable, style: d.status === 'Complete' ? 'color:var(--ink-mute); text-decoration:line-through;' : '' }),
-        chip(d.status, statusTone(d.status)),
-      ]);
-      row.style.cursor = 'pointer';
-      row.title = d.evidence || '';
-      row.addEventListener('click', () => cycleDeliverable(d));
-      critList.appendChild(row);
+    items.forEach(i => {
+      attention.appendChild(h('button', {
+        class: `banner banner-${i.tone} mb-2 w-full text-left`,
+        onclick: () => go(i.route),
+      }, [h('span', { text: i.text })]));
     });
-    critList.lastChild.style.borderBottom = 'none';
   }
-  critPanel.appendChild(critList);
-  critPanel.appendChild(h('div', { class: 'px-5 pb-3 text-xs t-mute', text: 'Tap a criterion to advance its status.' }));
+  page.appendChild(attention);
 
-  /* Phase-exit review — an advisory gate, not a hard block. Advancing
-     CURRENT_PHASE stays a config change by design. */
-  const hasExitReview = STATE.ai_assessments.some(a => a.trigger === 'phase_exit' && a.phase === CURRENT_PHASE);
-  if (!hasExitReview) {
-    critPanel.appendChild(h('div', { class: 'px-5 pb-3' }, [
-      h('div', { class: 'banner banner-honey' }, [
-        h('span', { text: 'This phase has not had an exit review.' }),
-      ]),
-    ]));
+  /* ---- 2 · Where the five questions stand ---- */
+  const qs = [...STATE.questions].sort((a, b) => (a.sort || 0) - (b.sort || 0));
+  const qCard = h('div', { class: 'card card-pad mb-4' }, [
+    h('div', { class: 'flex items-baseline justify-between mb-3' }, [
+      h('div', { class: 'card-title', text: 'Where the five questions stand' }),
+      h('button', { class: 'btn btn-ghost text-xs', onclick: () => go('questions') }, 'Open →'),
+    ]),
+  ]);
+  if (!qs.length) {
+    qCard.appendChild(emptyState('No questions set.', 'Settings → Reset to the starting workspace restores the five from the research brief.'));
+  } else {
+    qs.forEach(q => {
+      const e = evidenceFor(q.id);
+      const w = evidenceWeight(q.id);
+      qCard.appendChild(h('div', { class: 'flex flex-wrap items-center gap-2 py-2 border-b b-soft' }, [
+        chip(q.ref || '—', 'info'),
+        h('span', { class: 'text-sm flex-1 min-w-[160px]', text: q.short || '' }),
+        chip(w.label, w.tone),
+        chip(q.status || 'Open', questionTone(q.status)),
+        h('span', { class: 'text-xs t-mute num', text: `${e.supports.length}↑ ${e.challenges.length}↓` }),
+      ]));
+    });
   }
-  if (aiAvailable) {
-    const exitBtn = h('button', { class: 'btn btn-line text-xs', onclick: async () => {
-      exitBtn.disabled = true;
-      exitBtn.textContent = 'Reviewing…';
-      try {
-        await runAssessment('phase_exit');
-        go('decision-brief');
-      } catch (e) {
-        exitBtn.disabled = false;
-        exitBtn.textContent = 'Run phase exit review';
-        alert('Exit review failed: ' + e.message);
-      }
-    } }, 'Run phase exit review');
-    critPanel.appendChild(h('div', { class: 'px-5 pb-4' }, [exitBtn]));
-  } else if (!hasExitReview) {
-    critPanel.appendChild(h('div', { class: 'px-5 pb-4 text-xs t-mute', text: 'Connect the assistant to run the exit review before advancing the phase.' }));
-  }
-  grid.appendChild(critPanel);
+  page.appendChild(qCard);
 
-  /* Panel 2 — saturation by segment */
-  const satPanel = h('div', { class: 'card' });
-  satPanel.appendChild(h('div', { class: 'px-5 pt-4 pb-3 border-b b-soft' }, [
-    h('div', { class: 'micro t-mute', text: 'Saturation by segment' }),
-    h('div', { class: 'serif text-base mt-0.5', text: 'Interview coverage' }),
-  ]));
-  const satList = h('div', { class: 'px-5 py-3' });
-  SEGMENTS.forEach(seg => {
-    const done = STATE.interviews.filter(r => r.segment === seg.name).length;
-    const pct = Math.min(100, Math.round((done / seg.target) * 100));
-    const color = done >= seg.target ? 'var(--sage)' : done >= seg.target / 2 ? 'var(--honey)' : 'var(--line)';
-    satList.appendChild(h('div', { class: 'mb-3' }, [
-      h('div', { class: 'flex justify-between text-xs mb-1' }, [
-        h('span', { text: seg.name }),
-        h('span', { class: 'num t-mute', text: `${done} / ${seg.target}` }),
-      ]),
-      progressBar(pct, color),
-    ]));
-  });
-  const satLink = h('button', { class: 'btn btn-ghost text-xs', onclick: () => go('saturation') }, 'Open saturation →');
-  satPanel.appendChild(satList);
-  satPanel.appendChild(h('div', { class: 'px-5 pb-3' }, [satLink]));
-  grid.appendChild(satPanel);
-
-  /* Panel 3 — needs attention (the exceptions, led by the hard rule) */
-  const attnPanel = h('div', { class: 'card' });
-  attnPanel.appendChild(h('div', { class: 'px-5 pt-4 pb-3 border-b b-soft' }, [
-    h('div', { class: 'micro t-mute', text: 'Needs attention' }),
-    h('div', { class: 'serif text-base mt-0.5', text: 'Problems first' }),
-  ]));
-  const attnList = h('div', { class: 'px-5 py-3 flex flex-col gap-2' });
-
-  const overdue = STATE.interviews.filter(isUntaggedOverdue);
-  overdue.forEach(r => {
-    const item = h('div', { class: 'banner banner-rose', style: 'cursor:pointer;' }, [
-      h('span', { text: `${r.interview_id} untagged for ${daysSince(r.date)} day${daysSince(r.date) === 1 ? '' : 's'} — tag it now` }),
-    ]);
-    item.addEventListener('click', () => go('interviews'));
-    attnList.appendChild(item);
-  });
-
-  const stalled = STATE.outreach.filter(isStalled);
-  stalled.forEach(r => {
-    const item = h('div', { class: 'banner banner-honey', style: 'cursor:pointer;' }, [
-      h('span', { text: `${r.name} (${r.status.toLowerCase()}) silent since ${fmtDate(r.first_contact)} — chase or close` }),
-    ]);
-    item.addEventListener('click', () => go('outreach'));
-    attnList.appendChild(item);
-  });
-
-  const blocked = STATE.deliverables.filter(d => d.phase === CURRENT_PHASE && d.status === 'Blocked');
-  blocked.forEach(d => {
-    attnList.appendChild(h('div', { class: 'banner banner-rose' }, [
-      h('span', { text: `Blocked: ${d.deliverable}` }),
-    ]));
-  });
-
-  if (!attnList.children.length) {
-    attnList.appendChild(h('div', { class: 'banner banner-info' }, [
-      h('span', { text: 'Nothing needs attention. Keep interviewing.' }),
-    ]));
-  }
-  attnPanel.appendChild(attnList);
-  grid.appendChild(attnPanel);
-
+  /* ---- 3 · The numbers, underneath ---- */
+  const live = STATE.prospects.filter(p => PIPELINE_LIVE.includes(p.status)).length;
+  const pilots = STATE.prospects.filter(p => p.status === 'Pilot').length;
+  const reactions = STATE.pricing_reactions.length;
+  const grid = h('div', { class: 'grid gap-3 mb-4', style: 'grid-template-columns:repeat(auto-fit,minmax(140px,1fr))' }, [
+    kpiCard('Conversations', STATE.conversations.length, 'the only real evidence'),
+    kpiCard('Findings', STATE.insights.length, 'attached to a question'),
+    kpiCard('Live prospects', live, `${pilots} at pilot`, pilots ? 'green' : undefined),
+    kpiCard('Price reactions', reactions, reactions ? 'to a real number' : 'nobody has seen a price yet', reactions ? undefined : 'gold'),
+    kpiCard('Facts with sources', STATE.market_facts.filter(f => !factNeedsSource(f)).length, `of ${STATE.market_facts.length}`),
+    kpiCard('Competitors', STATE.competitors.length, 'including the status quo'),
+  ]);
   page.appendChild(grid);
 
-  async function cycleDeliverable(d) {
-    const order = ['Not started', 'In progress', 'Complete', 'Blocked'];
-    const next = order[(order.indexOf(d.status) + 1) % order.length];
-    try {
-      await data.update('deliverables', d.id, { status: next });
-      await loadAllData();
-    } catch (e) { alert('Update failed: ' + e.message); }
+  /* ---- 4 · The last few things that happened ---- */
+  const recent = [
+    ...STATE.conversations.map(c => ({ date: c.date, text: `Talked to ${prospectName(c.prospect_id)}${c.person ? ' — ' + c.person : ''}`, route: 'conversations' })),
+    ...STATE.insights.map(i => ({ date: i.date, text: `Finding: ${String(i.finding || '').slice(0, 90)}`, route: 'insights' })),
+    ...STATE.pricing_reactions.map(r => ({ date: r.date, text: `${prospectName(r.prospect_id)} reacted "${r.reaction}" to a price`, route: 'pricing' })),
+    ...STATE.competitor_updates.map(u => ({ date: u.date, text: `Competitor update: ${String(u.note || '').slice(0, 90)}`, route: 'competitors' })),
+  ].filter(x => x.date).sort((a, b) => String(b.date).localeCompare(String(a.date))).slice(0, 8);
+
+  const recentCard = h('div', { class: 'card card-pad' }, [
+    h('div', { class: 'card-title mb-3', text: 'Lately' }),
+  ]);
+  if (!recent.length) {
+    recentCard.appendChild(h('div', { class: 'text-sm t-mute', text: 'Nothing recorded yet. The workspace starts with reference material only — the competitor set, the Kenyan rules to read, four pricing ideas and a starter target list. Everything else is yours to fill in.' }));
+  } else {
+    recent.forEach(r => recentCard.appendChild(h('button', {
+      class: 'flex items-baseline gap-3 py-2 border-b b-soft w-full text-left h-row',
+      onclick: () => go(r.route),
+    }, [
+      h('span', { class: 'text-xs t-mute num', style: 'min-width:56px', text: fmtDate(r.date) }),
+      h('span', { class: 'text-sm', text: r.text }),
+    ])));
   }
+  page.appendChild(recentCard);
 }
 
 registerRoute('overview', 'Overview', renderOverview,
-  'Where does the project stand, and what needs me today?');
+  'What should we do today?');

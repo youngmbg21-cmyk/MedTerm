@@ -3,7 +3,7 @@
    pattern for everything the AI suggests. The AI argues; it
    never decides: every AI-originated write lands here first,
    and only a human tap on Confirm sends it through data.js.
-   Used by the chat panel and by screens (link proposals).
+   Used by the chat panel and by screens.
    ============================================================ */
 import { STATE, h, renderCurrentRoute } from './app.js';
 import { data } from './data.js';
@@ -11,12 +11,12 @@ import { data } from './data.js';
 /* Which table each proposable action writes to. add_* creates;
    everything else patches by payload.id. */
 const TABLE_FOR_ACTION = {
-  add_interview: 'interviews',
-  add_matrix_entry: 'matrix',
-  update_deliverable: 'deliverables',
-  flag_quote: 'matrix',
-  add_evidence_link: 'evidence_links',
-  update_hypothesis_status: 'hypotheses',
+  add_insight: 'insights',
+  add_prospect: 'prospects',
+  add_market_fact: 'market_facts',
+  add_competitor_update: 'competitor_updates',
+  update_prospect: 'prospects',
+  update_question: 'questions',
 };
 
 /* Perform a confirmed action through data.js and refresh STATE.
@@ -27,8 +27,9 @@ export async function applyAction(action, { rerender = true } = {}) {
   if (!table) throw new Error(`Unknown action: ${action.action_type}`);
   if (action.action_type.startsWith('add')) {
     const payload = { ...action.payload };
-    // AI-proposed evidence links are always recorded as human-confirmed.
-    if (action.action_type === 'add_evidence_link') payload.source = 'ai_confirmed';
+    // Anything the assistant proposed is recorded as such, so the ledger
+    // always shows whether a human or the AI first wrote a row down.
+    payload.source = 'ai_confirmed';
     await data.create(table, payload);
   } else {
     const { id, ...patch } = action.payload;
@@ -51,7 +52,7 @@ export function actionConfirmation(action, { onDone, rerender = true } = {}) {
     try {
       await applyAction(action, { rerender });
       buttons.innerHTML = '';
-      buttons.appendChild(h('span', { class: 'chip chip-sage', text: 'Done' }));
+      buttons.appendChild(h('span', { class: 'chip chip-green', text: 'Done' }));
       onDone?.('confirmed');
     } catch (e) {
       buttons.innerHTML = '';
@@ -66,7 +67,7 @@ export function actionConfirmation(action, { onDone, rerender = true } = {}) {
   } }, 'Skip'));
 
   return h('div', { class: 'chat-msg bot action-card' }, [
-    h('div', { class: 'micro mb-2 t-clay', text: 'Proposed action' }),
+    h('div', { class: 'micro mb-2 t-bronze', text: 'Proposed action' }),
     h('div', { class: 'text-sm mb-3', text: action.description || JSON.stringify(action.payload) }),
     buttons,
   ]);

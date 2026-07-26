@@ -4,19 +4,19 @@
    Otherwise it shows a calm disabled state instead of erroring.
    ============================================================ */
 import { STATE, h, lockScroll, unlockScroll } from './app.js';
-import { CURRENT_PHASE, PHASES, SEGMENTS } from './config.js';
+import { CURRENT_STAGE, STAGES, SEGMENTS, PIPELINE_NAMES } from './config.js';
 import { aiAvailable, chatRequest, aiDataSlices } from './data.js';
 import { addActionConfirmation } from './actions.js';
 
 let currentSessionId = null;
 
 const QUICK_PROMPTS = [
-  ['Strategy read', 'Give me your current strategy read on whether this is viable enough to build. Reason across demand, willingness to pay, unit economics, trust/moat, and execution risk — pull the interviews, matrix, segment cards, economics, and evidence links first. Land on a leaning, say what it hinges on, and name the single most valuable piece of evidence we still lack.'],
-  ['Steel-man the risk', 'Argue the strongest case AGAINST building this. What is the most likely reason this fails, which kill criterion is closest to tripping, and what evidence in our own data supports the bear case? Be specific and cite it.'],
-  ['Economics stress-test', 'Stress-test the unit economics. Pull the economics rows, name the single assumption the whole case rests on, and tell me what would have to be true at the break-point for this to work. Flag any number that has no evidence behind it.'],
-  ['Compare segments', 'Compare the segments strategically using the segment cards and matrix. Which segment has the sharpest, best-paid pain — and which should we drop? Cite the pains and WTP signal per segment.'],
-  ['What now?', 'What is the single most important thing I should do today to de-risk the decision, given the state of the project? Be specific — name a person, a deliverable, or an interview.'],
-  ['Search the notes', 'Search all field notes and documents for the most important thing we have learned that is NOT yet reflected in the theme matrix or an evidence link. Quote the source and say what it implies strategically.'],
+  ['Where do we stand?', 'Read the whole workspace and tell me where the five questions actually stand. For each one: what the evidence says, how thin it is, and whether we are entitled to a leaning yet. Be blunt when the honest answer is "we do not know".'],
+  ['Argue against us', 'Argue the strongest case AGAINST taking HaTi to market as it stands. Use our own recorded evidence — conversations, competitor notes, market facts — and cite it. What is the most likely reason this fails?'],
+  ['What should I do today?', 'Given the state of the workspace, what is the single most useful thing to do today? Name a specific company, person or document. Prefer whatever would move the question with the least evidence behind it.'],
+  ['Pricing read', 'Look at the pricing ideas and every recorded reaction. Which model is holding up, which is dying, and what number would you put in front of the next prospect? Say plainly if there is not enough evidence to have a view.'],
+  ['Who is missing?', 'Look at the prospects and conversations against our segment targets. Which kind of company have we not talked to, and who should we be chasing that we are not?'],
+  ['Check my facts', 'Go through the market and regulation facts. Which are still unverified or unsourced, which ones actually decide something, and in what order should we check them?'],
 ];
 
 export function initChat() {
@@ -80,9 +80,9 @@ export function toggleChat(forceOpen) {
 
   if (!panel.classList.contains('closed') && document.getElementById('chat-messages').children.length === 0) {
     if (!aiAvailable) {
-      addChatMessage('bot', 'The assistant connects when AI_MODE is set to \'worker\' — it works with local data too. Everything else in the workspace works without it; see Settings for how to go live.');
+      addChatMessage('bot', 'The assistant is off. It turns on when AI_MODE is set to \'worker\' in js/config.js, and it works with local data too. Everything else in the workspace works without it.');
     } else {
-      addChatMessage('bot', 'Hi. I read your interviews, outreach, matrix, economics, segment cards, and the hypothesis board every time you ask — then reason from them like a strategy analyst, not just report them. Ask for a strategy read, stress-test the economics, or steel-man the risk. Try a quick action below, or type a question.');
+      addChatMessage('bot', 'Hi. I read your conversations, prospects, competitors, pricing tests and market facts every time you ask, and reason from them rather than just reporting them. Ask where the five questions stand, or ask me to argue against you. Try a quick action below, or type a question.');
     }
   }
 }
@@ -111,11 +111,12 @@ function addChatMessage(role, text) {
    dropped to a hairline, and the decision tokens GO / PIVOT / NO-GO /
    INSUFFICIENT become colored pills. */
 const LEANING_PILL = {
-  'GO':           { bg: '#E6EDE7', tx: '#3F5A4D' },
-  'NO-GO':        { bg: '#F6E3E3', tx: '#9A3F3F' },
-  'PIVOT':        { bg: '#F5E9CF', tx: '#755A1E' },
-  'INSUFFICIENT': { bg: '#F5E9CF', tx: '#755A1E' },
+  'GO':           { bg: '#E2EFE8', tx: '#0E4E34' },
+  'NO-GO':        { bg: '#F8E3E1', tx: '#94382F' },
+  'PIVOT':        { bg: '#F7EDD3', tx: '#74560F' },
+  'INSUFFICIENT': { bg: '#F7EDD3', tx: '#74560F' },
 };
+
 function renderRich(text) {
   const root = h('div', { class: 'chat-rich' });
   const lines = String(text || '').replace(/\r/g, '').split('\n');
@@ -188,79 +189,105 @@ function setTyping(on) {
   msgs.scrollTop = msgs.scrollHeight;
 }
 
-/* Compact context snapshot — summaries, not raw dumps. */
+/* Compact context snapshot — summaries, not raw dumps. The tools on the
+   backend can fetch detail; this is the shape of the workspace. */
 function buildDataContext() {
-  const phase = PHASES.find(p => p.n === CURRENT_PHASE);
+  const stage = STAGES.find(p => p.n === CURRENT_STAGE);
 
-  const segmentCounts = {};
-  STATE.interviews.forEach(r => { if (r.segment) segmentCounts[r.segment] = (segmentCounts[r.segment] || 0) + 1; });
+  const byStatus = {};
+  STATE.prospects.forEach(p => { const s = p.status || 'To contact'; byStatus[s] = (byStatus[s] || 0) + 1; });
 
-  const outreachByStatus = {};
-  STATE.outreach.forEach(r => { const s = r.status || 'Cold'; outreachByStatus[s] = (outreachByStatus[s] || 0) + 1; });
+  const bySegment = {};
+  const prospectById = Object.fromEntries(STATE.prospects.map(p => [String(p.id), p]));
+  STATE.conversations.forEach(c => {
+    const seg = (prospectById[String(c.prospect_id)] || {}).segment || 'unknown';
+    bySegment[seg] = (bySegment[seg] || 0) + 1;
+  });
 
-  const themes = {};
-  STATE.matrix.forEach(r => { if (r.theme_tag) themes[r.theme_tag] = (themes[r.theme_tag] || 0) + 1; });
-
-  const untagged = STATE.interviews.filter(r => r.tagged_same_day !== 'Y');
-
-  const highSevQuotes = STATE.matrix
-    .filter(r => +r.severity >= 4 && r.wtp === 'Y')
-    .slice(0, 12)
-    .map(r => `- [${r.theme_tag}] (${r.segment}, sev ${r.severity}, ${r.interview_id}) "${(r.quote || '').slice(0, 200)}"`)
-    .join('\n');
-
-  const criteria = STATE.deliverables
-    .filter(d => d.phase === CURRENT_PHASE)
-    .map(d => `- [${d.status}] ${d.deliverable}${d.evidence ? ` — ${d.evidence}` : ''}`)
-    .join('\n');
-
-  /* Hypothesis board — statuses live in the DB, never hardcoded. */
-  const hypLines = [...STATE.hypotheses]
-    .sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0))
-    .map(hyp => {
-      const links = STATE.evidence_links.filter(l => l.hypothesis_id === hyp.id);
-      const s = links.filter(l => l.direction === 'supports').length;
-      const c = links.filter(l => l.direction === 'contradicts').length;
-      return `- ${hyp.code} (${hyp.kind === 'kill_criterion' ? 'kill criterion' : 'buyer hypothesis'}) [${hyp.status}]: ${hyp.title} — ${hyp.description} (evidence: ${s} supporting, ${c} contradicting)`;
+  const questionLines = [...STATE.questions]
+    .sort((a, b) => (a.sort || 0) - (b.sort || 0))
+    .map(q => {
+      const mine = STATE.insights.filter(i => String(i.question_id) === String(q.id));
+      const sup = mine.filter(i => i.direction === 'Supports').length;
+      const ch = mine.filter(i => i.direction === 'Challenges').length;
+      return `- ${q.ref} [${q.status || 'Open'}]: ${q.short} (evidence: ${sup} supporting, ${ch} challenging)` +
+        (q.leaning ? `\n    our current read: ${q.leaning}` : '');
     }).join('\n');
 
-  const latestAssessment = [...STATE.ai_assessments]
-    .sort((a, b) => String(b.created_at).localeCompare(String(a.created_at)))[0];
+  const recentFindings = [...STATE.insights]
+    .sort((a, b) => String(b.date || '').localeCompare(String(a.date || '')))
+    .slice(0, 15)
+    .map(i => {
+      const q = STATE.questions.find(x => String(x.id) === String(i.question_id));
+      return `- [${q ? q.ref : '—'} · ${i.direction}] ${i.finding}${i.quote ? ` — quote: "${String(i.quote).slice(0, 180)}"` : ''} (${i.source_kind}: ${i.source_label || '—'})`;
+    }).join('\n');
 
-  return `Current phase: ${CURRENT_PHASE} — ${phase?.long}
+  const priceLines = STATE.pricing_ideas.map(idea => {
+    const rs = STATE.pricing_reactions.filter(r => String(r.pricing_idea_id) === String(idea.id));
+    const tally = rs.reduce((m, r) => { m[r.reaction] = (m[r.reaction] || 0) + 1; return m; }, {});
+    return `- ${idea.name} (${idea.model}, ${idea.price_low || '?'}–${idea.price_high || '?'} KES ${idea.unit || ''}) [${idea.status}] — reactions: ${Object.entries(tally).map(([k, n]) => `${k}=${n}`).join(', ') || 'none yet'}`;
+  }).join('\n');
 
-Exit criteria for this phase:
-${criteria || '(none defined)'}
+  const competitorLines = STATE.competitors
+    .map(c => `- ${c.name} (${c.type}, threat ${c.threat || 'unknown'}) — ${c.pricing_model || 'pricing unknown'}`)
+    .join('\n');
 
-Interviews logged: ${STATE.interviews.length}
-By segment: ${Object.entries(segmentCounts).map(([s, n]) => `${s}=${n}`).join(', ') || 'none yet'}
+  const factLines = STATE.market_facts
+    .map(f => `- [${f.category} · ${f.strength}] ${f.claim}${f.value ? ` (${f.value})` : ''}${f.source_url ? ` — source: ${f.source_url}` : ' — NO SOURCE LINK'}`)
+    .join('\n');
+
+  const unmined = STATE.conversations.filter(c => {
+    const has = STATE.insights.some(i => i.source_kind === 'Conversation' && String(i.source_id) === String(c.id));
+    return !has;
+  }).length;
+
+  return `HaTi Research — a go-to-market research workspace for two founders taking HaTi,
+a Kenyan contract lifecycle management platform, to market.
+
+Current stage: ${CURRENT_STAGE} — ${stage?.long}
+
+THE FIVE QUESTIONS (the spine of this workspace — everything exists to move one):
+${questionLines || '(no questions defined)'}
+
+Conversations logged: ${STATE.conversations.length}
+By segment: ${Object.entries(bySegment).map(([s, n]) => `${s}=${n}`).join(', ') || 'none yet'}
 Segment targets: ${SEGMENTS.map(s => `${s.name}=${s.target}`).join(', ')}
-Untagged interviews (violates same-day hard rule): ${untagged.length}${untagged.length ? ' (' + untagged.map(r => r.interview_id).join(', ') + ')' : ''}
+Conversations with NO finding written down: ${unmined} (this is the workspace's most important data-quality rule)
 
-Outreach status: ${Object.entries(outreachByStatus).map(([s, n]) => `${s}=${n}`).join(', ') || 'none yet'}
-Total outreach records: ${STATE.outreach.length}
+Prospects: ${STATE.prospects.length} — ${PIPELINE_NAMES.map(s => `${s}=${byStatus[s] || 0}`).join(', ')}
 
-Matrix: ${STATE.matrix.length} quotes tagged.
-Theme frequencies: ${Object.entries(themes).sort((a, b) => b[1] - a[1]).slice(0, 15).map(([t, n]) => `${t}=${n}`).join(', ') || 'none yet'}
+Findings recorded: ${STATE.insights.length}. Most recent:
+${recentFindings || '(none yet)'}
 
-High-severity WTP quotes (up to 12):
-${highSevQuotes || '(none yet)'}
+Pricing ideas and how prospects reacted:
+${priceLines || '(none)'}
 
-Kill list entries: ${STATE.kill_list.length}
-Field checks: ${STATE.field_checks.length}
+Competitors:
+${competitorLines || '(none)'}
 
-Hypothesis board (${STATE.evidence_links.length} evidence links total):
-${hypLines || '(no hypotheses defined)'}
-Latest AI assessment: ${latestAssessment ? `${latestAssessment.leaning} (${String(latestAssessment.created_at).slice(0, 10)}, trigger: ${latestAssessment.trigger})` : 'none yet'}
+Market and regulation facts:
+${factLines || '(none)'}
 
-Field notes coverage: ${STATE.interviews.filter(r => r.notes_markdown).length} of ${STATE.interviews.length} interviews have full field notes.
-Documents on file: ${STATE.documents.length}${STATE.documents.length ? ' — ' + STATE.documents.slice(0, 20).map(d => `${d.filename}${d.interview_id ? ` (${d.interview_id})` : ''}`).join(', ') : ''}
+Rules for you:
+- This workspace is deliberately empty of invented evidence. If there are no conversations,
+  the honest answer is that we do not know yet — say so plainly rather than reasoning from
+  the seeded reference material as if it were research.
+- Never invent a quote, a company, a price a prospect gave, or a number of conversations.
+  Every specific must be traceable to a record above.
+- Cite what you use: the question reference (Q1…Q5), the company, the source name.
+- No confidence percentages. A leaning plus what would change it.
+- You argue; the two founders decide. Every action you propose is confirmed by a human.`;
+}
 
-You have tools to reach EVERYTHING in this workspace: search_notes (full-text across
-interview field notes, outreach notes, matrix quotes, deliverable evidence, and document
-contents), query_* tools for structured records, list_documents, and read_document (returns
-a document's full contents). When a question could be answered by notes or documents,
-search before answering — never say you lack access to the team's notes.`;
+/* With local data the app opens without a login; the assistant is the first
+   thing that genuinely needs one, so it asks here, through the same Supabase
+   magic-link flow the shared-data mode uses at boot. */
+let signedIn = false;
+async function ensureSignedIn() {
+  if (signedIn) return;
+  const { requireLogin } = await import('./auth.js');
+  await requireLogin();
+  signedIn = true;
 }
 
 export async function sendChat(userText) {
@@ -278,6 +305,7 @@ export async function sendChat(userText) {
   if (sendBtn) sendBtn.disabled = true;
 
   try {
+    await ensureSignedIn();
     const res = await chatRequest({
       messages: STATE.chatHistory,
       dataContext: buildDataContext(),

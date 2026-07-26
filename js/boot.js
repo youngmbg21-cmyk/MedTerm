@@ -1,11 +1,9 @@
-/* Desktop entry — larger screens keep the original workspace exactly as it
-   was before the mobile redesign: sidebar shell, Tailwind utilities, theme.css,
-   the app router, all screen modules, and the assistant panel. index.html
-   picks this on viewports wider than a phone; phones get boot-mobile.js.
+/* Entry point. Builds the shell, loads the stylesheet and every screen, then
+   starts the router. One app for laptop and phone — the sidebar collapses to a
+   drawer below 900px, so nothing here branches on screen size.
 
-   Assets and shell are set up here (not in static HTML) so a phone never
-   downloads the desktop stylesheet or Tailwind, and so #modal-root exists in
-   the DOM before app.js — whose top-level code observes it — is imported. */
+   Assets and shell are set up here (not in static HTML) so #modal-root exists
+   in the DOM before app.js — whose top-level code observes it — is imported. */
 
 function loadStylesheet(href) {
   return new Promise((resolve) => {
@@ -27,10 +25,10 @@ const SHELL = `
 <div id="mobile-overlay" class="mobile-overlay"></div>
 <aside id="sidebar" class="sidebar-nav" aria-label="Main navigation">
   <div class="wordmark">
-    <div class="wordmark-badge"><span class="serif">M</span></div>
+    <div class="wordmark-badge"><span class="serif">H</span></div>
     <div>
-      <div class="wordmark-name serif">MedTerminal</div>
-      <div class="wordmark-sub micro">Research Workspace</div>
+      <div class="wordmark-name serif">HaTi Research</div>
+      <div class="wordmark-sub micro">Go-to-market</div>
     </div>
   </div>
   <nav id="nav-root" class="nav-scroll"></nav>
@@ -38,7 +36,7 @@ const SHELL = `
     <button class="btn btn-line" id="open-chat-btn"><span>💬</span><span>Assistant</span></button>
     <div class="sidebar-foot-row">
       <a class="nav-foot-link" id="settings-link" href="#settings">Settings</a>
-      <span class="micro t-mute" id="version-tag" title="If this doesn't match the latest release, hard-refresh — the browser is serving cached files.">v0.4</span>
+      <span class="micro t-mute" id="version-tag" title="If this doesn't match the latest release, hard-refresh — the browser is serving cached files.">v1.0</span>
     </div>
   </div>
 </aside>
@@ -67,7 +65,7 @@ const SHELL = `
   <div class="px-5 py-4 border-b flex items-center justify-between" style="border-color:var(--line-soft);">
     <div>
       <div class="serif text-lg leading-none">Research assistant</div>
-      <div class="micro mt-1" style="color:var(--ink-mute);">Reads your data · advises next steps</div>
+      <div class="micro mt-1" style="color:var(--ink-mute);">Reads your workspace · argues with you</div>
     </div>
     <div class="flex items-center gap-2">
       <button class="btn btn-ghost text-xs" id="clear-chat-btn" title="Clear conversation">Clear</button>
@@ -78,14 +76,14 @@ const SHELL = `
   <div id="chat-quick" class="px-5 py-3 border-t flex flex-wrap gap-2" style="border-color:var(--line-soft);"></div>
   <div class="px-5 py-4 border-t" style="border-color:var(--line-soft);">
     <div class="flex gap-2 items-end">
-      <textarea id="chat-input" class="textarea" rows="2" placeholder="Ask anything about the project state…"></textarea>
+      <textarea id="chat-input" class="textarea" rows="2" placeholder="Ask anything about the research…"></textarea>
       <button class="btn btn-primary" id="send-chat-btn">Send</button>
     </div>
   </div>
 </aside>
 <div id="modal-root"></div>`;
 
-async function bootDesktop() {
+async function boot() {
   // Styling first so the shell paints correctly; then the DOM shell; then the
   // app (whose module top-level touches #modal-root, so it must exist by now).
   await loadStylesheet('./css/theme.css');
@@ -97,17 +95,22 @@ async function bootDesktop() {
   const { initChat } = await import('./chat.js');
 
   await Promise.all([
-    import('./screens/overview.js'), import('./screens/decision-brief.js'), import('./screens/outreach.js'),
-    import('./screens/interviews.js'), import('./screens/matrix.js'), import('./screens/saturation.js'),
-    import('./screens/scripts.js'), import('./screens/templates.js'), import('./screens/manual.js'),
-    import('./screens/sensemaking.js'), import('./screens/economics.js'), import('./screens/decision.js'),
-    import('./screens/reports.js'), import('./screens/documents.js'), import('./screens/settings.js'),
+    import('./screens/overview.js'),
+    import('./screens/questions.js'),
+    import('./screens/competitors.js'),
+    import('./screens/prospects.js'),
+    import('./screens/conversations.js'),
+    import('./screens/pricing.js'),
+    import('./screens/market.js'),
+    import('./screens/insights.js'),
+    import('./screens/settings.js'),
   ]);
 
   document.getElementById('hamburger-btn').addEventListener('click', openSidebar);
   document.getElementById('mobile-overlay').addEventListener('click', closeSidebar);
 
-  // Hidden admin door: five quick taps on the wordmark → admin.html.
+  // Hidden admin door: five quick taps on the wordmark → admin.html, where the
+  // Claude API key is set. Unchanged from how it has always worked.
   let wordmarkTaps = 0, wordmarkTimer = null;
   document.querySelector('.wordmark').addEventListener('click', () => {
     wordmarkTaps++;
@@ -125,11 +128,16 @@ async function bootDesktop() {
   if (!location.hash) location.hash = 'overview';
   renderCurrentRoute();
 
-  if (DATA_MODE === 'api' || AI_MODE === 'worker') {
+  /* Sign-in is required up front only when the data itself lives in Supabase.
+     With local data the workspace opens straight away and stays fully usable;
+     the assistant asks for a sign-in the first time you actually use it
+     (js/chat.js), through the same Supabase login as always. */
+  if (DATA_MODE === 'api') {
     const { requireLogin } = await import('./auth.js');
     await requireLogin();
   }
+  void AI_MODE;
   await loadAllData();
 }
 
-bootDesktop();
+boot();

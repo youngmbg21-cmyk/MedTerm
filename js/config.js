@@ -3,10 +3,14 @@
    No screen may define its own copy of anything in this file.
    ============================================================ */
 
-/* 'local' — data lives in localStorage, seeded with demo data, zero credentials.
-   'api'   — data lives in Supabase via the claude-proxy Edge Function; every
-             active team member shares one synced workspace (requires login). */
-export const DATA_MODE = 'api';
+/* 'local' — data lives in this browser's storage, seeded with a starting
+             workspace, zero credentials. This is the default so the app
+             opens and works immediately.
+   'api'   — data is shared between Young and Simon through Supabase.
+             BEFORE switching this to 'api': run sql/schema.sql in the
+             Supabase SQL editor and redeploy the claude-proxy function
+             (see HANDOFF.md). Then change the one word below. */
+export const DATA_MODE = 'local';
 
 /* Your unique Supabase Connection Credentials */
 export const SUPABASE_URL = 'https://qezefhbywzvhgcavnopu.supabase.co';
@@ -20,64 +24,153 @@ export const AI_MODE = 'worker';
 
 /* Bumped whenever the exported-backup shape changes incompatibly. Import
    checks this before touching any data — see js/data.js importAll(). */
-export const SCHEMA_VERSION = 1;
+export const SCHEMA_VERSION = 2;
 
 /* ------------------------------------------------------------
-   Phases — the app's spine. CURRENT_PHASE drives nav gating.
+   The programme — five stages of going to market. STAGE drives
+   nothing except the label on the Overview; every screen is
+   always available, because research does not run in a line.
    ------------------------------------------------------------ */
-export const CURRENT_PHASE = 1;
+export const CURRENT_STAGE = 1;
 
-export const PHASES = [
-  { n: 0, name: 'Foundation',   long: 'Foundation & onboarding' },
-  { n: 1, name: 'Outreach',     long: 'Outreach & recruitment' },
-  { n: 2, name: 'Interviews',   long: 'Qualitative interviews' },
-  { n: 3, name: 'Sense-making', long: 'Sense-making' },
-  { n: 4, name: 'Economics',    long: 'Economics' },
-  { n: 5, name: 'Decision',     long: 'Decision' },
+export const STAGES = [
+  { n: 0, name: 'Setting up',   long: 'Workspace set up, questions agreed' },
+  { n: 1, name: 'Talking',      long: 'Discovery conversations with prospects' },
+  { n: 2, name: 'Pricing',      long: 'Testing what people will pay' },
+  { n: 3, name: 'Deciding',     long: 'Answering the five questions' },
+  { n: 4, name: 'Selling',      long: 'First paid pilots' },
 ];
 
 /* ------------------------------------------------------------
-   Segments — name + interview target, used by every dropdown,
-   filter, and the saturation screen. ONE definition.
+   PIPELINE — the one status ladder a prospect climbs. Used by
+   every dropdown, filter and board. ONE definition.
+   ------------------------------------------------------------ */
+export const PIPELINE = [
+  { name: 'To contact', tone: 'line',  hint: 'On the list, not yet approached' },
+  { name: 'Contacted',  tone: 'info',  hint: 'Reached out, waiting on a reply' },
+  { name: 'Talked',     tone: 'violet', hint: 'Had a real conversation' },
+  { name: 'Interested', tone: 'gold',  hint: 'Wants to see more, or asked about price' },
+  { name: 'Pilot',      tone: 'green', hint: 'Agreed to try it — paid or unpaid' },
+  { name: 'Not a fit',  tone: 'rose',  hint: 'Closed out, with the reason written down' },
+];
+export const PIPELINE_NAMES = PIPELINE.map(s => s.name);
+export const PIPELINE_LIVE = ['To contact', 'Contacted', 'Talked', 'Interested', 'Pilot'];
+export const pipelineTone = (s) => (PIPELINE.find(p => p.name === s) || {}).tone || 'line';
+
+/* Prospects in these statuses with no movement for this many days
+   count as "going cold" on the Overview needs-attention panel. */
+export const STALL_DAYS = 14;
+
+/* ------------------------------------------------------------
+   Prospect segments — the three tiers from RESEARCH_BRIEF.md.
+   `target` is how many conversations we want in each tier.
    ------------------------------------------------------------ */
 export const SEGMENTS = [
-  { name: 'Patient',          target: 8 },
-  { name: 'Caregiver',        target: 6 },
-  { name: 'Referring doctor', target: 4 },
-  { name: 'Hospital IPD',     target: 5 },
-  { name: 'Aggregator',       target: 3 },
-  { name: 'Agent',            target: 4 },
-  { name: 'Insurance broker', target: 2 },
-  { name: 'Diaspora family',  target: 4 },
+  { name: 'Mid-size corporate',  target: 8, hint: 'FMCG, manufacturing, logistics, agri — 100+ live contracts, 1–3 legal staff' },
+  { name: 'High-volume, thin legal', target: 5, hint: 'Insurance, SACCO, hospital group, schools, NGOs' },
+  { name: 'Law firm / counsel',  target: 4, hint: 'Boutique firms and independent counsel — the services wedge' },
+  { name: 'Enterprise',          target: 2, hint: 'Banks, telcos, multinationals — slow, but worth listening to' },
 ];
 export const SEGMENT_NAMES = SEGMENTS.map(s => s.name);
 
+export const SECTORS = ['FMCG / manufacturing', 'Logistics & warehousing', 'Agri-processing',
+  'Insurance & brokerage', 'Banking & SACCO', 'Healthcare', 'Education', 'Real estate & property',
+  'NGO / donor-funded', 'Professional services', 'Technology', 'Other'];
+
+export const CHANNELS = ['Intro / referral', 'Email', 'LinkedIn', 'WhatsApp', 'Phone',
+  'In person', 'Event', 'Inbound'];
+
 /* ------------------------------------------------------------
-   Theme taxonomy
+   Competitors
    ------------------------------------------------------------ */
-export const THEMES = [
-  'Discovery — WhatsApp/personal', 'Discovery — search/online', 'Discovery — broker/agent', 'Discovery — doctor referral',
-  'Trust — doctor reputation', 'Trust — price clarity', 'Trust — speed of reply', 'Trust — accreditation',
-  'Friction — slow response', 'Friction — paperwork', 'Friction — language', 'Friction — money transfer', 'Friction — quote chasing',
-  'Pain — financial', 'Pain — emotional', 'Pain — coordination', 'Pain — outcome',
-  'Money — willingness to pay', 'Money — broker commission', 'Money — insurance',
-  'Buyer — family abroad', 'Buyer — Nairobi family', 'Buyer — Hospital IPD',
-  'Aftercare — finding follow-up care', 'Aftercare — records back home', 'Aftercare — complications & readmission',
+export const COMPETITOR_TYPES = [
+  'Global CLM',
+  'E-signature',
+  'Regional / African',
+  'Kenyan / local',
+  'Adjacent tool',
+  'Status quo',
 ];
 
-export const OUTREACH_STATUSES = ['Cold', 'Sent', 'Replied', 'Booked', 'Done', 'Declined'];
-export const CHANNELS = ['LinkedIn', 'Email', 'In-person', 'Phone', 'WhatsApp', 'Facebook'];
+/* ------------------------------------------------------------
+   Pricing
+   ------------------------------------------------------------ */
+export const PRICING_MODELS = [
+  'Per seat / month',
+  'Flat workspace / month',
+  'Per contract',
+  'Onboarding fee (one-off)',
+  'Services retainer',
+  'Free tier + paid upgrade',
+];
 
-/* Outreach contacts in these statuses with no movement for this many
-   days count as "stalled" on the Overview needs-attention panel. */
-export const STALL_DAYS = 10;
+export const REACTIONS = [
+  { name: 'Too expensive', tone: 'rose' },
+  { name: 'About right',   tone: 'green' },
+  { name: 'Cheap',         tone: 'gold' },
+  { name: 'Wrong shape',   tone: 'violet' },
+  { name: 'Could not say', tone: 'line' },
+];
+export const REACTION_NAMES = REACTIONS.map(r => r.name);
+export const reactionTone = (r) => (REACTIONS.find(x => x.name === r) || {}).tone || 'line';
 
 /* ------------------------------------------------------------
-   Team — two roles, editable display names. Nothing outside this
-   block may hardcode a person's name.
+   Market & regulation facts. Every fact carries a source link —
+   that rule is enforced in the form, not just asked for.
    ------------------------------------------------------------ */
-const TEAM_LS_KEY = 'medterm_team_v1';
-const TEAM_DEFAULTS = { lead: 'Young', field: 'Simon' };
+export const FACT_CATEGORIES = [
+  'Market size',
+  'Data Protection Act',
+  'Stamp duty',
+  'E-signature law',
+  'Tax & procurement',
+  'Competitor pricing',
+  'Industry data',
+  'Other',
+];
+
+/* How much weight a fact carries. Deliberately words, never a percentage —
+   a number here would be false precision. */
+export const FACT_STRENGTH = [
+  { name: 'Primary source', tone: 'green',  hint: 'The law, the regulator, the company itself' },
+  { name: 'Reported',       tone: 'info',   hint: 'Reputable secondary reporting' },
+  { name: 'Estimate',       tone: 'gold',   hint: 'Someone\'s calculation, including ours' },
+  { name: 'Needs checking', tone: 'rose',   hint: 'Heard it, have not verified it' },
+];
+export const FACT_STRENGTH_NAMES = FACT_STRENGTH.map(f => f.name);
+export const factStrengthTone = (s) => (FACT_STRENGTH.find(f => f.name === s) || {}).tone || 'line';
+
+/* ------------------------------------------------------------
+   Insights — the link between a finding and a question.
+   ------------------------------------------------------------ */
+export const DIRECTIONS = [
+  { name: 'Supports',  tone: 'green' },
+  { name: 'Challenges', tone: 'rose' },
+  { name: 'Context',   tone: 'info' },
+];
+export const DIRECTION_NAMES = DIRECTIONS.map(d => d.name);
+export const directionTone = (d) => (DIRECTIONS.find(x => x.name === d) || {}).tone || 'line';
+
+/* Where an insight came from. Keeps the ledger honest about whether a
+   finding is grounded in a conversation or is someone's hunch. */
+export const EVIDENCE_KINDS = ['Conversation', 'Competitor', 'Market fact', 'Pricing test', 'Our own thinking'];
+
+/* A question's standing. Never a score — a leaning plus what would move it. */
+export const QUESTION_STATUS = [
+  { name: 'Open',      tone: 'line',  hint: 'No real evidence either way yet' },
+  { name: 'Leaning',   tone: 'gold',  hint: 'Evidence is pointing somewhere, not enough to act on' },
+  { name: 'Answered',  tone: 'green', hint: 'We know enough to decide, and we have written down why' },
+  { name: 'Parked',    tone: 'info',  hint: 'Deliberately not chasing this right now' },
+];
+export const QUESTION_STATUS_NAMES = QUESTION_STATUS.map(q => q.name);
+export const questionTone = (s) => (QUESTION_STATUS.find(q => q.name === s) || {}).tone || 'line';
+
+/* ------------------------------------------------------------
+   Team — two founders, editable display names. Nothing outside
+   this block may hardcode a person's name.
+   ------------------------------------------------------------ */
+const TEAM_LS_KEY = 'hati_team_v1';
+const TEAM_DEFAULTS = { lead: 'Young', partner: 'Simon' };
 
 let teamCache = null;
 const teamListeners = [];
@@ -100,5 +193,5 @@ export function setTeam(patch) {
 export function onTeamChange(fn) { teamListeners.push(fn); }
 
 /* People options for dropdowns. */
-export function interviewerOptions() { const t = getTeam(); return [t.lead, t.field]; }
-export function ownerOptions()       { const t = getTeam(); return [t.lead, t.field, 'Joint']; }
+export function teamOptions()  { const t = getTeam(); return [t.lead, t.partner]; }
+export function ownerOptions() { const t = getTeam(); return [t.lead, t.partner, 'Both']; }
