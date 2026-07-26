@@ -560,14 +560,6 @@ table.data.sticky-head thead th { position: sticky; top: 0; background: var(--su
 .chat-rich .chat-quote { border-left: 3px solid #ECDCB6; background: #FBF3DF; color: #5A4A24; padding: 8px 12px; border-radius: 8px; font-size: 13px; line-height: 20px; }
 .chat-rich .chat-code { font-family: ui-monospace, Menlo, monospace; font-size: 12.5px; background: var(--surface-inset); border: 1px solid var(--line-soft); border-radius: 4px; padding: 1px 5px; }
 .chat-rich .chat-pill { display: inline-block; font-weight: 600; font-size: 12.5px; padding: 1px 8px; border-radius: 999px; white-space: nowrap; }
-.quick-action {
-  min-height: 32px; padding: 5px 12px; font-size: 12px; line-height: 16px; border-radius: 999px;
-  background: var(--surface-card); border: 1px solid var(--line); color: var(--ink-soft);
-  cursor: pointer; transition: background-color var(--ease), color var(--ease), border-color var(--ease);
-}
-.quick-action:hover { background: var(--green-soft); color: var(--green-text); border-color: var(--green); }
-.quick-action:disabled { opacity: 0.5; cursor: not-allowed; }
-.quick-action:disabled:hover { background: var(--surface-card); color: var(--ink-soft); border-color: var(--line); }
 /* Proposed-action cards span the panel; they are cards of work, not speech */
 .chat-msg.action-card { max-width: 100%; }
 .typing-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--ink-mute); animation: blink 1.4s infinite both; }

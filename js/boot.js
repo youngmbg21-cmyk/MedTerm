@@ -73,7 +73,6 @@ const SHELL = `
     </div>
   </div>
   <div id="chat-messages" class="flex-1 overflow-y-auto px-5 py-4 flex flex-col gap-3"></div>
-  <div id="chat-quick" class="px-5 py-3 border-t flex flex-wrap gap-2" style="border-color:var(--line-soft);"></div>
   <div class="px-5 py-4 border-t" style="border-color:var(--line-soft);">
     <div class="flex gap-2 items-end">
       <textarea id="chat-input" class="textarea" rows="2" placeholder="Ask anything about the research…"></textarea>

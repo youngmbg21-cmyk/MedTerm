@@ -10,15 +10,6 @@ import { addActionConfirmation } from './actions.js';
 
 let currentSessionId = null;
 
-const QUICK_PROMPTS = [
-  ['Where do we stand?', 'Read the whole workspace and tell me where the five questions actually stand. For each one: what the evidence says, how thin it is, and whether we are entitled to a leaning yet. Be blunt when the honest answer is "we do not know".'],
-  ['Argue against us', 'Argue the strongest case AGAINST taking HaTi to market as it stands. Use our own recorded evidence — conversations, competitor notes, market facts — and cite it. What is the most likely reason this fails?'],
-  ['What should I do today?', 'Given the state of the workspace, what is the single most useful thing to do today? Name a specific company, person or document. Prefer whatever would move the question with the least evidence behind it.'],
-  ['Pricing read', 'Look at the pricing ideas and every recorded reaction. Which model is holding up, which is dying, and what number would you put in front of the next prospect? Say plainly if there is not enough evidence to have a view.'],
-  ['Who is missing?', 'Look at the prospects and conversations against our segment targets. Which kind of company have we not talked to, and who should we be chasing that we are not?'],
-  ['Check my facts', 'Go through the market and regulation facts. Which are still unverified or unsourced, which ones actually decide something, and in what order should we check them?'],
-];
-
 export function initChat() {
   document.getElementById('open-chat-btn').addEventListener('click', () => toggleChat());
   document.getElementById('chat-fab')?.addEventListener('click', () => toggleChat(true));
@@ -35,15 +26,6 @@ export function initChat() {
   window.matchMedia('(max-width: 1024px)').addEventListener('change', () => {
     const panel = document.getElementById('chat-panel');
     syncChatScrollLock(!panel.classList.contains('closed'));
-  });
-
-  const quick = document.getElementById('chat-quick');
-  QUICK_PROMPTS.forEach(([label, prompt]) => {
-    quick.appendChild(h('button', {
-      class: 'quick-action',
-      disabled: aiAvailable ? null : '',
-      onclick: () => { if (aiAvailable) { toggleChat(true); sendChat(prompt); } },
-    }, label));
   });
 
   if (!aiAvailable) {
@@ -84,7 +66,7 @@ export function toggleChat(forceOpen) {
     if (!aiAvailable) {
       addChatMessage('bot', 'The assistant is off. It turns on when AI_MODE is set to \'worker\' in js/config.js, and it works with local data too. Everything else in the workspace works without it.');
     } else {
-      addChatMessage('bot', 'Hi. I read your conversations, prospects, competitors, pricing tests and market facts every time you ask, and reason from them rather than just reporting them. Ask where the five questions stand, or ask me to argue against you. Try a quick action below, or type a question.');
+      addChatMessage('bot', 'Hi. I read your conversations, prospects, competitors, pricing tests and market facts every time you ask, and reason from them rather than just reporting them. Ask me anything about the research.');
     }
   }
 }
