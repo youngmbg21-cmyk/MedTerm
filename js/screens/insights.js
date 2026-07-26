@@ -18,7 +18,7 @@ function renderInsights(page) {
   const qs = [...STATE.questions].sort((a, b) => (a.sort || 0) - (b.sort || 0));
 
   /* The board: every question with its tally, tappable as a filter. */
-  const board = h('div', { class: 'grid gap-3 mb-4', style: 'grid-template-columns:repeat(auto-fit,minmax(220px,1fr))' });
+  const board = h('div', { class: 'grid gap-3 mb-4', style: 'display:grid;gap:12px;grid-template-columns:repeat(auto-fit,minmax(220px,1fr))' });
   qs.forEach(q => {
     const e = evidenceFor(q.id);
     const selected = view.question === String(q.id);

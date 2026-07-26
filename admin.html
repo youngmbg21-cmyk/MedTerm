@@ -3,16 +3,16 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width,initial-scale=1" />
-<title>MedTerminal — Admin</title>
+<title>HaTi Research — Admin</title>
 <script src="https://cdn.tailwindcss.com"></script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,300;9..144,400;9..144,500;9..144,600&family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;700&family=Inter:wght@400;500&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="css/theme.css">
 <style>
   .admin-wrap { max-width: 480px; margin: 80px auto; padding: 0 20px; }
   .status-dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
-  .status-dot.active { background: var(--sage); }
+  .status-dot.active { background: var(--green); }
   .status-dot.inactive { background: var(--rose); }
 </style>
 </head>
@@ -148,7 +148,7 @@
       msgEl.style.color = 'var(--rose)';
       msgEl.textContent = error.message;
     } else {
-      msgEl.style.color = 'var(--sage-deep)';
+      msgEl.style.color = 'var(--green-text)';
       msgEl.textContent = 'Check your email for the magic link.';
     }
   });
@@ -212,7 +212,7 @@
       msgEl.style.color = 'var(--rose)';
       msgEl.textContent = `Save failed: ${error.message}`;
     } else {
-      msgEl.style.color = 'var(--sage-deep)';
+      msgEl.style.color = 'var(--green-text)';
       msgEl.textContent = 'API key saved.';
       document.getElementById('key-input').value = '';
       await loadKeyStatus();
@@ -258,7 +258,7 @@
 
       const data = await res.json();
       if (res.ok && data.text) {
-        resultEl.style.color = 'var(--sage-deep)';
+        resultEl.style.color = 'var(--green-text)';
         resultEl.textContent = `Success: "${data.text.slice(0, 100)}"`;
       } else {
         resultEl.style.color = 'var(--rose)';

@@ -595,68 +595,6 @@ table.data.sticky-head thead th { position: sticky; top: 0; background: var(--su
 .modal-title-danger { border-bottom: 2px solid var(--rose); }
 
 /* ============================================================================
-   MASTER–DETAIL (Interviews)
-   ========================================================================== */
-.md-layout { display: grid; grid-template-columns: minmax(280px, 5fr) 7fr; gap: 24px; align-items: start; }
-.md-list-item {
-  padding: 12px 16px; border-bottom: 1px solid var(--line-soft); cursor: pointer;
-  transition: background-color var(--ease);
-  border-left: 2px solid transparent;
-}
-.md-list-item:hover { background: var(--surface-inset); }
-.md-list-item.selected { background: var(--green-soft); border-left-color: var(--green-deep); }
-.md-list-item:last-child { border-bottom: none; }
-@media (max-width: 900px) {
-  .md-layout { display: block; }
-  .md-detail { margin-top: 16px; }
-}
-
-/* Interviews — segment groups. The list scrolls in its own box so sticky
-   group headers never collide with the app's own sticky top header. */
-.md-list-scroll { max-height: 70vh; overflow-y: auto; overscroll-behavior: contain; border-top: 1px solid var(--line-soft); }
-.group-block:last-child .md-list-item:last-child { border-bottom: none; }
-.group-header {
-  position: sticky; top: 0; z-index: 5;
-  display: flex; align-items: center; justify-content: space-between; gap: 12px;
-  min-height: 40px; padding: 8px 16px; background: var(--surface-inset);
-  border-bottom: 1px solid var(--line-soft);
-  cursor: pointer; user-select: none;
-}
-.group-header-gold { background: var(--gold-soft); }
-.group-header-pinned { background: var(--rose-soft); }
-.group-chevron { font-size: 12px; color: var(--ink-mute); width: 12px; display: inline-block; text-align: center; }
-.group-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--rose); display: inline-block; }
-
-/* ============================================================================
-   SEGMENTED CONTROL (Theme matrix Grid | Quotes)
-   ========================================================================== */
-.seg-toggle { display: inline-flex; padding: 3px; background: var(--surface-inset); border: 1px solid var(--line); border-radius: var(--r-ctl); }
-.seg-toggle-btn {
-  min-height: 34px; padding: 6px 14px; border-radius: 8px;
-  font-size: 13px; line-height: 20px; font-weight: 500; color: var(--ink-soft);
-  background: transparent; border: none; cursor: pointer;
-  transition: background-color var(--ease), color var(--ease);
-}
-.seg-toggle-btn.active { background: var(--surface-card); color: var(--green-text); border: 1px solid var(--line); }
-
-/* ============================================================================
-   THEME MATRIX — pivot grid + grouped quotes
-   ========================================================================== */
-/* theme rows pinned on the left — the one deliberate horizontal scroll */
-.grid-pivot { min-width: 640px; }
-.grid-row-header { position: sticky; left: 0; z-index: 2; background: var(--surface-card); min-width: 190px; max-width: 220px; }
-.grid-pivot thead th.grid-row-header { z-index: 3; }
-.grid-cell:hover { filter: brightness(0.96); }
-
-.theme-group-header {
-  display: flex; align-items: center; justify-content: space-between; gap: 12px;
-  min-height: 40px; padding: 10px 24px; background: var(--surface-inset);
-  border-top: 1px solid var(--line-soft); border-bottom: 1px solid var(--line-soft);
-  cursor: pointer; user-select: none;
-}
-.theme-group-header-gold { background: var(--gold-soft); }
-
-/* ============================================================================
    RESPONSIVE TABLE STACKING
    ========================================================================== */
 @media (max-width: 640px) {
@@ -686,7 +624,5 @@ table.data.sticky-head thead th { position: sticky; top: 0; background: var(--su
 @media print {
   .sidebar-nav, .chat-panel, .mobile-overlay, .hamburger, header, .modal-bg { display: none !important; }
   .main-area { padding-left: 0 !important; }
-  .report-print-view { max-width: 700px; margin: 0 auto; font-size: 14px; line-height: 1.6; }
-  .report-print-view .micro { color: var(--bronze-text) !important; }
-  @page { margin: 20mm; }
+    @page { margin: 20mm; }
 }

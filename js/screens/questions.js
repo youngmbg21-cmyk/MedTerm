@@ -56,7 +56,7 @@ function questionCard(q) {
   ]);
 
   const body = h('div', { class: 'mt-3' });
-  if (q.full) body.appendChild(h('div', { class: 'text-sm t-soft', text: q.full }));
+  if (q.why_it_matters) body.appendChild(h('div', { class: 'text-sm t-soft', text: q.why_it_matters }));
 
   if (q.would_answer) {
     body.appendChild(h('div', { class: 'inset-block mt-3' }, [
@@ -115,7 +115,7 @@ function openQuestionForm(existing) {
   openModal(existing ? 'Edit question' : 'Add a question', [
     formField('Short reference (Q1, Q2…)', 'ref', 'input', q.ref),
     formField('The question, in one line', 'short', 'textarea', q.short),
-    formField('Why it matters', 'full', 'textarea', q.full),
+    formField('Why it matters', 'why_it_matters', 'textarea', q.why_it_matters),
     formField('What would answer it', 'would_answer', 'textarea', q.would_answer),
     formField('Status', 'status', 'select', q.status || 'Open', QUESTION_STATUS_NAMES),
     formField('Order', 'sort', 'input', q.sort ?? (STATE.questions.length + 1), null, 'number'),
@@ -156,7 +156,7 @@ async function draftLeaning(q) {
     section: 'question_leaning',
     instruction: `Write two to four short sentences saying where the evidence currently leaves question ${q.ref}: "${q.short}". Say plainly if the evidence is too thin to lean either way — that is the honest answer most of the time. Cite the findings you used. Name the single piece of evidence we do not yet have that would move this most.`,
     context: {
-      question: { ref: q.ref, short: q.short, full: q.full, would_answer: q.would_answer, status: q.status },
+      question: { ref: q.ref, short: q.short, full: q.why_it_matters, would_answer: q.would_answer, status: q.status },
       supports: e.supports, challenges: e.challenges, context: e.context,
     },
     localData: aiDataSlices(STATE),

@@ -86,7 +86,7 @@ function renderOverview(page) {
   const live = STATE.prospects.filter(p => PIPELINE_LIVE.includes(p.status)).length;
   const pilots = STATE.prospects.filter(p => p.status === 'Pilot').length;
   const reactions = STATE.pricing_reactions.length;
-  const grid = h('div', { class: 'grid gap-3 mb-4', style: 'grid-template-columns:repeat(auto-fit,minmax(140px,1fr))' }, [
+  const grid = h('div', { class: 'grid gap-3 mb-4', style: 'display:grid;gap:12px;grid-template-columns:repeat(auto-fit,minmax(140px,1fr))' }, [
     kpiCard('Conversations', STATE.conversations.length, 'the only real evidence'),
     kpiCard('Findings', STATE.insights.length, 'attached to a question'),
     kpiCard('Live prospects', live, `${pilots} at pilot`, pilots ? 'green' : undefined),

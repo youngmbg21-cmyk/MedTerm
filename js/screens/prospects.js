@@ -36,7 +36,7 @@ function renderProspects(page) {
   }
 
   /* The pipeline at a glance. */
-  const board = h('div', { class: 'grid gap-3 mb-4', style: 'grid-template-columns:repeat(auto-fit,minmax(120px,1fr))' });
+  const board = h('div', { class: 'grid gap-3 mb-4', style: 'display:grid;gap:12px;grid-template-columns:repeat(auto-fit,minmax(120px,1fr))' });
   pipelineCounts().forEach(({ label, value }) => {
     const stage = PIPELINE.find(p => p.name === label) || {};
     const cardEl = h('button', {

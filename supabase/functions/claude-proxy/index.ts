@@ -1,33 +1,28 @@
 /**
- * MedTerminal — Supabase Edge Function `claude-proxy`
+ * HaTi Research — Supabase Edge Function `claude-proxy`
  *
- * The single backend for the app, mirroring the Cloudflare `worker.js` so the
- * whole thing runs with NO Cloudflare account. It serves two surfaces:
+ * The single backend for the workspace. It serves two surfaces:
  *
  * AI (AI_MODE = 'worker'):
- *   POST .../claude-proxy/api/chat            — assistant panel (tool use loop)
- *   POST .../claude-proxy/api/assessment      — Decision Brief "Regenerate"
- *   POST .../claude-proxy/api/propose-links   — evidence-link proposals after a save
- *   POST .../claude-proxy/api/draft-section   — every AI-first drafting surface
+ *   POST .../claude-proxy/api/chat            — the assistant panel (tool-use loop)
+ *   POST .../claude-proxy/api/draft-section   — every AI-drafted piece of writing
  *   POST .../claude-proxy                     — bare call = chat (admin.html "Test connection")
  *
- * Shared data (DATA_MODE = 'api') — the synced team workspace:
+ * Shared data (DATA_MODE = 'api'):
  *   GET/POST/PATCH/DELETE .../claude-proxy/api/<table>[/<id>]   — record CRUD
- *   POST  .../claude-proxy/api/documents/<id>/file             — upload a file
- *   GET   .../claude-proxy/api/documents/<id>/link             — signed download URL
  *
- * Data seam: in local data mode the client sends the workspace slices it needs
- * in `localData`; in api mode this function reads/writes Supabase directly with
- * the service role, so every active team member shares one database.
+ * Data seam: with local data the client sends the workspace slices it needs in
+ * `localData`; in shared mode this function reads Supabase directly with the
+ * service role, so both founders share one database.
  *
  * Auth: the caller must be signed in AND an ACTIVE row in `team_members`
  * (matched by auth user id). Anyone can request a magic link, so membership —
- * not merely a valid login — is what keeps the shared workspace private to the
- * team. Roles: lead/partner can write; only lead can delete non-document rows.
+ * not merely a valid login — is what keeps the workspace private.
  *
  * Claude API key: read from the `settings` table (key = 'claude_api_key'), which
  * the admin page writes. Falls back to the ANTHROPIC_API_KEY / CLAUDE_API_KEY
- * Edge Function secret if the table has no key.
+ * Edge Function secret if the table has no key. UNCHANGED from how it has
+ * always worked — do not move this.
  *
  * Secrets available automatically to every Edge Function: SUPABASE_URL,
  * SUPABASE_ANON_KEY, SUPABASE_SERVICE_ROLE_KEY.
@@ -35,85 +30,49 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 
 const CLAUDE_MODEL = 'claude-sonnet-4-5';
-const STORAGE_BUCKET = 'field-documents';
 
-const SYSTEM_PROMPT = `You are MedTerminal, a senior research director embedded in a six-phase qualitative research programme. The programme is investigating whether a patient-side medical tourism platform (for Kenyan patients travelling to India for treatment) is viable enough to build.
+const SYSTEM_PROMPT = `You are the research assistant inside HaTi Research, a go-to-market research workspace used by two co-founders — Young and Simon — who are taking HaTi to market in Kenya.
 
-You speak in a direct, warm, honest voice. Editorial, not corporate. Conservative on claims — if evidence is thin, say so.
+HaTi is a contract lifecycle management (CLM) platform built for the Kenyan market. It is a working MVP: Kenyan contract templates, e-signature with a SHA-256 seal, a no-login counterparty portal, AI contract reading and OCR, bulk migration of a back catalogue, renewal reminders and obligations, approval workflows, and an Advice Desk that sells legal services at a published hourly rate. It runs as one self-hosted Node process per customer. It has never been sold to anyone and cannot yet bill anyone.
 
-Voice rules:
-- Use "sense-making" not "synthesis"
-- Use "phase" not "sprint"
-- Avoid "it's worth noting", "in conclusion", "leverage" as a verb
-- Numbers without sources are suspicious — cite or hedge
-- First use: spell out Hospital IPD (International Patient Department)
-- Never give medical advice
+NEITHER FOUNDER IS A DEVELOPER. Write in plain English. No jargon, no framework names, no "leverage" as a verb. If you must use a technical term, explain it in the same sentence.
 
-The six phases:
-0. Foundation & onboarding
-1. Outreach & exploratory interviews
-2. Depth interviews (across all segments, to their configured targets, until themes saturate)
-3. Sense-making (theme ranking, segment cards, kill-list, top-3 pains)
-4. Economics & stress-test (unit economics, break-point analysis)
-5. Decision & scoping (decision memo: GO / PIVOT / NO-GO)
+THE FIVE QUESTIONS are the spine of this workspace. Everything in it exists to move one of them from open to answered:
+  Q1 Who is the buyer, and what job do they hire HaTi for?
+  Q2 Will a Kenyan company pay for CLM software — and in what shape?
+  Q3 Does the signature stand up without IPRS and CAK-accredited PKI?
+  Q4 What does it take to be legally sellable in Kenya?
+  Q5 What displaces the incumbent — email, Word and a shared drive?
+The live wording, status and evidence for each are in the workspace; read them rather than assuming these summaries are current.
 
-The buyer hypotheses and kill criteria are first-class records in the workspace —
-they are injected below under HYPOTHESIS BOARD with their live statuses, and you can
-query them with the query_hypotheses and query_evidence_links tools. Never invent or
-assume hypotheses beyond that board.
+HOW YOU WORK
+- Read before you reason. Pull the conversations, prospects, competitors, pricing reactions, market facts and findings first. A claim with no cited record is an inference — label it one.
+- Be honest about thin evidence. This workspace deliberately ships with NO invented research: the seeded competitors, market facts and pricing ideas are reference material and our own thinking, not findings. If nobody has been interviewed yet, the correct answer is "we do not know yet", said plainly and briefly — not a fluent narrative built on the seed data.
+- Never invent a quote, a company, a person, a price a prospect gave, a number of conversations, or how long the research has been running. Every specific must be traceable to a record you were given.
+- Cite what you use: the question reference (Q1–Q5), the company name, the source name, the date.
+- No confidence percentages. With a handful of conversations, "70% confident" is theatre. Use a leaning and say what would change it.
+- You argue; the two of them decide. Every write you propose goes to a human Confirm/Skip button. You never decide, never write directly.
+- Distinguish the two things that get confused constantly: what a prospect SAYS they would pay, and what they have actually paid. Only the second is evidence.
 
-The same-day tagging rule is the most important data quality mechanism. Every interview must be tagged in the matrix the same day it happens. Untagged interviews are lost interviews.
+THE TWO DATA-QUALITY RULES you should defend, because they are what makes this workspace trustworthy:
+1. A conversation nobody wrote a finding from is a lost conversation.
+2. A market or regulatory fact with no source link is a rumour.
+If you see either breached, say so.
 
-When answering:
-- Reference specific interview IDs, participant codes, theme names — not generic advice
-- Cite the data you're drawing from
-- If asked "what should I do today?", name a specific person, deliverable, or interview
-- If evidence is thin on a topic, say so explicitly
-
---- YOUR ROLE AS A STRATEGY ANALYST ---
-Beyond reporting where the programme stands, you are the team's strategy analyst. Your job is to REASON from the evidence to its business implications — not just describe the data. When a question has strategic weight (viability, positioning, pricing, go-to-market, sequencing, risk, "should we build this"), work it deliberately:
-
-1. Read the evidence first. Pull the relevant interviews, matrix entries, segment cards, economics, kill list, and evidence links BEFORE you reason. A strategic claim with no cited evidence is an inference — label it one.
-2. Reason across the lenses that matter, and say which ones the evidence actually supports versus where you are inferring:
-   - Demand — how sharp and how widespread is the pain? A top-3 pain for a real segment, or an occasional annoyance?
-   - Willingness to pay — does the WTP signal survive the gap between what people say and what they'd pay? Where is it thin?
-   - Unit economics — do the numbers in the economics table survive their own break-point? Name the single assumption the case rests on.
-   - Trust & moat — why would a Kenyan patient trust this over a hospital's own International Patient Department (IPD) or an existing agent? What is defensible?
-   - Execution & regulatory risk — what must be true operationally, and what could kill it? Map risks to the kill criteria on the board.
-3. Land on a read, not a shrug. State the leaning (GO / PIVOT / NO-GO / INSUFFICIENT), the one or two things it hinges on, and the single most valuable piece of evidence you do not yet have. Then argue the strongest case AGAINST your own read before the team has to.
-
-You may reason beyond the literal records — draw implications, propose strategy, name second-order effects, sketch what to test next — but keep inference visibly separate from cited evidence, and stay conservative when the data is thin (~28 interviews is a small n; treat it like one). You still argue, never decide: the leaning is advisory, the humans co-sign, divergence gets written down, and no numeric confidence scores appear anywhere.
-
---- HOW TO FORMAT YOUR REPLIES ---
-Replies are read on a phone. Make them scannable and professional:
+HOW TO FORMAT REPLIES — they are read on a phone as often as a laptop:
 - Open with a one-line takeaway, not a preamble.
-- When a reply has parts, use short "## " section headers (2–4 words), each led by ONE relevant emoji — e.g. "## 📊 Demand", "## ⚠️ Biggest risk", "## 💰 Economics", "## ✅ What's working", "## 🔎 What to test next". One emoji per header only; never sprinkle emojis inside sentences or use them as decoration.
-- Bold the few phrases that carry the decision. Use "- " bullet lists for parallel points and keep each bullet to one line.
-- Write leanings as the bare tokens GO, PIVOT, NO-GO, or INSUFFICIENT — the app styles them; do not wrap them in asterisks.
-- Never output horizontal rules ("---", "***", "___"), a bare "#" with no text, markdown tables, or code fences around prose. No rows of dashes as separators.
-- Keep it tight: a phone reply is usually 3–8 short lines. Expand only when the question genuinely needs it.
+- Use short "## " section headers (2–4 words), each led by ONE relevant emoji — e.g. "## 📊 What the evidence says", "## ⚠️ The risk", "## 💰 On price", "## 🔎 What to do next". One emoji per header, never inside sentences.
+- Bold the few phrases that carry the decision. Use "- " bullets for parallel points, one line each.
+- Never output horizontal rules ("---"), markdown tables, or code fences around prose.
+- Keep it tight: usually 3–8 short lines. Expand only when the question genuinely needs it.`;
 
-This workspace is the team's sole repository. You have tools that reach everything in it:
-search_notes covers every notes field and document contents; read_document returns full
-document text (PDFs are transcribed, images shown to you). Search before saying you don't
-know, and cite filenames and interview IDs when you quote from notes or documents.`;
-
-/* Output-shape rules for every structured AI feature. */
-const OUTPUT_SHAPE_RULES = `Non-negotiable output-shape rules:
-- No numeric confidence scores. With ~28 interviews, "63% confident" is theater. Use a leaning (GO / PIVOT / NO-GO / INSUFFICIENT) plus a strength label per hypothesis (strong / moderate / thin).
-- Every claim cites its evidence — interview IDs, matrix entry IDs, filenames. A claim without a citation must be marked as inference.
-- "What would change this" is mandatory. Every hypothesis assessment must name the concrete evidence that would flip it.
-- The AI argues; it never decides. The AI's leaning is advisory. Humans hold the verdict and co-sign. Divergence from the AI is allowed but must be written down.`;
-
-/* Anti-fabrication rules. This is the load-bearing guarantee of the whole app:
-   a decision tool that invents evidence is worse than none. Injected into every
-   structured drafting/analysis surface. */
-const GROUNDING_RULES = `GROUNDING — the most important rule (a fabricated fact makes this tool worthless):
+const GROUNDING_RULES = `GROUNDING — the most important rule (one fabricated fact makes this tool worthless):
 - Use ONLY facts present in the workspace context you are given. Do NOT invent, estimate, or "reasonably assume" anything that is not written there.
-- Never state how long the programme has been running (weeks, months, "nine weeks in") — elapsed time is not tracked, so any such phrase is a fabrication.
-- Never invent interview counts, participant names or codes, quotes, dates, prices, percentages, segments, or events. Every specific must be traceable to a record in the context.
-- If a number, quote, or fact is not in the context, either omit it or write "not yet recorded" — never fill the gap with a plausible-sounding invention.
-- If the workspace is empty or thin on the topic, the correct output is a short, honest statement that there is not enough evidence yet — NOT a fluent narrative built on assumptions. An empty ledger means say so, briefly.`;
+- Never state how long this research has been running — elapsed time is not tracked, so any such phrase is a fabrication.
+- Never invent conversation counts, company names, people, quotes, dates, prices or percentages.
+- The seeded competitors, market facts and pricing ideas are STARTING POINTS the founders have not verified. Treat anything marked "Needs checking" or "Not verified" as an open question, never as a finding.
+- If a number, quote or fact is not in the context, either omit it or write "not yet recorded" — never fill the gap with something plausible.
+- If the workspace is thin on a topic, the correct output is a short honest statement that there is not enough evidence yet.`;
 
 /* ------------------------------------------------------------ CORS + JSON */
 const corsHeaders = {
@@ -132,9 +91,7 @@ function errorResponse(message: string, status = 400) {
   return jsonResponse({ error: message }, status);
 }
 
-/* ------------------------------------------------------------ Supabase REST
-   Only used for the Claude key lookup, best-effort chat persistence, and the
-   Supabase branch of fetchRows (api data mode). Uses the service role. */
+/* ------------------------------------------------------------ Supabase REST */
 type Env = {
   SUPABASE_URL: string;
   SUPABASE_SERVICE_KEY: string;
@@ -158,8 +115,8 @@ async function supabaseRequest(method: string, path: string, body: unknown, env:
   return { data, status: res.status };
 }
 
-/* One data seam: rows come from the client's request body (local-first) or from
-   Supabase (api mode). Filtering always happens in JS, so both modes match. */
+/* One data seam: rows come from the client's request body (local data mode) or
+   from Supabase (shared mode). Filtering always happens in JS, so both match. */
 async function fetchRows(env: Env, localData: Record<string, unknown[]> | null, table: string) {
   if (localData) return Array.isArray(localData[table]) ? localData[table] : [];
   const { data } = await supabaseRequest('GET', `${table}?order=created_at.desc&limit=1000`, null, env);
@@ -181,395 +138,8 @@ async function callClaude(env: Env, body: Record<string, unknown>) {
   return res.json();
 }
 
-function claudeText(result: any) {
-  return (result.content || []).filter((b: any) => b.type === 'text').map((b: any) => b.text).join('\n');
-}
-
-/* Pull the first JSON object/array out of a completion (tolerates code fences). */
-function extractJson(text: string) {
-  const fenced = text.match(/```(?:json)?\s*([\s\S]*?)```/);
-  const candidate = (fenced ? fenced[1] : text).trim();
-  const firstObj = candidate.indexOf('{');
-  const firstArr = candidate.indexOf('[');
-  const start = (firstArr !== -1 && (firstArr < firstObj || firstObj === -1)) ? firstArr : firstObj;
-  if (start === -1) throw new Error('No JSON found in response');
-  const end = candidate[start] === '{' ? candidate.lastIndexOf('}') : candidate.lastIndexOf(']');
-  if (end <= start) throw new Error('Unterminated JSON in response');
-  return JSON.parse(candidate.slice(start, end + 1));
-}
-
-/* ------------------------------------------------------------ Validation */
-const LEANINGS = ['GO', 'PIVOT', 'NO-GO', 'INSUFFICIENT'];
-const STRENGTHS = ['strong', 'moderate', 'thin'];
-const DIRECTIONS = ['strengthening', 'weakening', 'unclear'];
-const KILL_STATUSES = ['unknown', 'holding', 'breached'];
-
-function validateAssessment(a: any, hypotheses: any[]) {
-  const errors: string[] = [];
-  if (!a || typeof a !== 'object' || Array.isArray(a)) return { ok: false, errors: ['Response is not a JSON object'] };
-  if (!LEANINGS.includes(a.leaning)) errors.push(`leaning must be one of ${LEANINGS.join(' / ')}`);
-  if (!a.summary_markdown || typeof a.summary_markdown !== 'string') {
-    errors.push('summary_markdown is required');
-  } else {
-    if (!/the case against this leaning/i.test(a.summary_markdown)) {
-      errors.push('summary_markdown must contain a paragraph titled "The case against this leaning"');
-    }
-    if (/\d+(\.\d+)?\s*%\s*(confiden|certain|sure|probab|likel)/i.test(a.summary_markdown)) {
-      errors.push('No numeric confidence scores anywhere');
-    }
-  }
-  const buyerCodes = hypotheses.filter(h => h.kind === 'buyer_hypothesis').map(h => h.code);
-  const killCodes = hypotheses.filter(h => h.kind === 'kill_criterion').map(h => h.code);
-
-  if (!Array.isArray(a.per_hypothesis)) {
-    errors.push('per_hypothesis must be an array');
-  } else {
-    const seen = new Set(a.per_hypothesis.map((p: any) => p && p.hypothesis_code));
-    buyerCodes.forEach(c => { if (!seen.has(c)) errors.push(`per_hypothesis is missing ${c}`); });
-    a.per_hypothesis.forEach((p: any) => {
-      const tag = p?.hypothesis_code || '?';
-      if (!buyerCodes.includes(p?.hypothesis_code)) errors.push(`per_hypothesis has unknown code ${tag}`);
-      if (!STRENGTHS.includes(p?.strength)) errors.push(`${tag}: strength must be ${STRENGTHS.join('/')}`);
-      if (!DIRECTIONS.includes(p?.direction)) errors.push(`${tag}: direction must be ${DIRECTIONS.join('/')}`);
-      if (!p?.what_would_change) errors.push(`${tag}: what_would_change is mandatory`);
-      if (!Array.isArray(p?.key_evidence)) errors.push(`${tag}: key_evidence must be an array`);
-      else p.key_evidence.forEach((ev: any, i: number) => {
-        if (!ev || !ev.cite) errors.push(`${tag}: key_evidence[${i}] is missing its cite`);
-      });
-    });
-  }
-
-  if (!Array.isArray(a.breakpoints)) {
-    errors.push('breakpoints must be an array');
-  } else {
-    const seenK = new Set(a.breakpoints.map((b: any) => b && b.code));
-    killCodes.forEach(c => { if (!seenK.has(c)) errors.push(`breakpoints is missing ${c}`); });
-    a.breakpoints.forEach((b: any) => {
-      if (!KILL_STATUSES.includes(b?.status)) errors.push(`${b?.code || '?'}: breakpoint status must be ${KILL_STATUSES.join('/')}`);
-    });
-  }
-  return { ok: errors.length === 0, errors };
-}
-
-function validateDraftFields(parsed: any, fields: any[]) {
-  const errors: string[] = [];
-  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
-    return { ok: false, errors: ['Response is not a JSON object'] };
-  }
-  const wanted = fields.map(f => f.key);
-  wanted.forEach(k => {
-    const v = parsed[k];
-    if (typeof v !== 'string' || !v.trim()) errors.push(`${k}: required, must be a non-empty string`);
-    else if (/\d+(\.\d+)?\s*%\s*(confiden|certain|sure|probab|likel)/i.test(v)) errors.push(`${k}: no numeric confidence scores anywhere`);
-  });
-  Object.keys(parsed).forEach(k => { if (!wanted.includes(k)) errors.push(`unexpected field ${k}`); });
-  return { ok: errors.length === 0, errors };
-}
-
-function validateProposals(arr: any, hypotheses: any[]) {
-  const errors: string[] = [];
-  if (!Array.isArray(arr)) return { ok: false, errors: ['Response must be a JSON array'] };
-  if (arr.length > 2) errors.push('Propose at most 2 links');
-  const codes = new Set(hypotheses.map(h => h.code));
-  arr.forEach((p: any, i: number) => {
-    if (!codes.has(p?.hypothesis_code)) errors.push(`proposal[${i}]: unknown hypothesis_code`);
-    if (!['supports', 'contradicts', 'neutral'].includes(p?.direction)) errors.push(`proposal[${i}]: direction must be supports/contradicts/neutral`);
-    if (!['strong', 'moderate', 'weak'].includes(p?.strength)) errors.push(`proposal[${i}]: strength must be strong/moderate/weak`);
-    if (!p?.note) errors.push(`proposal[${i}]: note is required`);
-  });
-  return { ok: errors.length === 0, errors };
-}
-
-/* ------------------------------------------------------------ Prompt builders */
-function hypothesesPromptSection(hypotheses: any[]) {
-  const bySort = [...hypotheses].sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
-  const line = (hyp: any) => `- ${hyp.code} [status: ${hyp.status}]: ${hyp.title} — ${hyp.description}${hyp.status_note ? ` (status note: ${hyp.status_note})` : ''}`;
-  const buyers = bySort.filter(h => h.kind === 'buyer_hypothesis').map(line).join('\n');
-  const kills = bySort.filter(h => h.kind === 'kill_criterion').map(line).join('\n');
-  return `Buyer hypotheses being tested:\n${buyers || '(none defined)'}\n\nKill criteria — break-points that kill the patient-pays model:\n${kills || '(none defined)'}`;
-}
-
-function resolveEvidence(link: any, ws: any) {
-  switch (link.evidence_type) {
-    case 'interview': {
-      const r = ws.interviews.find((i: any) => i.interview_id === link.evidence_id);
-      return r ? `interview ${r.interview_id} (${r.segment || '?'}, ${r.date || '?'}): ${r.brief_topic || '(no topic)'}`
-        : `interview ${link.evidence_id} (record not found)`;
-    }
-    case 'matrix': {
-      const r = ws.matrix.find((m: any) => m.id === link.evidence_id);
-      return r ? `matrix entry ${r.id} (${r.interview_id || '?'}, ${r.theme_tag || '?'}, sev ${r.severity ?? '?'}, WTP ${r.wtp || '?'}): "${(r.quote || '').slice(0, 220)}"`
-        : `matrix entry ${link.evidence_id} (record not found)`;
-    }
-    case 'field_check': {
-      const r = ws.field_checks.find((f: any) => f.id === link.evidence_id);
-      return r ? `field check ${r.id} [${r.confirmed ? 'confirmed' : 'unconfirmed'}]: ${r.assumption}${r.notes ? ` — ${r.notes}` : ''}`
-        : `field check ${link.evidence_id} (record not found)`;
-    }
-    case 'document': {
-      const r = ws.documents.find((d: any) => d.id === link.evidence_id);
-      return r ? `document "${r.filename}"${r.interview_id ? ` (${r.interview_id})` : ''}: ${r.description || ''}`
-        : `document ${link.evidence_id} (record not found)`;
-    }
-    case 'economics': {
-      const r = ws.economics.find((e: any) => e.id === link.evidence_id);
-      return r ? `economics model "${r.model_name}": assumptions ${JSON.stringify(r.assumptions)}`
-        : `economics record ${link.evidence_id} (record not found)`;
-    }
-    default:
-      return `${link.evidence_type} ${link.evidence_id}`;
-  }
-}
-
-function evidenceLedgerText(ws: any) {
-  const bySort = [...ws.hypotheses].sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
-  return bySort.map((hyp: any) => {
-    const links = ws.evidence_links.filter((l: any) => l.hypothesis_id === hyp.id);
-    const lines = links.map((l: any) =>
-      `  - [${l.direction}/${l.strength || '?'}, ${l.source}] ${resolveEvidence(l, ws)} — link note: ${l.note || '(none)'}`
-    ).join('\n');
-    return `${hyp.code} [${hyp.status}] ${hyp.title} — ${hyp.description}${hyp.status_note ? `\n  status note: ${hyp.status_note}` : ''}\n${lines || '  (no evidence linked yet)'}`;
-  }).join('\n\n');
-}
-
-function workspaceContextText(ws: any, { phase, segments }: { phase: number; segments?: any[] }) {
-  const segCounts: Record<string, number> = {};
-  ws.interviews.forEach((r: any) => { if (r.segment) segCounts[r.segment] = (segCounts[r.segment] || 0) + 1; });
-  const segLine = (segments && segments.length)
-    ? segments.map(s => `${s.name}=${segCounts[s.name] || 0}/${s.target}`).join(', ')
-    : Object.entries(segCounts).map(([s, n]) => `${s}=${n}`).join(', ');
-  const themes: Record<string, number> = {};
-  ws.matrix.forEach((r: any) => { if (r.theme_tag) themes[r.theme_tag] = (themes[r.theme_tag] || 0) + 1; });
-  const criteria = ws.deliverables.filter((d: any) => d.phase === phase)
-    .map((d: any) => `- [${d.status}] ${d.deliverable}${d.evidence ? ` — ${d.evidence}` : ''}`).join('\n');
-  const untagged = ws.interviews.filter((r: any) => r.tagged_same_day !== 'Y').map((r: any) => r.interview_id);
-  const econ = ws.economics.map((e: any) => `- ${e.model_name}: assumptions ${JSON.stringify(e.assumptions)}${e.derived ? `, derived ${JSON.stringify(e.derived)}` : ''}`).join('\n');
-  const kills = ws.kill_list.map((k: any) => `- KILLED (${k.killed_date}): ${k.hypothesis} — ${k.evidence}`).join('\n');
-
-  return `Current phase: ${phase}
-Interviews logged: ${ws.interviews.length} (by segment vs target: ${segLine || 'none'})
-Untagged interviews: ${untagged.length}${untagged.length ? ` (${untagged.join(', ')})` : ''}
-Matrix entries: ${ws.matrix.length}. Theme frequencies: ${Object.entries(themes).sort((a, b) => b[1] - a[1]).slice(0, 15).map(([t, n]) => `${t}=${n}`).join(', ') || 'none'}
-Evidence links: ${ws.evidence_links.length}
-Field checks: ${ws.field_checks.length} (${ws.field_checks.filter((f: any) => !f.confirmed).length} unconfirmed)
-Documents on file: ${ws.documents.length}
-
-Phase ${phase} exit criteria:
-${criteria || '(none defined)'}
-
-Unit-economics inputs (kill-criteria relevant):
-${econ || '(none saved yet)'}
-
-Killed hypotheses (append-only kill list):
-${kills || '(none)'}
-
-EVIDENCE LEDGER (grouped by hypothesis — cite these ids):
-${evidenceLedgerText(ws)}`;
-}
-
-async function gatherWorkspace(env: Env, localData: Record<string, unknown[]> | null) {
-  const tables = ['hypotheses', 'evidence_links', 'ai_assessments', 'interviews', 'matrix',
-    'field_checks', 'documents', 'economics', 'deliverables', 'kill_list', 'outreach'];
-  const rows = await Promise.all(tables.map(t => fetchRows(env, localData, t)));
-  const ws: Record<string, any[]> = {};
-  tables.forEach((t, i) => { ws[t] = rows[i] as any[]; });
-  return ws;
-}
-
-/* ------------------------------------------------------------ Tool execution */
-async function executeToolCall(
-  name: string,
-  input: Record<string, any>,
-  env: Env,
-  localData: Record<string, unknown[]> | null,
-): Promise<any> {
-  const cap = (n: any, d = 50) => Math.min(Number(n) || d, 50);
-  switch (name) {
-    case 'query_outreach': {
-      let rows: any[] = await fetchRows(env, localData, 'outreach');
-      if (input.status) rows = rows.filter(r => r.status === input.status);
-      if (input.segment) rows = rows.filter(r => r.segment === input.segment);
-      rows = rows.slice(0, cap(input.limit));
-      return { records: rows, count: rows.length };
-    }
-    case 'query_interviews': {
-      let rows: any[] = await fetchRows(env, localData, 'interviews');
-      if (input.segment) rows = rows.filter(r => r.segment === input.segment);
-      if (input.interviewer) rows = rows.filter(r => r.interviewer === input.interviewer);
-      if (input.tagged) rows = rows.filter(r => r.tagged_same_day === input.tagged);
-      rows = [...rows].sort((a, b) => String(b.date || '').localeCompare(String(a.date || ''))).slice(0, cap(input.limit));
-      return { records: rows, count: rows.length };
-    }
-    case 'query_matrix': {
-      let rows: any[] = await fetchRows(env, localData, 'matrix');
-      if (input.theme_tag) rows = rows.filter(r => r.theme_tag === input.theme_tag);
-      if (input.segment) rows = rows.filter(r => r.segment === input.segment);
-      if (input.min_severity) rows = rows.filter(r => (+r.severity || 0) >= input.min_severity);
-      if (input.wtp) rows = rows.filter(r => r.wtp === input.wtp);
-      rows = rows.slice(0, cap(input.limit));
-      return { records: rows, count: rows.length };
-    }
-    case 'query_scripts': {
-      let rows: any[] = await fetchRows(env, localData, 'scripts');
-      if (input.script_name) rows = rows.filter(r => r.script_name === input.script_name);
-      rows = [...rows].sort((a, b) => (b.version || 0) - (a.version || 0));
-      return { records: rows, count: rows.length };
-    }
-    case 'query_deliverables': {
-      let rows: any[] = await fetchRows(env, localData, 'deliverables');
-      if (input.phase !== undefined) rows = rows.filter(r => r.phase === input.phase);
-      if (input.status) rows = rows.filter(r => r.status === input.status);
-      rows = [...rows].sort((a, b) => (a.phase || 0) - (b.phase || 0));
-      return { records: rows, count: rows.length };
-    }
-    case 'query_economics': {
-      let rows: any[] = await fetchRows(env, localData, 'economics');
-      if (input.segment) rows = rows.filter(r => r.segment === input.segment);
-      rows = rows.slice(0, cap(input.limit));
-      return { records: rows, count: rows.length };
-    }
-    case 'query_segment_cards': {
-      let rows: any[] = await fetchRows(env, localData, 'segment_cards');
-      if (input.segment) rows = rows.filter(r => r.segment === input.segment);
-      return { records: rows, count: rows.length };
-    }
-    case 'query_kill_list': {
-      const rows: any[] = (await fetchRows(env, localData, 'kill_list')).slice(0, cap(input.limit));
-      return { records: rows, count: rows.length };
-    }
-    case 'query_hypotheses': {
-      let rows: any[] = await fetchRows(env, localData, 'hypotheses');
-      if (input.kind) rows = rows.filter(r => r.kind === input.kind);
-      if (input.code) rows = rows.filter(r => r.code === input.code);
-      rows = [...rows].sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
-      return { records: rows, count: rows.length };
-    }
-    case 'query_evidence_links': {
-      const hypotheses: any[] = await fetchRows(env, localData, 'hypotheses');
-      let rows: any[] = await fetchRows(env, localData, 'evidence_links');
-      if (input.hypothesis_code) {
-        const hyp = hypotheses.find(x => x.code === input.hypothesis_code);
-        rows = hyp ? rows.filter(r => r.hypothesis_id === hyp.id) : [];
-      }
-      if (input.direction) rows = rows.filter(r => r.direction === input.direction);
-      if (input.evidence_type) rows = rows.filter(r => r.evidence_type === input.evidence_type);
-      rows = rows.slice(0, cap(input.limit));
-      const [interviews, matrix, field_checks, documents, economics] = await Promise.all(
-        ['interviews', 'matrix', 'field_checks', 'documents', 'economics'].map(t => fetchRows(env, localData, t)));
-      const ws = { interviews, matrix, field_checks, documents, economics };
-      const records = rows.map(l => ({
-        ...l,
-        hypothesis_code: hypotheses.find(x => x.id === l.hypothesis_id)?.code || l.hypothesis_id,
-        resolved_evidence: resolveEvidence(l, ws),
-      }));
-      return { records, count: records.length };
-    }
-    case 'get_latest_assessment': {
-      const rows: any[] = await fetchRows(env, localData, 'ai_assessments');
-      const latest = [...rows].sort((a, b) => String(b.created_at).localeCompare(String(a.created_at)))[0];
-      if (!latest) return { assessment: null, note: 'No assessment has been generated yet. The team can run one from the Decision Brief screen.' };
-      return { assessment: latest, count: rows.length };
-    }
-    case 'search_notes': {
-      const q = String(input.query || '').trim().toLowerCase();
-      if (!q) return { error: 'Empty query' };
-      const lim = Math.min(input.limit || 10, 25);
-      const has = (...fields: any[]) => fields.some(f => String(f || '').toLowerCase().includes(q));
-      const clip = (s: any, n = 1500) => (s || '').slice(0, n);
-
-      const [interviews, outreach, matrix, deliverables, documents] = await Promise.all(
-        ['interviews', 'outreach', 'matrix', 'deliverables', 'documents'].map(t => fetchRows(env, localData, t)));
-
-      return {
-        query: q,
-        interviews: interviews.filter((r: any) => has(r.notes_markdown, r.brief_topic)).slice(0, lim)
-          .map((r: any) => ({ interview_id: r.interview_id, date: r.date, segment: r.segment, brief_topic: r.brief_topic, notes: clip(r.notes_markdown) })),
-        outreach: outreach.filter((r: any) => has(r.notes)).slice(0, lim)
-          .map((r: any) => ({ name: r.name, segment: r.segment, status: r.status, notes: clip(r.notes, 500) })),
-        matrix: matrix.filter((r: any) => has(r.quote, r.notes)).slice(0, lim)
-          .map((r: any) => ({ id: r.id, interview_id: r.interview_id, theme_tag: r.theme_tag, segment: r.segment, severity: r.severity, wtp: r.wtp, quote: clip(r.quote, 500), notes: clip(r.notes, 300) })),
-        deliverables: deliverables.filter((r: any) => has(r.evidence)).slice(0, lim)
-          .map((r: any) => ({ phase: r.phase, deliverable: r.deliverable, status: r.status, evidence: clip(r.evidence, 800) })),
-        documents: documents.filter((r: any) => has(r.filename, r.description, r.text_content)).slice(0, lim)
-          .map((r: any) => ({ id: r.id, filename: r.filename, segment: r.segment, interview_id: r.interview_id, description: r.description, snippet: clip(r.text_content, 800) })),
-      };
-    }
-    case 'list_documents': {
-      let rows: any[] = await fetchRows(env, localData, 'documents');
-      if (input.segment) rows = rows.filter(r => r.segment === input.segment);
-      if (input.interview_id) rows = rows.filter(r => r.interview_id === input.interview_id);
-      const documents = rows.map(({ text_content, file_base64, ...rest }: any) => rest);
-      return { documents, count: documents.length };
-    }
-    case 'read_document': {
-      const rows: any[] = await fetchRows(env, localData, 'documents');
-      let doc: any = null;
-      if (input.document_id) doc = rows.find(r => r.id === input.document_id);
-      else if (input.filename) {
-        const f = String(input.filename).trim().toLowerCase();
-        doc = rows.find(r => String(r.filename || '').toLowerCase().includes(f));
-      } else return { error: 'Provide filename or document_id' };
-      if (!doc) return { error: 'Document not found. Use list_documents to see what exists.' };
-
-      if (doc.text_content) {
-        return { filename: doc.filename, mime_type: doc.mime_type, description: doc.description, contents: doc.text_content.slice(0, 20000) };
-      }
-      if (localData) {
-        return { error: `"${doc.filename}" is a binary file stored only in the team's browser (local data mode). Its text was not extracted. Ask the user to open it from the Documents screen.` };
-      }
-
-      const fileRes = await fetch(`${env.SUPABASE_URL}/storage/v1/object/${STORAGE_BUCKET}/${doc.id}`, {
-        headers: { Authorization: `Bearer ${env.SUPABASE_SERVICE_KEY}` },
-      });
-      if (!fileRes.ok) return { error: `File missing from storage (${fileRes.status}).` };
-      const buf = new Uint8Array(await fileRes.arrayBuffer());
-      let binary = '';
-      for (let i = 0; i < buf.length; i += 0x8000) {
-        binary += String.fromCharCode.apply(null, Array.from(buf.subarray(i, i + 0x8000)));
-      }
-      const b64 = btoa(binary);
-
-      if ((doc.mime_type || '').startsWith('image/')) {
-        return { __image: { media_type: doc.mime_type, data: b64 }, filename: doc.filename, description: doc.description };
-      }
-      if (doc.mime_type === 'application/pdf') {
-        const tr = await fetch('https://api.anthropic.com/v1/messages', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'x-api-key': env.CLAUDE_API_KEY,
-            'anthropic-version': '2023-06-01',
-          },
-          body: JSON.stringify({
-            model: CLAUDE_MODEL,
-            max_tokens: 8000,
-            messages: [{
-              role: 'user',
-              content: [
-                { type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: b64 } },
-                { type: 'text', text: 'Transcribe this document faithfully as plain text. Preserve headings, tables (as rows), and all figures. Do not summarise or omit anything.' },
-              ],
-            }],
-          }),
-        });
-        if (!tr.ok) return { error: `PDF transcription failed: ${await tr.text()}` };
-        const out = await tr.json();
-        const text = (out.content || []).filter((b: any) => b.type === 'text').map((b: any) => b.text).join('\n');
-        await supabaseRequest('PATCH', `documents?id=eq.${doc.id}`, { text_content: text.slice(0, 200000) }, env);
-        return { filename: doc.filename, mime_type: doc.mime_type, description: doc.description, contents: text.slice(0, 20000), note: 'Transcribed from PDF and cached for future searches.' };
-      }
-      return { error: `Unsupported file type for reading: ${doc.mime_type}. Ask the user to re-upload as PDF or text.` };
-    }
-    case 'propose_action':
-      return { proposed: true };
-    case 'generate_report':
-      return { message: 'Report generation acknowledged. The report content follows in the response text.' };
-    default:
-      return { error: `Unknown tool: ${name}` };
-  }
-}
-
-/* ------------------------------------------------------------ Claude key */
+/* Claude API key — read from the settings table the admin page writes,
+   falling back to an Edge Function secret. DO NOT MOVE THIS. */
 async function getClaudeApiKey(admin: ReturnType<typeof createClient>): Promise<string | null> {
   try {
     const { data, error } = await admin.from('settings').select('value').eq('key', 'claude_api_key').single();
@@ -580,362 +150,301 @@ async function getClaudeApiKey(admin: ReturnType<typeof createClient>): Promise<
   }
 }
 
-/* ------------------------------------------------------------ Endpoint handlers */
-async function handleAssessment(body: any, env: Env, member: Member | null) {
-  const trigger = ['manual', 'phase_exit', 'weekly'].includes(body.trigger) ? body.trigger : 'manual';
-  const phase = Number.isInteger(body.phase) ? body.phase : 0;
-  const localData = body.localData || null;
+/* ------------------------------------------------------------ Tools */
+const TOOLS = [
+  {
+    name: 'query_questions',
+    description: 'The five go-to-market questions with their live status, our current written read (the "leaning"), and what would answer each. Read this before any strategic answer.',
+    input_schema: { type: 'object', properties: { ref: { type: 'string', description: 'Filter to one question, e.g. Q2' } } },
+  },
+  {
+    name: 'query_insights',
+    description: 'The findings ledger — every finding somebody wrote down, which question it bears on, and whether it supports or challenges it. This is the evidence. Cite from here.',
+    input_schema: { type: 'object', properties: {
+      question_ref: { type: 'string', description: 'Filter by question, e.g. Q1' },
+      direction: { type: 'string', enum: ['Supports', 'Challenges', 'Context'] },
+      source_kind: { type: 'string', description: 'Conversation, Competitor, Market fact, Pricing test, Our own thinking' },
+      limit: { type: 'number', description: 'Max records (default 50)' },
+    } },
+  },
+  {
+    name: 'query_conversations',
+    description: 'Discovery conversations with prospects: who was spoken to, what they use today, their biggest pain, what it costs them, what they said about money, and their best verbatim quote. The only real primary evidence in this workspace.',
+    input_schema: { type: 'object', properties: {
+      company: { type: 'string', description: 'Filter by company name (partial match)' },
+      wtp_signal: { type: 'string', description: 'Filter by willingness-to-pay signal' },
+      limit: { type: 'number', description: 'Max records (default 30)' },
+    } },
+  },
+  {
+    name: 'query_prospects',
+    description: 'The pipeline: companies, their segment and sector, pipeline stage, whose they are, the next step, and when they were last touched.',
+    input_schema: { type: 'object', properties: {
+      status: { type: 'string', description: 'To contact, Contacted, Talked, Interested, Pilot, Not a fit' },
+      segment: { type: 'string' },
+      limit: { type: 'number', description: 'Max records (default 50)' },
+    } },
+  },
+  {
+    name: 'query_competitors',
+    description: 'The competitor map, including the status quo (a shared drive, email, and a lawyer on retainer) which is the alternative that actually wins most deals. Also returns dated updates logged against each competitor.',
+    input_schema: { type: 'object', properties: { type: { type: 'string', description: 'Global CLM, E-signature, Kenyan / local, Status quo, …' } } },
+  },
+  {
+    name: 'query_pricing',
+    description: 'Pricing ideas we might charge, with every recorded prospect reaction: the reaction, what they said word for word, and any number they gave.',
+    input_schema: { type: 'object', properties: { name: { type: 'string', description: 'Filter to one pricing idea by name (partial match)' } } },
+  },
+  {
+    name: 'query_market_facts',
+    description: 'Facts about the Kenyan market and its rules — market size, Data Protection Act, stamp duty, e-signature law, competitor pricing — each with a source link and how much it is worth (Primary source / Reported / Estimate / Needs checking).',
+    input_schema: { type: 'object', properties: {
+      category: { type: 'string' },
+      strength: { type: 'string', description: 'Primary source, Reported, Estimate, Needs checking' },
+    } },
+  },
+  {
+    name: 'search_workspace',
+    description: 'Full-text search across everything written in the workspace: conversation notes and quotes, prospect notes, findings, competitor notes and updates, market-fact detail, and pricing reactions. Use this whenever a question could be answered by something somebody typed.',
+    input_schema: { type: 'object', properties: {
+      query: { type: 'string', description: 'Words to search for (case-insensitive)' },
+      limit: { type: 'number', description: 'Max results per area (default 10)' },
+    }, required: ['query'] },
+  },
+  {
+    name: 'propose_action',
+    description: 'Propose a write for the founders to confirm. It appears with a Confirm/Skip button; nothing is saved unless a human taps Confirm. For add_insight the payload needs question_id, direction (Supports/Challenges/Context), finding, and ideally quote, source_kind and source_label.',
+    input_schema: { type: 'object', properties: {
+      action_type: { type: 'string', enum: ['add_insight', 'add_prospect', 'add_market_fact', 'add_competitor_update', 'update_prospect', 'update_question'] },
+      description: { type: 'string', description: 'Plain-English description of what this would write' },
+      payload: { type: 'object', description: 'The data to write' },
+    }, required: ['action_type', 'description', 'payload'] },
+  },
+];
 
-  const ws = await gatherWorkspace(env, localData);
-  if (!ws.hypotheses.length) return errorResponse('No hypotheses defined — seed the hypotheses table first.', 400);
-  const previous = [...ws.ai_assessments].sort((a, b) => String(b.created_at).localeCompare(String(a.created_at)))[0];
-  const buyerCodes = ws.hypotheses.filter((h: any) => h.kind === 'buyer_hypothesis').map((h: any) => h.code);
-  const killCodes = ws.hypotheses.filter((h: any) => h.kind === 'kill_criterion').map((h: any) => h.code);
+async function executeToolCall(
+  name: string,
+  input: Record<string, any>,
+  env: Env,
+  localData: Record<string, unknown[]> | null,
+): Promise<any> {
+  const cap = (n: any, d = 50) => Math.min(Number(n) || d, 100);
+  const like = (v: any, q: any) => String(v || '').toLowerCase().includes(String(q || '').toLowerCase());
 
-  const system = `${SYSTEM_PROMPT}
-
-${OUTPUT_SHAPE_RULES}
-
-${GROUNDING_RULES}
-
-If the evidence is thin, say INSUFFICIENT. An honest INSUFFICIENT is more valuable than a premature leaning. Steelman the opposite of your leaning in summary_markdown — one paragraph titled 'The case against this leaning.'
-
-You are producing a structured assessment, not a chat reply. Respond with ONLY a JSON object, no prose around it, in exactly this shape:
-{
-  "leaning": "GO" | "PIVOT" | "NO-GO" | "INSUFFICIENT",
-  "summary_markdown": "the narrative brief (markdown; must include a paragraph titled 'The case against this leaning')",
-  "per_hypothesis": [
-    { "hypothesis_code": "<one entry for EACH of: ${buyerCodes.join(', ')}>",
-      "direction": "strengthening" | "weakening" | "unclear",
-      "strength": "strong" | "moderate" | "thin",
-      "key_evidence": [ { "type": "interview|matrix|field_check|document|economics", "id": "<record id from the ledger>", "cite": "<human-readable citation, e.g. INT-007 or a filename>", "why": "<one line>" } ],
-      "gaps": "<what evidence is missing>",
-      "what_would_change": "<the concrete evidence that would flip this assessment>" }
-  ],
-  "breakpoints": [
-    { "code": "<one entry for EACH of: ${killCodes.join(', ')}>",
-      "status": "unknown" | "holding" | "breached",
-      "evidence": [ { "type": "...", "id": "...", "cite": "...", "why": "..." } ],
-      "note": "<one line>" }
-  ]
-}`;
-
-  const userMsg = `${workspaceContextText(ws, { phase, segments: body.segments })}
-
-${previous ? `PREVIOUS ASSESSMENT (for continuity — note what changed since):
-${String(previous.created_at).slice(0, 10)} · ${previous.leaning} (trigger: ${previous.trigger}, phase ${previous.phase})
-${(previous.per_hypothesis || []).map((p: any) => `- ${p.hypothesis_code}: ${p.direction}/${p.strength}`).join('\n')}` : 'No previous assessment — this is the first.'}
-
-Produce the assessment JSON now. Trigger: ${trigger}.`;
-
-  const claudeBase = { model: CLAUDE_MODEL, max_tokens: 8000, system };
-  let result = await callClaude(env, { ...claudeBase, messages: [{ role: 'user', content: userMsg }] });
-  let raw = claudeText(result);
-  let parsed: any = null;
-  let check: any;
-  try { parsed = extractJson(raw); check = validateAssessment(parsed, ws.hypotheses); }
-  catch (e) { check = { ok: false, errors: [(e as Error).message] }; }
-
-  if (!check.ok) {
-    result = await callClaude(env, { ...claudeBase, messages: [
-      { role: 'user', content: userMsg },
-      { role: 'assistant', content: raw || '(empty)' },
-      { role: 'user', content: `Your response failed validation:\n- ${check.errors.join('\n- ')}\n\nReturn the corrected JSON object only — no prose, no code fences.` },
-    ] });
-    raw = claudeText(result);
-    try { parsed = extractJson(raw); check = validateAssessment(parsed, ws.hypotheses); }
-    catch (e) { check = { ok: false, errors: [(e as Error).message] }; }
-  }
-  if (!check.ok) return errorResponse(`Assessment failed validation after one retry: ${check.errors.join('; ')}`, 502);
-
-  const record = {
-    trigger, phase,
-    leaning: parsed.leaning,
-    summary_markdown: parsed.summary_markdown,
-    per_hypothesis: parsed.per_hypothesis,
-    breakpoints: parsed.breakpoints,
-    data_snapshot: {
-      interviews: ws.interviews.length,
-      matrix_entries: ws.matrix.length,
-      evidence_links: ws.evidence_links.length,
-      field_checks: ws.field_checks.length,
-      documents: ws.documents.length,
-    },
-    model: CLAUDE_MODEL,
-  };
-
-  if (localData) {
-    return jsonResponse({ assessment: { ...record, created_at: new Date().toISOString() }, persisted: false });
-  }
-  const { data, status } = await supabaseRequest('POST', 'ai_assessments', { ...record, created_by: member?.id }, env);
-  const created = Array.isArray(data) ? data[0] : data;
-  return jsonResponse({ assessment: created, persisted: true }, status);
-}
-
-async function handleProposeLinks(body: any, env: Env) {
-  const { entry_type, entry } = body;
-  if (!['matrix', 'field_check', 'economics'].includes(entry_type) || !entry) {
-    return errorResponse('entry_type (matrix|field_check|economics) and entry are required', 400);
-  }
-  const localData = body.localData || null;
-  const hypotheses = await fetchRows(env, localData, 'hypotheses');
-  if (!hypotheses.length) return jsonResponse({ proposals: [] });
-  const links = await fetchRows(env, localData, 'evidence_links');
-  const evidenceId = entry.id;
-  if (!evidenceId) return errorResponse('entry.id is required', 400);
-  const existing = links.filter((l: any) => l.evidence_id === evidenceId);
-
-  const system = `${SYSTEM_PROMPT}
-
-${OUTPUT_SHAPE_RULES}
-
-You review one just-saved record and decide whether it bears on any hypothesis or kill criterion. Respond with ONLY a JSON array of 0 to 2 proposals:
-[ { "hypothesis_code": "H1", "direction": "supports" | "contradicts" | "neutral", "strength": "strong" | "moderate" | "weak", "note": "<one line: why this evidence bears on this hypothesis>" } ]
-For kill criteria, "supports" means the evidence pushes the criterion toward breach.
-Return [] if nothing clearly bears on the board — most records link to nothing, and silence is better than noise. Never duplicate an existing link.`;
-
-  const userMsg = `HYPOTHESIS BOARD:
-${hypothesesPromptSection(hypotheses)}
-
-JUST-SAVED RECORD (${entry_type}):
-${JSON.stringify(entry, null, 2)}
-
-EXISTING LINKS FOR THIS RECORD (do not duplicate):
-${existing.map((l: any) => `- ${hypotheses.find((hyp: any) => hyp.id === l.hypothesis_id)?.code || l.hypothesis_id}: ${l.direction} (${l.note})`).join('\n') || '(none)'}
-
-Return the JSON array now.`;
-
-  let proposals: any[] = [];
-  try {
-    let result = await callClaude(env, { model: CLAUDE_MODEL, max_tokens: 1000, system, messages: [{ role: 'user', content: userMsg }] });
-    let raw = claudeText(result);
-    let parsed: any = null;
-    let check: any;
-    try { parsed = extractJson(raw); check = validateProposals(parsed, hypotheses); }
-    catch (e) { check = { ok: false, errors: [(e as Error).message] }; }
-    if (!check.ok) {
-      result = await callClaude(env, { model: CLAUDE_MODEL, max_tokens: 1000, system, messages: [
-        { role: 'user', content: userMsg },
-        { role: 'assistant', content: raw || '(empty)' },
-        { role: 'user', content: `Your response failed validation:\n- ${check.errors.join('\n- ')}\n\nReturn the corrected JSON array only.` },
-      ] });
-      raw = claudeText(result);
-      parsed = extractJson(raw);
-      check = validateProposals(parsed, hypotheses);
-      if (!check.ok) parsed = [];
+  switch (name) {
+    case 'query_questions': {
+      let rows: any[] = await fetchRows(env, localData, 'questions');
+      if (input.ref) rows = rows.filter(r => r.ref === input.ref);
+      rows = [...rows].sort((a, b) => (a.sort || 0) - (b.sort || 0));
+      return { records: rows, count: rows.length };
     }
-    proposals = (parsed || []).map((p: any) => {
-      const hyp = hypotheses.find((x: any) => x.code === p.hypothesis_code);
-      return hyp ? {
-        hypothesis_id: hyp.id,
-        hypothesis_code: hyp.code,
-        hypothesis_title: hyp.title,
-        evidence_type: entry_type,
-        evidence_id: evidenceId,
-        direction: p.direction,
-        strength: p.strength,
-        note: p.note,
-      } : null;
-    }).filter(Boolean);
-  } catch {
-    proposals = []; // fail soft — a proposal is a nicety, never worth an error banner
+    case 'query_insights': {
+      const [insights, questions] = await Promise.all([
+        fetchRows(env, localData, 'insights'), fetchRows(env, localData, 'questions'),
+      ]);
+      const refOf = (id: any) => (questions as any[]).find(q => String(q.id) === String(id))?.ref || null;
+      let rows = insights as any[];
+      if (input.question_ref) rows = rows.filter(r => refOf(r.question_id) === input.question_ref);
+      if (input.direction) rows = rows.filter(r => r.direction === input.direction);
+      if (input.source_kind) rows = rows.filter(r => r.source_kind === input.source_kind);
+      const records = rows.slice(0, cap(input.limit)).map(r => ({ ...r, question_ref: refOf(r.question_id) }));
+      return { records, count: records.length };
+    }
+    case 'query_conversations': {
+      const [convos, prospects] = await Promise.all([
+        fetchRows(env, localData, 'conversations'), fetchRows(env, localData, 'prospects'),
+      ]);
+      const nameOf = (id: any) => (prospects as any[]).find(p => String(p.id) === String(id))?.company || null;
+      let rows = convos as any[];
+      if (input.company) rows = rows.filter(r => like(nameOf(r.prospect_id), input.company));
+      if (input.wtp_signal) rows = rows.filter(r => r.wtp_signal === input.wtp_signal);
+      const records = [...rows]
+        .sort((a, b) => String(b.date || '').localeCompare(String(a.date || '')))
+        .slice(0, cap(input.limit, 30))
+        .map(r => ({ ...r, company: nameOf(r.prospect_id) }));
+      return { records, count: records.length, total_in_workspace: (convos as any[]).length };
+    }
+    case 'query_prospects': {
+      let rows: any[] = await fetchRows(env, localData, 'prospects');
+      if (input.status) rows = rows.filter(r => r.status === input.status);
+      if (input.segment) rows = rows.filter(r => r.segment === input.segment);
+      rows = rows.slice(0, cap(input.limit));
+      return { records: rows, count: rows.length };
+    }
+    case 'query_competitors': {
+      const [comps, updates] = await Promise.all([
+        fetchRows(env, localData, 'competitors'), fetchRows(env, localData, 'competitor_updates'),
+      ]);
+      let rows = comps as any[];
+      if (input.type) rows = rows.filter(r => r.type === input.type);
+      const records = rows.map(c => ({
+        ...c,
+        updates: (updates as any[]).filter(u => String(u.competitor_id) === String(c.id))
+          .sort((a, b) => String(b.date || '').localeCompare(String(a.date || ''))),
+      }));
+      return { records, count: records.length };
+    }
+    case 'query_pricing': {
+      const [ideas, reactions, prospects] = await Promise.all([
+        fetchRows(env, localData, 'pricing_ideas'),
+        fetchRows(env, localData, 'pricing_reactions'),
+        fetchRows(env, localData, 'prospects'),
+      ]);
+      const nameOf = (id: any) => (prospects as any[]).find(p => String(p.id) === String(id))?.company || null;
+      let rows = ideas as any[];
+      if (input.name) rows = rows.filter(r => like(r.name, input.name));
+      const records = rows.map(i => ({
+        ...i,
+        reactions: (reactions as any[]).filter(r => String(r.pricing_idea_id) === String(i.id))
+          .map(r => ({ ...r, company: nameOf(r.prospect_id) })),
+      }));
+      return { records, count: records.length };
+    }
+    case 'query_market_facts': {
+      let rows: any[] = await fetchRows(env, localData, 'market_facts');
+      if (input.category) rows = rows.filter(r => r.category === input.category);
+      if (input.strength) rows = rows.filter(r => r.strength === input.strength);
+      return {
+        records: rows,
+        count: rows.length,
+        unsourced: rows.filter(r => !String(r.source_url || '').trim()).length,
+      };
+    }
+    case 'search_workspace': {
+      const q = String(input.query || '').trim().toLowerCase();
+      if (!q) return { error: 'Empty query' };
+      const lim = Math.min(Number(input.limit) || 10, 25);
+      const has = (...fields: any[]) => fields.some(f => String(f || '').toLowerCase().includes(q));
+      const clip = (s: any, n = 800) => String(s || '').slice(0, n);
+
+      const [conversations, prospects, insights, competitors, updates, facts, reactions] = await Promise.all(
+        ['conversations', 'prospects', 'insights', 'competitors', 'competitor_updates', 'market_facts', 'pricing_reactions']
+          .map(t => fetchRows(env, localData, t)));
+      const nameOf = (id: any) => (prospects as any[]).find(p => String(p.id) === String(id))?.company || null;
+
+      return {
+        query: q,
+        conversations: (conversations as any[])
+          .filter(r => has(r.notes, r.best_quote, r.main_pain, r.current_tools, r.wtp_detail, r.pain_cost, r.person))
+          .slice(0, lim)
+          .map(r => ({ company: nameOf(r.prospect_id), person: r.person, date: r.date, main_pain: clip(r.main_pain, 400), best_quote: clip(r.best_quote, 400), notes: clip(r.notes) })),
+        insights: (insights as any[]).filter(r => has(r.finding, r.quote, r.source_label)).slice(0, lim)
+          .map(r => ({ direction: r.direction, finding: r.finding, quote: clip(r.quote, 400), source: r.source_label, date: r.date })),
+        prospects: (prospects as any[]).filter(r => has(r.company, r.notes, r.why_fit, r.next_step)).slice(0, lim)
+          .map(r => ({ company: r.company, status: r.status, segment: r.segment, why_fit: clip(r.why_fit, 300), next_step: clip(r.next_step, 300) })),
+        competitors: (competitors as any[]).filter(r => has(r.name, r.positioning, r.notes, r.price_notes, r.strengths, r.weaknesses)).slice(0, lim)
+          .map(r => ({ name: r.name, type: r.type, positioning: clip(r.positioning, 300), price_notes: clip(r.price_notes, 300) })),
+        competitor_updates: (updates as any[]).filter(r => has(r.note)).slice(0, lim)
+          .map(r => ({ note: clip(r.note, 400), date: r.date, source_url: r.source_url })),
+        market_facts: (facts as any[]).filter(r => has(r.claim, r.detail, r.value, r.notes)).slice(0, lim)
+          .map(r => ({ category: r.category, claim: clip(r.claim, 300), value: r.value, strength: r.strength, source_url: r.source_url })),
+        pricing_reactions: (reactions as any[]).filter(r => has(r.verbatim, r.notes)).slice(0, lim)
+          .map(r => ({ company: nameOf(r.prospect_id), reaction: r.reaction, verbatim: clip(r.verbatim, 400), their_number: r.their_number })),
+      };
+    }
+    case 'propose_action':
+      return { proposed: true };
+    default:
+      return { error: `Unknown tool: ${name}` };
   }
-  return jsonResponse({ proposals });
 }
 
-async function handleDraftSection(body: any, env: Env) {
-  if (!body.section_label) return errorResponse('section_label is required', 400);
-  const localData = body.localData || null;
-  const phase = Number.isInteger(body.phase) ? body.phase : 0;
-  const ws = await gatherWorkspace(env, localData);
-  const docKind = body.doc_kind || 'a section of the human decision memo';
-  const structured = Array.isArray(body.fields) && body.fields.length > 0;
-
-  const shapeInstruction = structured
-    ? `Return ONLY a JSON object with exactly these string fields, nothing else:
-${body.fields.map((f: any) => `- "${f.key}": ${f.label}${f.placeholder ? ` (${f.placeholder})` : ''}`).join('\n')}
-Each field: 1–3 sentences of plain prose. Cite inline — interview IDs (INT-007), matrix entry ids, filenames. If the evidence for a field is thin or missing, say so in that field rather than smoothing over it.`
-    : `Write 150–300 words of plain prose (no headings, no JSON). Cite inline as you go — interview IDs (INT-007), matrix entry ids, filenames. If the evidence for a claim is thin or missing, say so in the text rather than smoothing over it.`;
-
-  const system = `${SYSTEM_PROMPT}
-
-${OUTPUT_SHAPE_RULES}
-
-${GROUNDING_RULES}
-
-You are drafting ${docKind}: "${body.section_label}"${body.placeholder ? ` (${body.placeholder})` : ''}.
-${shapeInstruction}
-This is a draft the humans will edit; argue from the ledger, do not decide for them.`;
-
-  const userMsg = `${workspaceContextText(ws, { phase, segments: body.segments })}
-
-Draft "${body.section_label}" now. Use ONLY the workspace facts above. If the workspace is empty or thin, say so plainly in one or two sentences and stop — do not manufacture a narrative.`;
-
-  const claudeBase = { model: CLAUDE_MODEL, max_tokens: 2000, system };
-  let result = await callClaude(env, { ...claudeBase, messages: [{ role: 'user', content: userMsg }] });
-  if (!structured) {
-    return jsonResponse({ text: claudeText(result).trim() });
-  }
-
-  let raw = claudeText(result);
-  let parsed: any = null;
-  let check: any;
-  try { parsed = extractJson(raw); check = validateDraftFields(parsed, body.fields); }
-  catch (e) { check = { ok: false, errors: [(e as Error).message] }; }
-  if (!check.ok) {
-    result = await callClaude(env, { ...claudeBase, messages: [
-      { role: 'user', content: userMsg },
-      { role: 'assistant', content: raw || '(empty)' },
-      { role: 'user', content: `Your response failed validation:\n- ${check.errors.join('\n- ')}\n\nReturn the corrected JSON object only — no prose, no code fences.` },
-    ] });
-    raw = claudeText(result);
-    try { parsed = extractJson(raw); check = validateDraftFields(parsed, body.fields); }
-    catch (e) { check = { ok: false, errors: [(e as Error).message] }; }
-  }
-  if (!check.ok) return errorResponse(`Draft failed validation after one retry: ${check.errors.join('; ')}`, 502);
-  return jsonResponse({ fields: parsed });
-}
-
-async function handleChat(body: any, env: Env, userId: string) {
+/* ------------------------------------------------------------ Chat */
+async function handleChat(body: any, env: Env) {
   const { messages, dataContext, sessionId, tools: enableTools, localData } = body;
 
-  // Best-effort persistence — chat still works if the chat_* tables are absent.
-  let activeSessionId = sessionId;
-  try {
-    if (!activeSessionId) {
-      const { data } = await supabaseRequest('POST', 'chat_sessions', {
-        user_id: userId,
-        title: messages[0]?.content?.slice(0, 80) || 'Chat session',
-      }, env);
-      activeSessionId = Array.isArray(data) ? (data[0] as any)?.id : (data as any)?.id;
-    }
-    const lastMsg = messages[messages.length - 1];
-    if (lastMsg?.role === 'user') {
-      await supabaseRequest('POST', 'chat_messages', { session_id: activeSessionId, role: 'user', content: lastMsg.content }, env);
-    }
-  } catch { /* persistence is optional in this setup */ }
+  const system = `${SYSTEM_PROMPT}
 
-  const chatHypotheses = await fetchRows(env, localData || null, 'hypotheses');
-  const systemMessage = `${SYSTEM_PROMPT}\n\n${GROUNDING_RULES}\n\n--- HYPOTHESIS BOARD (live records — the single source of truth) ---\n${hypothesesPromptSection(chatHypotheses)}\n\n--- LIVE PROJECT DATA ---\n${dataContext || '(none provided)'}`;
+${GROUNDING_RULES}
 
-  const claudeMessages = (messages || []).map((m: any) => ({
-    role: m.role === 'assistant' ? 'assistant' : 'user',
-    content: m.content,
-  }));
+--- CURRENT STATE OF THE WORKSPACE ---
+${dataContext || '(no snapshot supplied)'}`;
 
-  const toolDefs = enableTools ? [
-    { name: 'query_outreach', description: 'Query outreach contacts with optional filters. Returns matching records.', input_schema: { type: 'object', properties: { status: { type: 'string', description: 'Filter by status: Cold, Sent, Replied, Booked, Done, Declined' }, segment: { type: 'string', description: 'Filter by segment' }, limit: { type: 'number', description: 'Max records to return (default 20)' } } } },
-    { name: 'query_interviews', description: 'Query interview records with optional filters.', input_schema: { type: 'object', properties: { segment: { type: 'string', description: 'Filter by segment' }, interviewer: { type: 'string', description: 'Filter by interviewer name' }, tagged: { type: 'string', description: 'Filter by tagged status: Y or N' }, limit: { type: 'number', description: 'Max records to return (default 20)' } } } },
-    { name: 'query_matrix', description: 'Query theme matrix entries with optional filters.', input_schema: { type: 'object', properties: { theme_tag: { type: 'string', description: 'Filter by theme tag' }, segment: { type: 'string', description: 'Filter by segment' }, min_severity: { type: 'number', description: 'Minimum severity (1-5)' }, wtp: { type: 'string', description: 'Filter by WTP: Y, Maybe, N' }, limit: { type: 'number', description: 'Max records to return (default 20)' } } } },
-    { name: 'query_scripts', description: 'Query interview scripts. Returns the latest version of each script.', input_schema: { type: 'object', properties: { script_name: { type: 'string', description: 'Filter by script name' } } } },
-    { name: 'query_deliverables', description: 'Query phase deliverables and exit criteria.', input_schema: { type: 'object', properties: { phase: { type: 'number', description: 'Filter by phase number (0-5)' }, status: { type: 'string', description: 'Filter by status' } } } },
-    { name: 'query_economics', description: 'Query the unit-economics rows: assumptions, cost/revenue lines, break-point analysis. Use this for any pricing, margin, or "do the numbers work" question — never estimate economics you can query.', input_schema: { type: 'object', properties: { segment: { type: 'string', description: 'Filter by segment (optional)' }, limit: { type: 'number', description: 'Max records to return (default 50)' } } } },
-    { name: 'query_segment_cards', description: 'Query the per-segment synthesis cards: each segment\'s top pains, willingness-to-pay read, demand strength, and the summary the team has written. The fastest way to compare segments strategically.', input_schema: { type: 'object', properties: { segment: { type: 'string', description: 'Filter by segment name (optional)' } } } },
-    { name: 'query_kill_list', description: 'Query the kill list — ideas, segments, or features the team has explicitly ruled out, with the reason and who killed it. Read this before proposing anything, so you never re-propose a killed direction.', input_schema: { type: 'object', properties: { limit: { type: 'number', description: 'Max records to return (default 50)' } } } },
-    { name: 'search_notes', description: 'Full-text search across EVERYTHING written in the workspace: interview field notes and topics, outreach notes, matrix quotes and notes, deliverable evidence, and document descriptions/contents. Use this whenever a question could be answered by the team\'s notes.', input_schema: { type: 'object', properties: { query: { type: 'string', description: 'Words to search for (case-insensitive substring match)' }, limit: { type: 'number', description: 'Max results per table (default 10)' } }, required: ['query'] } },
-    { name: 'list_documents', description: 'List uploaded field documents (filename, segment, linked interview, description).', input_schema: { type: 'object', properties: { segment: { type: 'string', description: 'Filter by segment' }, interview_id: { type: 'string', description: 'Filter by linked interview, e.g. INT-004' } } } },
-    { name: 'read_document', description: 'Read the full contents of an uploaded document by its filename or id. Text/CSV/markdown return verbatim text; PDFs are transcribed; images are returned for you to look at.', input_schema: { type: 'object', properties: { filename: { type: 'string', description: 'Exact or partial filename' }, document_id: { type: 'string', description: 'Document record id (alternative to filename)' } } } },
-    { name: 'query_hypotheses', description: 'Query the hypothesis board: buyer hypotheses (H1–H3) and kill criteria (K1–K3) with their live statuses and status notes.', input_schema: { type: 'object', properties: { kind: { type: 'string', enum: ['buyer_hypothesis', 'kill_criterion'], description: 'Filter by kind (optional)' }, code: { type: 'string', description: 'Filter by code, e.g. H2 (optional)' } } } },
-    { name: 'query_evidence_links', description: 'Query evidence links — the records tying interviews, matrix entries, field checks, documents, and economics to hypotheses. Each link carries direction (supports/contradicts/neutral), strength, a note, and provenance (human or ai_confirmed).', input_schema: { type: 'object', properties: { hypothesis_code: { type: 'string', description: 'Filter by hypothesis code, e.g. H2' }, direction: { type: 'string', enum: ['supports', 'contradicts', 'neutral'], description: 'Filter by direction' }, evidence_type: { type: 'string', enum: ['interview', 'matrix', 'field_check', 'document', 'economics'], description: 'Filter by evidence type' }, limit: { type: 'number', description: 'Max records to return (default 50)' } } } },
-    { name: 'get_latest_assessment', description: 'Get the most recent AI assessment: leaning (GO/PIVOT/NO-GO/INSUFFICIENT), narrative summary, per-hypothesis directions with cited evidence, and break-point statuses. Assessments are append-only; this returns the newest.', input_schema: { type: 'object', properties: {} } },
-    { name: 'propose_action', description: 'Propose an action for the user to confirm. The action will be shown to the user with a Confirm/Skip button. For add_evidence_link the payload needs hypothesis_id, evidence_type, evidence_id, direction, strength, note. For update_hypothesis_status the payload needs id, status, and a status_note explaining why.', input_schema: { type: 'object', properties: { action_type: { type: 'string', enum: ['add_interview', 'update_deliverable', 'add_matrix_entry', 'flag_quote', 'add_evidence_link', 'update_hypothesis_status'], description: 'Type of action' }, description: { type: 'string', description: 'Human-readable description of what this action does' }, payload: { type: 'object', description: 'The data to write' } }, required: ['action_type', 'description', 'payload'] } },
-    { name: 'generate_report', description: 'Generate a report. Types: weekly_status, phase_exit, investor_briefing, decision_memo.', input_schema: { type: 'object', properties: { report_type: { type: 'string', enum: ['weekly_status', 'phase_exit', 'investor_briefing', 'decision_memo'], description: 'Type of report' }, parameters: { type: 'object', description: 'Additional parameters for the report' } }, required: ['report_type'] } },
-  ] : undefined;
-
-  const claudeBody: Record<string, unknown> = { model: CLAUDE_MODEL, max_tokens: 4096, system: systemMessage, messages: claudeMessages };
-  if (toolDefs) claudeBody.tools = toolDefs;
-
-  let result = await callClaude(env, claudeBody);
+  const convo: any[] = (messages || []).map((m: any) => ({ role: m.role, content: m.content }));
   const actions: any[] = [];
-  const textParts: string[] = [];
-  let toolRound = 0;
-  const maxToolRounds = 5;
+  let finalText = '';
 
-  while (result.stop_reason === 'tool_use' && toolRound < maxToolRounds) {
-    toolRound++;
-    const toolUseBlocks = result.content.filter((b: any) => b.type === 'tool_use');
-    result.content.filter((b: any) => b.type === 'text').forEach((b: any) => textParts.push(b.text));
+  // Up to five rounds of tool use, then answer.
+  for (let round = 0; round < 6; round++) {
+    const res: any = await callClaude(env, {
+      model: CLAUDE_MODEL,
+      max_tokens: 2000,
+      system,
+      messages: convo,
+      ...(enableTools === false ? {} : { tools: TOOLS }),
+    });
 
-    const toolResults: any[] = [];
-    for (const toolBlock of toolUseBlocks) {
-      const toolResult = await executeToolCall(toolBlock.name, toolBlock.input, env, localData || null);
-      if (toolBlock.name === 'propose_action') {
-        actions.push({ action_type: toolBlock.input.action_type, description: toolBlock.input.description, payload: toolBlock.input.payload });
-        toolResults.push({ type: 'tool_result', tool_use_id: toolBlock.id, content: 'Action proposed to user for confirmation.' });
-      } else if (toolResult && toolResult.__image) {
-        toolResults.push({ type: 'tool_result', tool_use_id: toolBlock.id, content: [
-          { type: 'text', text: `Document: ${toolResult.filename}${toolResult.description ? ` — ${toolResult.description}` : ''}` },
-          { type: 'image', source: { type: 'base64', media_type: toolResult.__image.media_type, data: toolResult.__image.data } },
-        ] });
-      } else {
-        toolResults.push({ type: 'tool_result', tool_use_id: toolBlock.id, content: JSON.stringify(toolResult).slice(0, 24000) });
+    const textParts = (res.content || []).filter((c: any) => c.type === 'text').map((c: any) => c.text);
+    if (textParts.length) finalText = textParts.join('\n\n');
+
+    const toolUses = (res.content || []).filter((c: any) => c.type === 'tool_use');
+    if (!toolUses.length) break;
+
+    convo.push({ role: 'assistant', content: res.content });
+    const results: any[] = [];
+    for (const tu of toolUses) {
+      if (tu.name === 'propose_action') {
+        actions.push({
+          action_type: tu.input.action_type,
+          description: tu.input.description,
+          payload: tu.input.payload,
+        });
       }
+      const out = await executeToolCall(tu.name, tu.input || {}, env, localData || null);
+      results.push({ type: 'tool_result', tool_use_id: tu.id, content: JSON.stringify(out).slice(0, 40000) });
     }
-
-    claudeMessages.push({ role: 'assistant', content: result.content });
-    claudeMessages.push({ role: 'user', content: toolResults });
-    result = await callClaude(env, { ...claudeBody, messages: claudeMessages });
+    convo.push({ role: 'user', content: results });
   }
 
-  if (result.content) {
-    result.content.filter((b: any) => b.type === 'text').forEach((b: any) => textParts.push(b.text));
-  }
-  const finalText = textParts.join('\n\n') || '(empty response)';
-
-  try {
-    await supabaseRequest('POST', 'chat_messages', {
-      session_id: activeSessionId,
-      role: 'assistant',
-      content: finalText,
-      tool_calls: toolRound > 0 ? { rounds: toolRound, actions: actions.length } : null,
-    }, env);
-  } catch { /* persistence is optional */ }
-
-  return jsonResponse({ text: finalText, sessionId: activeSessionId, actions, patterns: [] });
+  return jsonResponse({ text: finalText || '(empty reply)', sessionId: sessionId || null, actions });
 }
 
-/* ------------------------------------------------------------ Data storage (api mode)
-   These power DATA_MODE = 'api' — the shared, synced workspace. Every record
-   read/write goes through the service role (RLS is enforced here in code by the
-   team-membership check), so all active team members see one shared database. */
+/* ------------------------------------------------------------ Drafting
+   One seam for every AI-drafted piece of writing in the app. The caller says
+   what it wants and hands over the relevant slice; the draft always lands in
+   an editable box on the client and is never saved automatically. */
+async function handleDraftSection(body: any, env: Env) {
+  const { section, instruction, context, localData } = body;
 
+  const system = `${SYSTEM_PROMPT}
+
+${GROUNDING_RULES}
+
+You are drafting one short piece of writing for the founders to edit. Return the prose only — no preamble, no "here is the draft", no headings unless the instruction asks for them. Plain sentences. If the evidence supplied is thin or empty, say so in one or two sentences and stop; do not pad.`;
+
+  const res: any = await callClaude(env, {
+    model: CLAUDE_MODEL,
+    max_tokens: 1200,
+    system,
+    messages: [{
+      role: 'user',
+      content: `Section: ${section || 'unspecified'}
+
+${instruction || 'Draft this section.'}
+
+--- THE EVIDENCE YOU MAY USE (and nothing else) ---
+${JSON.stringify(context || {}, null, 2).slice(0, 60000)}
+
+--- THE WIDER WORKSPACE, FOR CONTEXT ---
+${JSON.stringify(localData || {}, null, 2).slice(0, 40000)}`,
+    }],
+  });
+
+  const text = (res.content || []).filter((c: any) => c.type === 'text').map((c: any) => c.text).join('\n\n');
+  return jsonResponse({ text: text || '', section: section || null });
+}
+
+/* ------------------------------------------------------------ Table CRUD */
 type Member = { id: string; role: string; display_name: string; userId: string };
 
 // The only tables the app reads/writes. Anything else 404s — no arbitrary access.
 const DATA_TABLES = new Set([
-  'outreach', 'interviews', 'matrix', 'deliverables', 'scripts', 'reports',
-  'kill_list', 'economics', 'field_checks', 'decision_memos', 'segment_cards',
-  'documents', 'hypotheses', 'evidence_links', 'ai_assessments',
+  'questions', 'competitors', 'competitor_updates', 'prospects', 'contacts',
+  'conversations', 'pricing_ideas', 'pricing_reactions', 'market_facts', 'insights',
 ]);
 
-// Which column records "who created this" on insert — it is NOT `created_by`
-// everywhere (see sql/schema.sql). Tables absent here have no such column, so
-// we stamp nothing. Stamping a non-existent column makes PostgREST 400 (PGRST204).
-const CREATOR_COLUMN: Record<string, string> = {
-  outreach: 'created_by', interviews: 'created_by', matrix: 'created_by',
-  scripts: 'created_by', economics: 'created_by', field_checks: 'created_by',
-  decision_memos: 'created_by', segment_cards: 'created_by', documents: 'created_by',
-  evidence_links: 'created_by', ai_assessments: 'created_by',
-  reports: 'generated_by', kill_list: 'killed_by',
-  // deliverables, hypotheses: no creator column — stamp nothing.
-};
-
-async function logAction(env: Env, actorId: string, action: string, table: string, recordId: string | null, newValues: unknown) {
-  // Audit is best-effort — a write must never fail because the log did.
-  try {
-    await supabaseRequest('POST', 'audit_log', {
-      actor_id: actorId, action, table_name: table, record_id: recordId, new_values: newValues,
-    }, env);
-  } catch { /* ignore */ }
-}
-
 async function handleTableCrud(method: string, table: string, recordId: string | null, req: Request, env: Env, member: Member) {
-  const isWriteRole = member.role === 'lead' || member.role === 'partner';
-
-  // ai_assessments are append-only: the trajectory over time is itself evidence.
-  if (table === 'ai_assessments' && (method === 'PATCH' || method === 'DELETE')) {
-    return errorResponse('Assessments are append-only — they are never updated or deleted.', 405);
-  }
+  const isWriteRole = member.role === 'lead' || member.role === 'partner' || member.role === 'admin';
 
   if (method === 'GET') {
     const query = recordId ? `${table}?id=eq.${recordId}` : `${table}?order=created_at.desc`;
@@ -944,70 +453,22 @@ async function handleTableCrud(method: string, table: string, recordId: string |
   }
 
   if (method === 'POST' && isWriteRole) {
-    const body = await req.json();
-    const row = body.fields || body;
-    const creatorCol = CREATOR_COLUMN[table];
-    if (creatorCol) row[creatorCol] = member.id;
-    if (table === 'documents') row.uploaded_by = member.display_name;
+    const row = await req.json();
     const { data, status } = await supabaseRequest('POST', table, row, env);
     const created = Array.isArray(data) ? data[0] : data;
-    await logAction(env, member.id, 'create', table, (created as any)?.id, row);
     return jsonResponse(created, status);
   }
 
   if (method === 'PATCH' && recordId && isWriteRole) {
-    const body = await req.json();
-    const fields = body.fields || body;
+    const fields = await req.json();
     const { data, status } = await supabaseRequest('PATCH', `${table}?id=eq.${recordId}`, fields, env);
     const updated = Array.isArray(data) ? data[0] : data;
-    await logAction(env, member.id, 'update', table, recordId, fields);
     return jsonResponse(updated, status);
   }
 
-  // Leads delete anywhere; partners may delete their own documents.
-  if (method === 'DELETE' && recordId && (member.role === 'lead' || (table === 'documents' && isWriteRole))) {
+  if (method === 'DELETE' && recordId && isWriteRole) {
     const { status } = await supabaseRequest('DELETE', `${table}?id=eq.${recordId}`, null, env);
-    if (table === 'documents') {
-      await fetch(`${env.SUPABASE_URL}/storage/v1/object/${STORAGE_BUCKET}/${recordId}`, {
-        method: 'DELETE', headers: { Authorization: `Bearer ${env.SUPABASE_SERVICE_KEY}` },
-      }).catch(() => {});
-    }
-    await logAction(env, member.id, 'delete', table, recordId, null);
     return jsonResponse({ deleted: true }, status);
-  }
-
-  return errorResponse('Method not allowed or insufficient permissions', 405);
-}
-
-async function handleDocumentFile(docId: string, action: string, method: string, req: Request, env: Env, member: Member) {
-  const isWriteRole = member.role === 'lead' || member.role === 'partner';
-
-  if (action === 'file' && method === 'POST' && isWriteRole) {
-    const { base64, mime_type } = await req.json();
-    const bytes = Uint8Array.from(atob(base64), c => c.charCodeAt(0));
-    const up = await fetch(`${env.SUPABASE_URL}/storage/v1/object/${STORAGE_BUCKET}/${docId}`, {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${env.SUPABASE_SERVICE_KEY}`,
-        'Content-Type': mime_type || 'application/octet-stream',
-        'x-upsert': 'true',
-      },
-      body: bytes,
-    });
-    if (!up.ok) return errorResponse(`Storage upload failed: ${await up.text()}`, 502);
-    await supabaseRequest('PATCH', `documents?id=eq.${docId}`, { storage_path: docId }, env);
-    return jsonResponse({ stored: true });
-  }
-
-  if (action === 'link' && method === 'GET') {
-    const sign = await fetch(`${env.SUPABASE_URL}/storage/v1/object/sign/${STORAGE_BUCKET}/${docId}`, {
-      method: 'POST',
-      headers: { Authorization: `Bearer ${env.SUPABASE_SERVICE_KEY}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ expiresIn: 3600 }),
-    });
-    if (!sign.ok) return jsonResponse({ url: null });
-    const { signedURL } = await sign.json();
-    return jsonResponse({ url: `${env.SUPABASE_URL}/storage/v1${signedURL}` });
   }
 
   return errorResponse('Method not allowed or insufficient permissions', 405);
@@ -1045,12 +506,12 @@ Deno.serve(async (req: Request) => {
       CLAUDE_API_KEY: '',
     };
 
-    // Must be signed in AND an active team member. This is what keeps the shared
-    // workspace private to the team even though anyone can request a magic link.
+    // Must be signed in AND an active team member. This is what keeps the
+    // workspace private even though anyone can request a magic link.
     const member = await authenticate(req, env);
     if (!member) {
       return errorResponse(
-        'Not authorised. You must be signed in and listed as an active member in the team_members table. Ask the project lead to add you.',
+        'Not authorised. You must be signed in and listed as an active member in the team_members table. Ask Young to add you.',
         403,
       );
     }
@@ -1060,7 +521,7 @@ Deno.serve(async (req: Request) => {
     const sub = (apiIdx >= 0 ? path.slice(apiIdx + 5) : '').replace(/\/+$/, '');
 
     // ---- AI routes (need the Claude key) ----
-    const isAiRoute = sub === '' || sub === 'chat' || sub === 'assessment' || sub === 'propose-links' || sub === 'draft-section';
+    const isAiRoute = sub === '' || sub === 'chat' || sub === 'draft-section';
     if (isAiRoute) {
       if (req.method !== 'POST') return errorResponse('Method not allowed', 405);
       const admin = createClient(env.SUPABASE_URL, env.SUPABASE_SERVICE_KEY);
@@ -1070,15 +531,9 @@ Deno.serve(async (req: Request) => {
         return errorResponse('Claude API key not configured. Set it on the admin page, or as an ANTHROPIC_API_KEY Edge Function secret.', 503);
       }
       const body = await req.json();
-      if (sub === 'assessment') return await handleAssessment(body, env, member);
-      if (sub === 'propose-links') return await handleProposeLinks(body, env);
       if (sub === 'draft-section') return await handleDraftSection(body, env);
-      return await handleChat(body, env, member.userId); // 'chat' or bare function URL
+      return await handleChat(body, env); // 'chat' or bare function URL
     }
-
-    // ---- Document file / signed-link routes ----
-    const fileMatch = sub.match(/^documents\/([^/]+)\/(file|link)$/);
-    if (fileMatch) return await handleDocumentFile(fileMatch[1], fileMatch[2], req.method, req, env, member);
 
     // ---- Table CRUD routes: <table> or <table>/<id> ----
     const parts = sub.split('/');
