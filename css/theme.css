@@ -388,6 +388,47 @@ table.data.sticky-head thead th { position: sticky; top: 0; background: var(--su
 .b-rose-hint { border-color: var(--rose-border); background: var(--rose-soft); }
 
 /* ============================================================================
+   THE INTERVIEW SHEET — one meeting, one page.
+   The question you are asking has to be readable at arm's length across a
+   table, so it is set in the heading face at body-plus size, with the
+   how-to-ask-it note underneath in quiet grey. The note is for you, not for
+   them; it must never compete with the question itself.
+   ========================================================================== */
+/* The block jump strip. Sticks below the app header — the offset is the
+   header's own height, so the two never overlap. Scrolls sideways on a phone
+   rather than wrapping into three rows of chips. */
+.sheet-jump {
+  position: sticky; top: 61px; z-index: 15;
+  display: flex; gap: 6px; margin-bottom: 16px; padding: 8px 0;
+  overflow-x: auto; overscroll-behavior-x: contain;
+  background: var(--surface-page);
+  border-bottom: 1px solid var(--line-soft);
+}
+.sheet-jump .chip { cursor: pointer; height: 28px; flex-shrink: 0; }
+.sheet-jump .chip:hover { background: var(--surface-inset); border-color: var(--line); }
+/* Jumping to a block must land on its heading, not underneath the two sticky
+   bars covering the top of the page. */
+.sheet-block { scroll-margin-top: 124px; }
+@media (max-width: 640px) {
+  /* The phone header wraps to two rows, so both offsets grow. */
+  .sheet-jump { top: 104px; }
+  .sheet-block { scroll-margin-top: 168px; }
+}
+
+.sheet-q { padding: 14px 0; border-top: 1px solid var(--line-soft); }
+.sheet-q:first-of-type { border-top: none; padding-top: 0; }
+.sheet-ask {
+  font-family: var(--font-display); font-weight: 500;
+  font-size: 15px; line-height: 22px; color: var(--ink); letter-spacing: -0.01em;
+}
+.sheet-hint { font-size: 12px; line-height: 18px; color: var(--ink-mute); margin-top: 4px; }
+/* The row that turns an answer into evidence, sitting under its box. Quiet
+   until you need it — it must not compete with the next question. */
+.sheet-attach {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 6px;
+}
+
+/* ============================================================================
    THE LOOP — the four steps this whole workspace exists to run, shown on the
    Overview until somebody says they have got it. Nothing else in the app ever
    explains what it is for; a research tool that assumes you read the brief is

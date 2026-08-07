@@ -1,8 +1,13 @@
-/* Pricing — one question: "What will they actually pay, and for what shape?"
+/* Pricing options — one question: "What will they actually pay, and for what shape?"
 
-   An idea with no reactions is an opinion. The screen counts reactions per
-   idea and puts the untested ones first, so the board cannot quietly become
-   a list of things we like the sound of. */
+   This screen is where the priced options are SET UP. They are tested in the
+   interview sheet, which reads them out with their real numbers and records
+   the reaction in the meeting. That split is deliberate: pricing used to be
+   captured here, on a screen you had to remember to visit afterwards, and the
+   result was a workspace with zero recorded reactions.
+
+   An idea with no reactions is an opinion. The untested ones sort to the top,
+   so the list cannot quietly become a set of things we like the sound of. */
 import {
   STATE, registerRoute, renderCurrentRoute, h, chip, emptyState, quoteBlock,
   openModal, closeModal, formField, setPageActions, fmtDate, today, fmtKES, prospectName,
@@ -24,13 +29,13 @@ function renderPricing(page) {
   const untested = STATE.pricing_ideas.filter(i => reactionsFor(i.id).length === 0);
   if (untested.length) {
     page.appendChild(h('div', { class: 'banner banner-gold mb-4' }, [
-      h('span', { text: `${untested.length} of ${STATE.pricing_ideas.length} pricing ideas have never been put in front of anyone. Until a real prospect reacts to a real number, these are opinions.` }),
+      h('span', { text: `${untested.length} of ${STATE.pricing_ideas.length} pricing ideas have never been put in front of anyone. Until a real prospect reacts to a real number, these are opinions — read them out in your next interview sheet.` }),
     ]));
   }
 
   page.appendChild(h('div', { class: 'flex flex-wrap items-center gap-3 mb-4' }, [
     h('div', { class: 'text-sm t-soft flex-1 min-w-[200px]',
-      text: 'Show a prospect three priced options and record what they said — the words, not your reading of them. "Too expensive" and "wrong shape" mean completely different things.' }),
+      text: 'Set the options up here with real numbers. They appear in every interview sheet, where you read them out and record what was said — the words, not your reading of them. "Too expensive" and "wrong shape" mean completely different things.' }),
     h('button', { class: 'btn btn-line', onclick: exportPricing }, '↓ CSV'),
   ]));
 
@@ -92,7 +97,10 @@ function ideaCard(idea, listLength = 0) {
   if (grid.children.length) body.appendChild(grid);
 
   body.appendChild(h('div', { class: 'flex flex-wrap gap-2 pt-3 border-t b-soft' }, [
-    h('button', { class: `btn ${reactions.length ? 'btn-line' : 'btn-primary'} text-xs`, onclick: () => openReactionForm(idea) }, '+ Record a reaction'),
+    /* Reactions are recorded in the meeting, on the sheet. This one covers the
+       case the sheet cannot: they emailed you back about the price a week
+       later. It is deliberately the quiet option. */
+    h('button', { class: 'btn btn-line text-xs', onclick: () => openReactionForm(idea) }, '+ A reaction outside a meeting'),
     h('button', { class: 'btn btn-line text-xs', onclick: () => insightModal({
       sourceKind: 'Pricing test', sourceId: idea.id, sourceLabel: idea.name,
     }) }, '+ Write down a finding'),
@@ -204,5 +212,5 @@ function deleteIdea(idea) {
   }, 'Delete', { danger: true });
 }
 
-registerRoute('pricing', 'Pricing', renderPricing,
-  'What will they actually pay, and for what shape?');
+registerRoute('pricing', 'Pricing options', renderPricing,
+  'What are we putting in front of people, and what did they say?');

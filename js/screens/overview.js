@@ -34,18 +34,18 @@ const dismissLoop = () => { try { localStorage.setItem(LOOP_LS_KEY, '1'); } catc
 function nextAction() {
   const unmined = STATE.conversations.filter(c => conversationUnmined(c));
   if (unmined.length) {
-    return { label: 'Write up a conversation', route: 'conversations',
-      why: `Start with the ${unmined.length === 1 ? 'conversation' : `${unmined.length} conversations`} nothing has been written down from.` };
+    return { label: 'Finish a sheet', route: 'conversations',
+      why: `Open the ${unmined.length === 1 ? 'sheet' : `${unmined.length} sheets`} nothing has been written down from, and attach at least one finding.` };
   }
   if (!STATE.prospects.length) {
     return { label: '+ Add a prospect', route: 'prospects',
       why: 'Nobody is on the list yet. Four companies you can get an introduction to this week is a good start.' };
   }
   if (!STATE.conversations.length) {
-    return { label: '+ Log a conversation', route: 'conversations',
+    return { label: '+ Start an interview sheet', route: 'sheet',
       why: 'Nobody has been talked to yet. Everything else in here is preparation for that.' };
   }
-  return { label: '+ Write down a finding', route: null,
+  return { label: '+ Start an interview sheet', route: 'sheet',
     why: 'Every conversation has been written up. Go and have another one.' };
 }
 
@@ -184,18 +184,18 @@ function loopCard() {
     { n: 1, done: STATE.prospects.length > 0,
       text: 'Line up a company worth talking to.', go: 'prospects', label: 'Prospects' },
     { n: 2, done: STATE.conversations.length > 0,
-      text: 'Have the conversation, and write up what they said the same day.', go: 'conversations', label: 'Conversations' },
+      text: 'Meet them and fill in the sheet — the questions written for their kind of company, the prices, and what they said, all on one page.', go: 'sheet', label: 'New sheet' },
     { n: 3, done: STATE.insights.length > 0,
-      text: 'Turn what they said into a finding, attached to one of the five questions.', go: 'findings', label: 'Findings' },
+      text: 'Tick which answers mattered. That is what attaches them to one of the five questions — you do it on the sheet, in the room.', go: 'conversations', label: 'Conversations' },
     { n: 4, done: STATE.questions.some(q => q.leaning),
-      text: 'Read where the five questions now stand, and aim the next conversation at the thinnest one.', go: 'questions', label: 'The five questions' },
+      text: 'Read where the five questions now stand, and aim the next meeting at the thinnest one.', go: 'questions', label: 'Where we stand' },
   ];
 
   const card = h('div', { class: 'card card-pad mb-4' }, [
     h('div', { class: 'flex flex-wrap items-start justify-between gap-3 mb-1' }, [
       h('div', {}, [
         h('div', { class: 'card-title', text: 'How this works' }),
-        h('div', { class: 'text-2nd t-mute mt-0.5', text: 'One loop, four steps. Everything in the sidebar feeds it.' }),
+        h('div', { class: 'text-2nd t-mute mt-0.5', text: 'One loop, four steps. The sheet in step 2 is where nearly all of it happens.' }),
       ]),
       h('button', {
         class: 'btn btn-ghost text-xs',

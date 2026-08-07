@@ -100,6 +100,7 @@ async function boot() {
     import('./screens/competitors.js'),
     import('./screens/prospects.js'),
     import('./screens/conversations.js'),
+    import('./screens/sheet.js'),
     import('./screens/pricing.js'),
     import('./screens/market.js'),
     import('./screens/findings.js'),

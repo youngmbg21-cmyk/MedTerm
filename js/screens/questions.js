@@ -4,11 +4,11 @@
    question from Open to Answered, and a question only moves on written
    evidence, never on a feeling. */
 import {
-  STATE, registerRoute, renderCurrentRoute, h, chip, emptyState, sectionCard,
+  STATE, registerRoute, renderCurrentRoute, h, chip, emptyState,
   openModal, closeModal, formField, setPageActions, evidenceFor, evidenceWeight, fmtDate,
   expandableCard,
 } from '../app.js';
-import { QUESTION_STATUS, QUESTION_STATUS_NAMES, questionTone, ownerOptions } from '../config.js';
+import { QUESTION_STATUS_NAMES, questionTone, ownerOptions } from '../config.js';
 import { data } from '../data.js';
 import { insightCard, insightModal, deleteInsight } from '../evidence.js';
 import { aiDraftControls } from '../ai-draft.js';
@@ -183,5 +183,5 @@ async function draftLeaning(q) {
   openLeaningForm(q, (res && (res.text || res.draft)) || '');
 }
 
-registerRoute('questions', 'The five questions', renderQuestions,
+registerRoute('questions', 'Where we stand', renderQuestions,
   'What do we still not know, and what would answer it?');

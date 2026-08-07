@@ -170,10 +170,15 @@ export function registerRoute(name, title, renderFn, question = '') {
   ROUTES[name] = { title, question, render: renderFn };
 }
 
-export function go(route) {
+/* go('sheet?prospect=abc') works: the query part is carried through rather
+   than being treated as part of the route name. */
+export function go(target) {
+  const qi = String(target).indexOf('?');
+  let route = qi < 0 ? target : target.slice(0, qi);
+  const query = qi < 0 ? '' : target.slice(qi);
   route = ROUTE_ALIASES[route] || route;
-  if (!ROUTES[route]) route = 'overview';
-  location.hash = route;
+  if (!ROUTES[route]) { route = 'overview'; return void (location.hash = route); }
+  location.hash = route + query;
 }
 
 /* The screen's single primary action lives top-right in the app header.
@@ -221,30 +226,33 @@ export function renderCurrentRoute() {
 }
 
 /* ------------------------------------------------------------
-   NAV — the sidebar reads in the order the work actually happens,
-   not in the order the tables were designed.
+   NAV — four screens you work in, and a reference shelf you visit
+   occasionally.
 
-     Overview                      where do I start today
-     ── The spine ──
-     The five questions            what we are trying to answer
-     Findings                      what we have learned so far
-     ── The research ──
-     Prospects → Conversations     the loop that produces findings
-     Pricing · Competitors · Market & rules   what we look up
+     Overview          what to do today
+     Prospects         who we are lining up
+     Conversations     the interview sheets — where the work happens
+     Where we stand    the five questions, filling up on their own
+     ── Reference ──
+     All findings · Pricing options · Competitors · Market & rules
 
-   Section headings are labels, not buttons. With eight destinations,
-   collapsing them was a control to learn for no room saved — and a
-   screen you cannot see is a screen you forget exists.
+   The four at the top are the loop: line someone up, meet them and
+   fill in the sheet, watch the questions move. Everything the sheet
+   needs — the priced options it reads out, the findings it produces
+   — is captured inside the sheet, so the reference shelf is for
+   setting things up and for desk research, not for daily use.
+
+   Section headings are labels, not buttons: a screen you cannot see
+   is a screen you forget exists.
    ------------------------------------------------------------ */
 const NAV = [
   { type: 'route', route: 'overview', label: 'Overview' },
-  { type: 'section', label: 'The spine' },
-  { type: 'route', route: 'questions', label: 'The five questions' },
-  { type: 'route', route: 'findings', label: 'Findings' },
-  { type: 'section', label: 'The research' },
   { type: 'route', route: 'prospects', label: 'Prospects' },
   { type: 'route', route: 'conversations', label: 'Conversations' },
-  { type: 'route', route: 'pricing', label: 'Pricing' },
+  { type: 'route', route: 'questions', label: 'Where we stand' },
+  { type: 'section', label: 'Reference' },
+  { type: 'route', route: 'findings', label: 'All findings' },
+  { type: 'route', route: 'pricing', label: 'Pricing options' },
   { type: 'route', route: 'competitors', label: 'Competitors' },
   { type: 'route', route: 'market', label: 'Market & rules' },
 ];

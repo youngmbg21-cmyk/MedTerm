@@ -43,6 +43,15 @@ const optionForQuestion = (id) => {
   return q ? `${q.ref} — ${q.short}` : '';
 };
 
+/* Resolve a question REF ('Q1') against the live question board. The
+   interview script points at questions this way rather than carrying copies
+   of them, so renaming or deleting one in the app can never leave a stale
+   duplicate behind — the pointer simply stops matching. */
+export function questionByRef(ref) {
+  if (!ref) return null;
+  return STATE.questions.find(q => q.ref === ref) || null;
+}
+
 /**
  * The one modal for writing an insight down. Callers pass whatever they
  * already know about the source; the human fills in the rest.

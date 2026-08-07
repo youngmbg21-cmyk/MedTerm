@@ -151,6 +151,11 @@ CREATE TABLE IF NOT EXISTS conversations (
   wtp_detail TEXT,
   best_quote TEXT,
   notes TEXT,
+  -- Answers to the scripted interview questions that do not have a column of
+  -- their own, as a JSON object keyed by the question key in js/script.js.
+  -- The named columns above stay because the rest of the app and the Edge
+  -- Function read them directly; this is only for the segment-specific extras.
+  answers TEXT,
   created_at TIMESTAMPTZ DEFAULT now(),
   updated_at TIMESTAMPTZ DEFAULT now()
 );
@@ -177,6 +182,9 @@ CREATE TABLE IF NOT EXISTS pricing_reactions (
   id TEXT PRIMARY KEY,
   pricing_idea_id TEXT REFERENCES pricing_ideas(id) ON DELETE CASCADE,
   prospect_id TEXT REFERENCES prospects(id) ON DELETE SET NULL,
+  -- The meeting the price was read out in. Reactions are recorded on the
+  -- interview sheet, so there is almost always one.
+  conversation_id TEXT REFERENCES conversations(id) ON DELETE SET NULL,
   reaction TEXT,
   verbatim TEXT,
   their_number NUMERIC,

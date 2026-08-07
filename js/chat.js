@@ -173,6 +173,9 @@ function setTyping(on) {
   msgs.scrollTop = msgs.scrollHeight;
 }
 
+const prospectLabel = (c) =>
+  (STATE.prospects.find(p => String(p.id) === String(c.prospect_id)) || {}).company || 'unknown company';
+
 /* Compact context snapshot — summaries, not raw dumps. The tools on the
    backend can fetch detail; this is the shape of the workspace. */
 function buildDataContext() {
@@ -225,6 +228,35 @@ function buildDataContext() {
     return !has;
   }).length;
 
+  /* What the interview sheets actually recorded. Conversations are captured
+     against a written script (js/script.js), so the answers are comparable
+     across interviews — that is the point of the script, and the assistant
+     should reason across them rather than treating each as free text. */
+  const recentSheets = [...STATE.conversations]
+    .sort((a, b) => String(b.date || '').localeCompare(String(a.date || '')))
+    .slice(0, 6)
+    .map(c => {
+      let bag = {};
+      try { bag = JSON.parse(c.answers || '{}') || {}; } catch { /* older row */ }
+      const named = {
+        'what they use today': c.current_tools, 'biggest pain': c.main_pain,
+        'what that pain costs': c.pain_cost, 'on price': c.wtp_detail,
+      };
+      const lines = [...Object.entries(named), ...Object.entries(bag)]
+        .filter(([, v]) => String(v || '').trim())
+        .map(([k, v]) => `    ${k.replace(/_/g, ' ')}: ${String(v).slice(0, 400)}`);
+      const rx = STATE.pricing_reactions
+        .filter(r => String(r.conversation_id) === String(c.id))
+        .map(r => {
+          const idea = STATE.pricing_ideas.find(i => String(i.id) === String(r.pricing_idea_id));
+          return `${idea ? idea.name : 'a price'}=${r.reaction}${r.verbatim ? ` ("${String(r.verbatim).slice(0, 160)}")` : ''}`;
+        });
+      return `- ${prospectLabel(c)} · ${c.date || 'no date'} · would they pay: ${c.wtp_signal || 'not discussed'}\n` +
+        (lines.join('\n') || '    (nothing written down)') +
+        (rx.length ? `\n    reactions to our prices: ${rx.join('; ')}` : '') +
+        (c.best_quote ? `\n    their words: "${String(c.best_quote).slice(0, 300)}"` : '');
+    }).join('\n');
+
   return `HaTi Research — a go-to-market research workspace for two founders taking HaTi,
 a Kenyan contract lifecycle management platform, to market.
 
@@ -232,6 +264,11 @@ Current stage: ${CURRENT_STAGE} — ${stage?.long}
 
 THE FIVE QUESTIONS (the spine of this workspace — everything exists to move one):
 ${questionLines || '(no questions defined)'}
+
+WHAT THE INTERVIEWS ACTUALLY RECORDED (most recent first). Every conversation is
+captured on one sheet against a written question script, so these answers are
+directly comparable across interviews — compare them, do not just list them:
+${recentSheets || '(no conversations yet)'}
 
 Conversations logged: ${STATE.conversations.length}
 By segment: ${Object.entries(bySegment).map(([s, n]) => `${s}=${n}`).join(', ') || 'none yet'}

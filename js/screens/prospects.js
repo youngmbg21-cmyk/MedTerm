@@ -150,7 +150,7 @@ function prospectCard(p, listLength = 0) {
 
   body.appendChild(h('div', { class: 'flex flex-wrap gap-2 pt-3 border-t b-soft' }, [
     h('button', { class: 'btn btn-line text-xs', onclick: () => openContactForm(p) }, '+ Add a person'),
-    h('a', { class: 'btn btn-line text-xs', href: `#conversations?prospect=${encodeURIComponent(p.id)}` }, 'Log a conversation'),
+    h('a', { class: 'btn btn-line text-xs', href: `#sheet?prospect=${encodeURIComponent(p.id)}` }, 'Start an interview sheet'),
   ]));
 
   const foot = h('div', { class: 'text-xs t-mute mt-2', text: [

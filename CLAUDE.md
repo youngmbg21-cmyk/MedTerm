@@ -34,9 +34,13 @@ in an edit box, never auto-saved. With local data the client sends the backend t
 workspace slices it needs in the request body. The decision spine — the five questions,
 the findings linked to them, and the source each finding came from — lives in ordinary
 tables and flows through `js/evidence.js`; AI-proposed writes go through the Confirm/Skip
-pattern in `js/actions.js`. The sidebar reads in the order the work happens (Overview ·
-**the spine**: the five questions, findings · **the research**: prospects, conversations,
-pricing, competitors, market & rules), and every list screen renders its records through
+pattern in `js/actions.js`. **The interview sheet (`js/screens/sheet.js`) is the centre of
+the app**: one meeting is one page, carrying the scripted questions for that prospect's
+segment (`js/script.js`), the priced options read out with their real numbers, and the
+one-tap route from an answer to a finding attached to a question — so nothing about a
+meeting is captured anywhere else. The sidebar is four working screens (Overview ·
+Prospects · Conversations · Where we stand) over a Reference shelf (all findings, pricing
+options, competitors, market & rules), and every list screen renders its records through
 `expandableCard()` — a summary row that always shows, detail one tap away.
 
 ## Core rules — never violate
@@ -90,7 +94,15 @@ pricing, competitors, market & rules), and every list screen renders its records
     in `sql/schema.sql`, in `js/evidence.js` and in the Edge Function — and it is a
     **finding** in every single word the user reads. Never both. The same discipline
     applies to anything else that grows a second name.
-15. **Every screen must stay scannable when the workspace fills up.** A list screen shows
+15. **A meeting is captured in one place.** Everything a conversation produces —
+    the answers, the reaction to a price, the findings — is recorded on the interview
+    sheet, in the meeting. Never add a screen that asks the user to go somewhere else
+    afterwards to finish recording what they just heard; that is exactly what left this
+    workspace with zero price reactions.
+16. **The script is configuration and has one home**, `js/script.js`. A screen may never
+    define its own interview questions. A scripted question points at one of the five
+    questions by REF and resolves it against the live `questions` table — never a copy.
+17. **Every screen must stay scannable when the workspace fills up.** A list screen shows
     records through `expandableCard()`, and the shut summary must carry enough to decide
     whether to open it. A record that breaches one of the two data-quality rules opens
     itself and stays flagged — those are never one tap away.
@@ -138,6 +150,7 @@ at the top of `css/theme.css`; the load-bearing rules:
 | `css/theme.css` | The entire design system |
 | `js/config.js` | All configuration — single source of truth. Holds the Supabase credentials block; do not restructure it |
 | `js/data.js` | Data interface + local/api adapters + the AI request functions |
+| `js/script.js` | The interview script — the questions asked, per segment. One home |
 | `js/seed.js` | The starting workspace — reference material only, never invented evidence |
 | `js/app.js` | State, router, nav, component kit (incl. `expandableCard`), the two data-quality rules |
 | `js/auth.js` | Magic-link login (lazy-loaded) |
@@ -146,6 +159,7 @@ at the top of `css/theme.css`; the load-bearing rules:
 | `js/evidence.js` | Findings: the link between something we learned and a question (`insights` table) |
 | `js/ai-draft.js` | The one AI-drafts-you-edit control row |
 | `js/export.js` | CSV exports |
+| `js/screens/sheet.js` | **The interview sheet** — one meeting, one page, everything on it |
 | `js/screens/*.js` | One screen per file |
 | `admin.html` | Where the Claude API key is set. Reached by five taps on the wordmark |
 | `supabase/functions/claude-proxy/index.ts` | The backend: AI endpoints + shared-data CRUD |

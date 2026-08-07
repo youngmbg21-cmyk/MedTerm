@@ -27,25 +27,38 @@ at 375px wide just as well as on a laptop.
 Everything in here serves one loop, and the Overview shows it until you hide it:
 
 1. **Line up a company worth talking to** — Prospects
-2. **Have the conversation, write it up the same day** — Conversations
-3. **Turn what they said into a finding, attached to one of the five questions** — Findings
-4. **Read where the five questions now stand, and aim the next conversation at the thinnest
-   one** — The five questions
+2. **Meet them and fill in the sheet** — the questions written for their kind of company,
+   your prices with their real numbers, and what they said, all on one page
+3. **Tick which answers mattered** — that attaches them to one of the five questions, and
+   you do it on the sheet, in the room
+4. **Read where the five questions now stand**, and aim the next meeting at the thinnest one
 
 ## What is in it
 
-The sidebar is in that order too: the spine first, then the research that feeds it.
+Four screens you work in:
 
 | Screen | The one question it answers |
 |---|---|
 | **Overview** | What should we do today? |
-| **The five questions** | What do we still not know, and what would answer it? |
-| **Findings** | What have we learned, and what does it change? |
 | **Prospects** | Who are we talking to, and who is going cold? |
 | **Conversations** | What did people actually tell us? |
-| **Pricing** | What will they actually pay, and for what shape? |
-| **Competitors** | Who else could they buy instead of us — including nobody? |
-| **Market & rules** | What is true about Kenya, and who says so? |
+| **Where we stand** | What do we still not know, and what would answer it? |
+
+And a **Reference** shelf you set up once and visit rarely: all findings, pricing options,
+competitors, market & rules.
+
+### The sheet
+
+Tap **+ New sheet**, pick the company, and you get the interview written for their kind of
+business — a law firm is asked different things from an insurance broker. Everything about
+that meeting goes on that one page:
+
+- the questions, with a note under each on how to ask it
+- your priced options, with the real numbers, and a row of buttons for their reaction
+- under any answer that matters, one tap to attach it to Q1–Q5 as supporting or challenging
+
+It saves itself as you type, so nothing is lost if the phone rings. The strip at the top
+jumps between blocks, because real conversations do not go in order.
 
 On the list screens each record starts as a single summary line — tap it to open the
 detail. Anything the app has flagged opens itself.
