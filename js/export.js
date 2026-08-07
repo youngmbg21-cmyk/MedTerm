@@ -1,6 +1,7 @@
 /* ============================================================
-   CSV EXPORTS — for taking a list into a spreadsheet or a board
-   meeting. One generic writer; each screen names its columns.
+   EXPORTS — for taking something out of the workspace: a list
+   into a spreadsheet, or the decision brief into an email.
+   One generic writer per format; each screen names its content.
    ============================================================ */
 import { STATE, prospectName, questionShort } from './app.js';
 
@@ -13,6 +14,19 @@ export function downloadCsv(filename, headers, rows) {
   const body = [headers, ...rows].map(r => r.map(csvCell).join(',')).join('\n');
   // The BOM makes Excel open UTF-8 correctly instead of mangling é and ’.
   const blob = new Blob(['﻿' + body], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+/* Plain text, for the decision brief — something you can paste into an email
+   to somebody who does not have the app. Deliberately not a PDF: no library,
+   no build step, and a text file opens on every phone either founder owns. */
+export function downloadText(filename, text) {
+  const blob = new Blob([text], { type: 'text/plain;charset=utf-8;' });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;

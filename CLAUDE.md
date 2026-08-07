@@ -38,10 +38,14 @@ pattern in `js/actions.js`. **The interview sheet (`js/screens/sheet.js`) is the
 the app**: one meeting is one page, carrying the scripted questions for that prospect's
 segment (`js/script.js`), the priced options read out with their real numbers, and the
 one-tap route from an answer to a finding attached to a question — so nothing about a
-meeting is captured anywhere else. The sidebar is four working screens (Overview ·
-Prospects · Conversations · Where we stand) over a Reference shelf (all findings, pricing
-options, competitors, market & rules), and every list screen renders its records through
-`expandableCard()` — a summary row that always shows, detail one tap away.
+meeting is captured anywhere else. **The decision brief (`js/screens/brief.js`) is what it
+is all for**: the assistant reads the whole workspace and argues one leaning — GO · PIVOT ·
+NO-GO · INSUFFICIENT, four words and never a score — through the same `/api/draft-section`
+seam; briefs are append-only so the trail of how the read changed survives, and the human
+verdict sits beside the AI's on the same card. The sidebar is five working screens (Overview
+· Prospects · Conversations · Where we stand · Decision brief) over a Reference shelf (all
+findings, pricing options, competitors, market & rules), and every list screen renders its
+records through `expandableCard()` — a summary row that always shows, detail one tap away.
 
 ## Core rules — never violate
 
@@ -102,7 +106,12 @@ options, competitors, market & rules), and every list screen renders its records
 16. **The script is configuration and has one home**, `js/script.js`. A screen may never
     define its own interview questions. A scripted question points at one of the five
     questions by REF and resolves it against the live `questions` table — never a copy.
-17. **Every screen must stay scannable when the workspace fills up.** A list screen shows
+17. **The decision brief is append-only and advisory.** A brief is never rewritten — you
+    write a new one and the old ones stay, because the trail of how the read changed is
+    worth more than any single brief. The AI's leaning and the founders' `verdict` are
+    separate columns shown side by side, and a disagreement between them is labelled, not
+    smoothed over. Four words only, never a percentage.
+18. **Every screen must stay scannable when the workspace fills up.** A list screen shows
     records through `expandableCard()`, and the shut summary must carry enough to decide
     whether to open it. A record that breaches one of the two data-quality rules opens
     itself and stays flagged — those are never one tap away.
@@ -158,8 +167,9 @@ at the top of `css/theme.css`; the load-bearing rules:
 | `js/actions.js` | Shared Confirm/Skip pattern for AI-proposed writes |
 | `js/evidence.js` | Findings: the link between something we learned and a question (`insights` table) |
 | `js/ai-draft.js` | The one AI-drafts-you-edit control row |
-| `js/export.js` | CSV exports |
+| `js/export.js` | CSV exports, and the brief as a text file |
 | `js/screens/sheet.js` | **The interview sheet** — one meeting, one page, everything on it |
+| `js/screens/brief.js` | **The decision brief** — what it all adds up to, and what we decided |
 | `js/screens/*.js` | One screen per file |
 | `admin.html` | Where the Claude API key is set. Reached by five taps on the wordmark |
 | `supabase/functions/claude-proxy/index.ts` | The backend: AI endpoints + shared-data CRUD |

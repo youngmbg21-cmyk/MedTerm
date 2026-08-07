@@ -32,10 +32,12 @@ Everything in here serves one loop, and the Overview shows it until you hide it:
 3. **Tick which answers mattered** — that attaches them to one of the five questions, and
    you do it on the sheet, in the room
 4. **Read where the five questions now stand**, and aim the next meeting at the thinnest one
+5. **Ask for a decision brief** once enough is written down — what it all adds up to, and
+   what you two decide to do about it
 
 ## What is in it
 
-Four screens you work in:
+Five screens you work in:
 
 | Screen | The one question it answers |
 |---|---|
@@ -43,6 +45,7 @@ Four screens you work in:
 | **Prospects** | Who are we talking to, and who is going cold? |
 | **Conversations** | What did people actually tell us? |
 | **Where we stand** | What do we still not know, and what would answer it? |
+| **Decision brief** | If we had to decide today, what would we do — and on what evidence? |
 
 And a **Reference** shelf you set up once and visit rarely: all findings, pricing options,
 competitors, market & rules.
@@ -62,6 +65,19 @@ jumps between blocks, because real conversations do not go in order.
 
 On the list screens each record starts as a single summary line — tap it to open the
 detail. Anything the app has flagged opens itself.
+
+### The decision brief
+
+When there is enough written down, the assistant reads every finding, every price reaction
+and every sourced fact, and argues one position: **GO**, **PIVOT**, **NO-GO**, or
+**INSUFFICIENT**. Early on the honest answer is INSUFFICIENT, and it will say so rather
+than inventing a view — that is the point of it.
+
+It never decides. Underneath its argument there is a line where you and Simon record what
+you actually concluded, and if you disagree with the brief the app says so on the card.
+Briefs are kept forever and never rewritten, so in three months you can see that in August
+the read was PIVOT on nine conversations, and what changed it. Each one downloads as a text
+file you can paste into an email.
 
 The **assistant** (the button at the bottom of the sidebar) reads the whole workspace and
 argues with you about it. It can propose things to write down, but nothing is ever saved

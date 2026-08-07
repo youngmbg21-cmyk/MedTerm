@@ -197,6 +197,39 @@ CREATE TABLE IF NOT EXISTS pricing_reactions (
 CREATE INDEX IF NOT EXISTS idx_reactions_idea ON pricing_reactions(pricing_idea_id);
 
 -- ------------------------------------------------------------
+-- Decision briefs — the AI's read of the whole workspace, and the
+-- human verdict recorded next to it.
+--
+-- APPEND-ONLY BY DESIGN. A brief is never rewritten: the point is to
+-- be able to look back and see how the read changed as evidence
+-- arrived, and a record that edits itself cannot show that. Only the
+-- verdict columns are ever updated, and only on the newest row.
+--
+-- No score anywhere. `leaning` is one of four words, and the reason
+-- lives in prose. A number here would be false precision on top of
+-- fifteen conversations.
+-- ------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS briefs (
+  id TEXT PRIMARY KEY,
+  leaning TEXT,                 -- GO · PIVOT · NO-GO · INSUFFICIENT
+  summary_markdown TEXT,        -- the argument, as written
+  -- What the workspace held at the moment it was written, so an old
+  -- brief can always be read against the evidence it actually had.
+  snapshot_conversations INTEGER,
+  snapshot_findings INTEGER,
+  snapshot_reactions INTEGER,
+  snapshot_facts INTEGER,
+  -- The humans' call. The AI argues; it never decides.
+  verdict TEXT,                 -- GO · PIVOT · NO-GO · Not yet
+  verdict_note TEXT,
+  verdict_by TEXT,
+  verdict_date DATE,
+  owner TEXT,
+  created_at TIMESTAMPTZ DEFAULT now(),
+  updated_at TIMESTAMPTZ DEFAULT now()
+);
+
+-- ------------------------------------------------------------
 -- Market and regulation facts. source_url is NOT NULL on
 -- purpose: a fact without a source is a rumour, and the
 -- database should refuse it as firmly as the form does.
@@ -252,7 +285,8 @@ DECLARE t TEXT;
 BEGIN
   FOREACH t IN ARRAY ARRAY[
     'questions', 'competitors', 'competitor_updates', 'prospects', 'contacts',
-    'conversations', 'pricing_ideas', 'pricing_reactions', 'market_facts', 'insights'
+    'conversations', 'pricing_ideas', 'pricing_reactions', 'market_facts', 'insights',
+    'briefs'
   ] LOOP
     EXECUTE format('ALTER TABLE %I ENABLE ROW LEVEL SECURITY', t);
     EXECUTE format('DROP POLICY IF EXISTS "Active members read %s" ON %I', t, t);
@@ -288,7 +322,8 @@ DECLARE t TEXT;
 BEGIN
   FOREACH t IN ARRAY ARRAY[
     'questions', 'competitors', 'competitor_updates', 'prospects', 'contacts',
-    'conversations', 'pricing_ideas', 'pricing_reactions', 'market_facts', 'insights'
+    'conversations', 'pricing_ideas', 'pricing_reactions', 'market_facts', 'insights',
+    'briefs'
   ] LOOP
     EXECUTE format('DROP TRIGGER IF EXISTS trg_touch_%s ON %I', t, t);
     EXECUTE format('CREATE TRIGGER trg_touch_%s BEFORE UPDATE ON %I

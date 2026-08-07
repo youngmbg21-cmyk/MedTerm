@@ -3,7 +3,7 @@
    runs when AI_MODE is 'worker' (independent of the data mode).
    Otherwise it shows a calm disabled state instead of erroring.
    ============================================================ */
-import { STATE, h, lockScroll, unlockScroll } from './app.js';
+import { STATE, h, lockScroll, unlockScroll, renderRich } from './app.js';
 import { CURRENT_STAGE, STAGES, SEGMENTS, PIPELINE_NAMES } from './config.js';
 import { aiAvailable, chatRequest, aiDataSlices } from './data.js';
 import { addActionConfirmation } from './actions.js';
@@ -88,78 +88,6 @@ function addChatMessage(role, text) {
   msgs.appendChild(el);
   msgs.scrollTop = msgs.scrollHeight;
   return el;
-}
-
-/* Rich markdown → DOM (desktop mirror of the mobile renderer). Line-driven so a
-   heading immediately followed by a list parses correctly; horizontal rules are
-   dropped to a hairline, and the decision tokens GO / PIVOT / NO-GO /
-   INSUFFICIENT become colored pills. */
-const LEANING_PILL = {
-  'GO':           { bg: '#E2EFE8', tx: '#0E4E34' },
-  'NO-GO':        { bg: '#F8E3E1', tx: '#94382F' },
-  'PIVOT':        { bg: '#F7EDD3', tx: '#74560F' },
-  'INSUFFICIENT': { bg: '#F7EDD3', tx: '#74560F' },
-};
-
-function renderRich(text) {
-  const root = h('div', { class: 'chat-rich' });
-  const lines = String(text || '').replace(/\r/g, '').split('\n');
-  let para = [], list = null;
-  const flushPara = () => { if (para.length) { root.appendChild(h('p', { class: 'chat-p' }, mdInline(para.join(' ')))); para = []; } };
-  const flushList = () => { if (list) { root.appendChild(list.el); list = null; } };
-  const flushAll = () => { flushPara(); flushList(); };
-  for (const rawLine of lines) {
-    const t = rawLine.replace(/\s+$/, '').trim();
-    if (!t) { flushAll(); continue; }
-    if (/^(-{3,}|\*{3,}|_{3,}|—{2,}|={3,})$/.test(t)) { flushAll(); root.appendChild(h('hr', { class: 'chat-hr' })); continue; }
-    const head = t.match(/^(#{1,6})\s+(.*)$/);
-    if (head) { flushAll(); root.appendChild(h('div', { class: 'chat-h' }, mdInline(head[2]))); continue; }
-    const bq = t.match(/^>\s?(.*)$/);
-    if (bq) { flushPara(); flushList(); root.appendChild(h('div', { class: 'chat-quote' }, mdInline(bq[1]))); continue; }
-    const bullet = t.match(/^[-*•]\s+(.*)$/);
-    if (bullet) {
-      flushPara();
-      if (!list || list.type !== 'ul') { flushList(); list = { type: 'ul', el: h('ul', { class: 'chat-ul' }) }; }
-      list.el.appendChild(h('li', {}, mdInline(bullet[1]))); continue;
-    }
-    const num = t.match(/^\d+[.)]\s+(.*)$/);
-    if (num) {
-      flushPara();
-      if (!list || list.type !== 'ol') { flushList(); list = { type: 'ol', el: h('ol', { class: 'chat-ol' }) }; }
-      list.el.appendChild(h('li', {}, mdInline(num[1]))); continue;
-    }
-    flushList(); para.push(t);
-  }
-  flushAll();
-  return root;
-}
-function mdInline(text) {
-  const nodes = [];
-  const src = String(text);
-  const re = /(\*\*[^*]+\*\*|__[^_]+__|\*[^*\n]+\*|(?<![A-Za-z0-9])_[^_\n]+_(?![A-Za-z0-9])|`[^`]+`)/g;
-  let last = 0, m;
-  while ((m = re.exec(src))) {
-    colorizeInto(nodes, src.slice(last, m.index));
-    const tok = m[0];
-    if (tok.startsWith('**') || tok.startsWith('__')) nodes.push(h('strong', { text: tok.slice(2, -2) }));
-    else if (tok.startsWith('`')) nodes.push(h('code', { class: 'chat-code', text: tok.slice(1, -1) }));
-    else nodes.push(h('em', { text: tok.slice(1, -1) }));
-    last = re.lastIndex;
-  }
-  colorizeInto(nodes, src.slice(last));
-  return nodes;
-}
-function colorizeInto(nodes, s) {
-  if (!s) return;
-  const re = /\b(NO-GO|GO|PIVOT|INSUFFICIENT)\b/g;
-  let last = 0, m;
-  while ((m = re.exec(s))) {
-    if (m.index > last) nodes.push(document.createTextNode(s.slice(last, m.index)));
-    const p = LEANING_PILL[m[1]];
-    nodes.push(h('span', { class: 'chat-pill', style: `background:${p.bg};color:${p.tx};`, text: m[1] }));
-    last = m.index + m[0].length;
-  }
-  if (last < s.length) nodes.push(document.createTextNode(s.slice(last)));
 }
 
 function setTyping(on) {

@@ -45,6 +45,18 @@ function nextAction() {
     return { label: '+ Start an interview sheet', route: 'sheet',
       why: 'Nobody has been talked to yet. Everything else in here is preparation for that.' };
   }
+  /* Enough has been learned to be worth a brief, and either none has been
+     written or findings have arrived since the last one. Evidence that is
+     never made to add up to anything is just filing. */
+  const newest = [...STATE.briefs].sort((a, b) =>
+    String(b.created_at || '').localeCompare(String(a.created_at || '')))[0];
+  const findingsSince = STATE.insights.length - (newest?.snapshot_findings ?? 0);
+  if (STATE.insights.length >= 3 && (!newest || findingsSince >= 3)) {
+    return { label: newest ? 'Write a new brief' : 'Write the first brief', route: 'brief',
+      why: newest
+        ? `${findingsSince} findings have arrived since the last brief. Ask the assistant what they now add up to.`
+        : 'There is enough written down to be worth a decision brief. Ask the assistant what it all adds up to.' };
+  }
   return { label: '+ Start an interview sheet', route: 'sheet',
     why: 'Every conversation has been written up. Go and have another one.' };
 }
@@ -135,6 +147,9 @@ function renderOverview(page) {
   }
   page.appendChild(qCard);
 
+  /* ---- 2b · What it currently adds up to ---- */
+  page.appendChild(leaningStrip());
+
   /* ---- 3 · The numbers, underneath ---- */
   const live = STATE.prospects.filter(p => PIPELINE_LIVE.includes(p.status)).length;
   const pilots = STATE.prospects.filter(p => p.status === 'Pilot').length;
@@ -172,6 +187,47 @@ function renderOverview(page) {
     ])));
   }
   page.appendChild(recentCard);
+}
+
+/* The single line the whole workspace exists to produce, shown on the
+   Overview so it is not something you have to remember to go and look at.
+   Both readings are here on purpose: what the evidence says, and what the two
+   of them actually decided — the gap between those is the interesting part. */
+function leaningStrip() {
+  const newest = [...STATE.briefs].sort((a, b) =>
+    String(b.created_at || '').localeCompare(String(a.created_at || '')))[0];
+
+  const card = h('div', { class: 'card card-pad mb-4' }, [
+    h('div', { class: 'flex items-baseline justify-between mb-3' }, [
+      h('div', { class: 'card-title', text: 'What it adds up to' }),
+      h('button', { class: 'btn btn-ghost text-xs', onclick: () => go('brief') }, 'Open →'),
+    ]),
+  ]);
+
+  if (!newest) {
+    card.appendChild(h('div', { class: 'text-sm t-mute', text: STATE.insights.length
+      ? 'No decision brief written yet. The assistant will read every finding, price reaction and market fact and argue one position from them — including saying the evidence is too thin, which is usually the honest answer at this stage.'
+      : 'Nothing to add up yet. The brief is written from findings, and there are none.' }));
+    return card;
+  }
+
+  const tone = { GO: 'green', 'NO-GO': 'rose', PIVOT: 'gold' };
+  const decided = newest.verdict && newest.verdict !== 'Not yet';
+  card.appendChild(h('div', { class: 'flex flex-wrap items-center gap-3' }, [
+    h('div', {}, [
+      h('div', { class: 'micro t-mute mb-1', text: 'The evidence says' }),
+      chip(newest.leaning || 'INSUFFICIENT', tone[newest.leaning] || 'line'),
+    ]),
+    h('div', {}, [
+      h('div', { class: 'micro t-mute mb-1', text: 'We decided' }),
+      decided ? chip(newest.verdict, tone[newest.verdict] || 'line') : chip('not yet', 'gold'),
+    ]),
+    h('div', { class: 'text-xs t-mute', text: `written ${fmtDate(newest.created_at)}` }),
+  ]));
+  if (!decided) {
+    card.appendChild(h('div', { class: 'text-sm t-mute mt-3', text: 'The brief is the assistant\'s argument, not a decision. Open it and write down what the two of you concluded.' }));
+  }
+  return card;
 }
 
 /* ------------------------------------------------------------

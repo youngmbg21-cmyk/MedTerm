@@ -27,7 +27,7 @@ const LS_KEY = 'hati_research_v1';
    Order matters for the api-mode import: parents before children. */
 export const KNOWN_TABLES = ['questions', 'competitors', 'competitor_updates',
   'prospects', 'contacts', 'conversations', 'pricing_ideas', 'pricing_reactions',
-  'market_facts', 'insights'];
+  'market_facts', 'insights', 'briefs'];
 
 /* ------------------------------------------------------------
    Local adapter — localStorage, seeded on first run.
@@ -254,12 +254,12 @@ const apiAdapter = {
      NOT atomic: a mid-way failure leaves partial state — the safety export is
      the recovery. */
   async importAll(dump) {
-    const delOrder = ['insights', 'pricing_reactions', 'conversations', 'contacts',
+    const delOrder = ['briefs', 'insights', 'pricing_reactions', 'conversations', 'contacts',
       'competitor_updates', 'prospects', 'competitors', 'pricing_ideas',
       'market_facts', 'questions'];
     const createOrder = ['questions', 'competitors', 'prospects', 'pricing_ideas',
       'market_facts', 'contacts', 'conversations', 'competitor_updates',
-      'pricing_reactions', 'insights'];
+      'pricing_reactions', 'insights', 'briefs'];
 
     for (const table of delOrder) {
       const existing = await apiAdapter.list(table);

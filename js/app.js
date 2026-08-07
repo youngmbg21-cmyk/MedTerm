@@ -16,13 +16,14 @@ export const STATE = {
   prospects: [], contacts: [], conversations: [],
   pricing_ideas: [], pricing_reactions: [],
   market_facts: [],
+  briefs: [],
   chatHistory: [],
   loaded: false,
 };
 
 const TABLES = ['questions', 'insights', 'competitors', 'competitor_updates',
   'prospects', 'contacts', 'conversations', 'pricing_ideas', 'pricing_reactions',
-  'market_facts'];
+  'market_facts', 'briefs'];
 
 export async function loadAllData() {
   setSync('Loading…');
@@ -233,6 +234,7 @@ export function renderCurrentRoute() {
      Prospects         who we are lining up
      Conversations     the interview sheets — where the work happens
      Where we stand    the five questions, filling up on their own
+     Decision brief    what all of it adds up to, and what we decided
      ── Reference ──
      All findings · Pricing options · Competitors · Market & rules
 
@@ -250,6 +252,7 @@ const NAV = [
   { type: 'route', route: 'prospects', label: 'Prospects' },
   { type: 'route', route: 'conversations', label: 'Conversations' },
   { type: 'route', route: 'questions', label: 'Where we stand' },
+  { type: 'route', route: 'brief', label: 'Decision brief' },
   { type: 'section', label: 'Reference' },
   { type: 'route', route: 'findings', label: 'All findings' },
   { type: 'route', route: 'pricing', label: 'Pricing options' },
@@ -566,4 +569,89 @@ export function formField(label, key, type, value, options, inputType, attrs = {
   }
   wrap.appendChild(input);
   return { key, el: wrap };
+}
+
+/* ------------------------------------------------------------
+   8 · RICH TEXT — the one markdown-to-DOM renderer.
+
+   Everything the assistant writes comes back as markdown: chat
+   replies and the decision brief both. They render through this,
+   so a heading looks the same wherever it appears and there is
+   only one place to fix a parsing bug.
+
+   Line-driven, so a heading immediately followed by a list parses
+   correctly. Horizontal rules drop to a hairline. The four decision
+   words — GO / PIVOT / NO-GO / INSUFFICIENT — become coloured
+   pills wherever they appear, which is why they are the only
+   vocabulary the brief is allowed to use for a leaning.
+
+   Text goes in through textContent and h(), never innerHTML —
+   this renders model output, and rule 5 exists for exactly that.
+   ------------------------------------------------------------ */
+const LEANING_PILL = {
+  'GO':           { bg: '#E2EFE8', tx: '#0E4E34' },
+  'NO-GO':        { bg: '#F8E3E1', tx: '#94382F' },
+  'PIVOT':        { bg: '#F7EDD3', tx: '#74560F' },
+  'INSUFFICIENT': { bg: '#F7EDD3', tx: '#74560F' },
+};
+
+export function renderRich(text) {
+  const root = h('div', { class: 'chat-rich' });
+  const lines = String(text || '').replace(/\r/g, '').split('\n');
+  let para = [], list = null;
+  const flushPara = () => { if (para.length) { root.appendChild(h('p', { class: 'chat-p' }, mdInline(para.join(' ')))); para = []; } };
+  const flushList = () => { if (list) { root.appendChild(list.el); list = null; } };
+  const flushAll = () => { flushPara(); flushList(); };
+  for (const rawLine of lines) {
+    const t = rawLine.replace(/\s+$/, '').trim();
+    if (!t) { flushAll(); continue; }
+    if (/^(-{3,}|\*{3,}|_{3,}|—{2,}|={3,})$/.test(t)) { flushAll(); root.appendChild(h('hr', { class: 'chat-hr' })); continue; }
+    const head = t.match(/^(#{1,6})\s+(.*)$/);
+    if (head) { flushAll(); root.appendChild(h('div', { class: 'chat-h' }, mdInline(head[2]))); continue; }
+    const bq = t.match(/^>\s?(.*)$/);
+    if (bq) { flushPara(); flushList(); root.appendChild(h('div', { class: 'chat-quote' }, mdInline(bq[1]))); continue; }
+    const bullet = t.match(/^[-*•]\s+(.*)$/);
+    if (bullet) {
+      flushPara();
+      if (!list || list.type !== 'ul') { flushList(); list = { type: 'ul', el: h('ul', { class: 'chat-ul' }) }; }
+      list.el.appendChild(h('li', {}, mdInline(bullet[1]))); continue;
+    }
+    const num = t.match(/^\d+[.)]\s+(.*)$/);
+    if (num) {
+      flushPara();
+      if (!list || list.type !== 'ol') { flushList(); list = { type: 'ol', el: h('ol', { class: 'chat-ol' }) }; }
+      list.el.appendChild(h('li', {}, mdInline(num[1]))); continue;
+    }
+    flushList(); para.push(t);
+  }
+  flushAll();
+  return root;
+}
+function mdInline(text) {
+  const nodes = [];
+  const src = String(text);
+  const re = /(\*\*[^*]+\*\*|__[^_]+__|\*[^*\n]+\*|(?<![A-Za-z0-9])_[^_\n]+_(?![A-Za-z0-9])|`[^`]+`)/g;
+  let last = 0, m;
+  while ((m = re.exec(src))) {
+    colorizeInto(nodes, src.slice(last, m.index));
+    const tok = m[0];
+    if (tok.startsWith('**') || tok.startsWith('__')) nodes.push(h('strong', { text: tok.slice(2, -2) }));
+    else if (tok.startsWith('`')) nodes.push(h('code', { class: 'chat-code', text: tok.slice(1, -1) }));
+    else nodes.push(h('em', { text: tok.slice(1, -1) }));
+    last = re.lastIndex;
+  }
+  colorizeInto(nodes, src.slice(last));
+  return nodes;
+}
+function colorizeInto(nodes, s) {
+  if (!s) return;
+  const re = /\b(NO-GO|GO|PIVOT|INSUFFICIENT)\b/g;
+  let last = 0, m;
+  while ((m = re.exec(s))) {
+    if (m.index > last) nodes.push(document.createTextNode(s.slice(last, m.index)));
+    const p = LEANING_PILL[m[1]];
+    nodes.push(h('span', { class: 'chat-pill', style: `background:${p.bg};color:${p.tx};`, text: m[1] }));
+    last = m.index + m[0].length;
+  }
+  if (last < s.length) nodes.push(document.createTextNode(s.slice(last)));
 }

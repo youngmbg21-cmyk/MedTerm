@@ -441,6 +441,7 @@ type Member = { id: string; role: string; display_name: string; userId: string }
 const DATA_TABLES = new Set([
   'questions', 'competitors', 'competitor_updates', 'prospects', 'contacts',
   'conversations', 'pricing_ideas', 'pricing_reactions', 'market_facts', 'insights',
+  'briefs',
 ]);
 
 async function handleTableCrud(method: string, table: string, recordId: string | null, req: Request, env: Env, member: Member) {

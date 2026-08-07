@@ -97,6 +97,7 @@ async function boot() {
   await Promise.all([
     import('./screens/overview.js'),
     import('./screens/questions.js'),
+    import('./screens/brief.js'),
     import('./screens/competitors.js'),
     import('./screens/prospects.js'),
     import('./screens/conversations.js'),
