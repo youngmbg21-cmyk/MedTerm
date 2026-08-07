@@ -6,6 +6,7 @@
 import {
   STATE, registerRoute, renderCurrentRoute, h, chip, emptyState, quoteBlock,
   openModal, closeModal, formField, setPageActions, fmtDate, today, fmtKES, prospectName,
+  expandableCard, OPEN_BY_DEFAULT_UP_TO,
 } from '../app.js';
 import { PRICING_MODELS, REACTION_NAMES, reactionTone, ownerOptions } from '../config.js';
 import { data } from '../data.js';
@@ -40,12 +41,12 @@ function renderPricing(page) {
     return;
   }
 
-  [...STATE.pricing_ideas]
-    .sort((a, b) => reactionsFor(a.id).length - reactionsFor(b.id).length)
-    .forEach(i => page.appendChild(ideaCard(i)));
+  const rows = [...STATE.pricing_ideas]
+    .sort((a, b) => reactionsFor(a.id).length - reactionsFor(b.id).length);
+  rows.forEach(i => page.appendChild(ideaCard(i, rows.length)));
 }
 
-function ideaCard(idea) {
+function ideaCard(idea, listLength = 0) {
   const reactions = reactionsFor(idea.id).sort((a, b) => String(b.date || '').localeCompare(String(a.date || '')));
   const insights = insightsForSource('Pricing test', idea.id);
   const tally = REACTION_NAMES
@@ -56,23 +57,25 @@ function ideaCard(idea) {
     ? `${fmtKES(idea.price_low)}${idea.price_high && idea.price_high !== idea.price_low ? ' – ' + fmtKES(idea.price_high) : ''}${idea.unit ? ' ' + idea.unit : ''}`
     : 'No number attached — pick one before you show it to anybody.';
 
-  const head = h('div', { class: 'flex flex-wrap items-start justify-between gap-3' }, [
-    h('div', { class: 'flex-1 min-w-[200px]' }, [
-      h('div', { class: 'flex flex-wrap items-center gap-1.5 mb-1' }, [
-        chip(idea.model || 'Model not set', 'violet'),
-        chip(idea.status || 'To test', ideaTone(idea.status)),
-        chip(`${reactions.length} reaction${reactions.length === 1 ? '' : 's'}`, reactions.length ? 'info' : 'line'),
-      ]),
-      h('div', { class: 'card-title', text: idea.name || '—' }),
-      h('div', { class: 'text-sm t-bronze mt-1 num', text: priceLine }),
+  const summary = h('div', {}, [
+    h('div', { class: 'flex flex-wrap items-center gap-1.5 mb-1' }, [
+      chip(idea.model || 'Model not set', 'violet'),
+      chip(idea.status || 'To test', ideaTone(idea.status)),
+      chip(`${reactions.length} reaction${reactions.length === 1 ? '' : 's'}`, reactions.length ? 'info' : 'line'),
     ]),
-    h('div', { class: 'flex gap-1' }, [
-      h('button', { class: 'btn btn-ghost text-xs', onclick: () => openIdeaForm(idea) }, 'Edit'),
-      h('button', { class: 'btn btn-ghost text-xs t-rose', onclick: () => deleteIdea(idea) }, 'Delete'),
-    ]),
+    h('div', { class: 'card-title', text: idea.name || '—' }),
+    h('div', { class: 'text-sm t-bronze mt-1 num', text: priceLine }),
+    h('div', { class: 'rec-peek', text: reactions.length
+      ? `Latest: ${reactions[0].reaction} — ${prospectName(reactions[0].prospect_id)}`
+      : 'Nobody has reacted to this number yet.' }),
   ]);
 
-  const body = h('div', { class: 'mt-3 flex flex-col gap-3' });
+  const tools = h('div', { class: 'flex gap-1' }, [
+    h('button', { class: 'btn btn-ghost text-xs', onclick: () => openIdeaForm(idea) }, 'Edit'),
+    h('button', { class: 'btn btn-ghost text-xs t-rose', onclick: () => deleteIdea(idea) }, 'Delete'),
+  ]);
+
+  const body = h('div', { class: 'flex flex-col gap-3' });
 
   if (tally.length) {
     body.appendChild(h('div', { class: 'flex flex-wrap gap-1.5' },
@@ -116,7 +119,10 @@ function ideaCard(idea) {
     onDelete: () => deleteInsight(i),
   })));
 
-  return h('div', { class: 'card card-pad mb-4' }, [head, body]);
+  return expandableCard({
+    key: `pricing:${idea.id}`, summary, detail: body, tools,
+    defaultOpen: listLength <= OPEN_BY_DEFAULT_UP_TO,
+  });
 }
 
 /* ------------------------------------------------------------ forms */

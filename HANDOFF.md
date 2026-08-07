@@ -121,5 +121,5 @@ reason to download one regularly.
 **You want to start over.**
 Settings, at the bottom, has two options. *Clear our research* keeps the questions,
 competitors, market facts and pricing ideas and deletes everything you have recorded.
-*Reset* puts the workspace back exactly as it arrived. Both ask you to type a word to
-confirm, and neither can be undone — download a backup first.
+*Reset the workspace* puts everything back exactly as it arrived. Both ask you to type a
+word to confirm, and neither can be undone — download a backup first.

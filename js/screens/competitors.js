@@ -5,6 +5,7 @@
 import {
   STATE, registerRoute, renderCurrentRoute, h, chip, emptyState,
   openModal, closeModal, formField, setPageActions, fmtDate, today,
+  expandableCard, OPEN_BY_DEFAULT_UP_TO,
 } from '../app.js';
 import { COMPETITOR_TYPES, ownerOptions } from '../config.js';
 import { data } from '../data.js';
@@ -43,33 +44,34 @@ function renderCompetitors(page) {
     return;
   }
 
-  [...STATE.competitors]
-    .sort((a, b) => typeOrder(a.type) - typeOrder(b.type) || String(a.name).localeCompare(String(b.name)))
-    .forEach(c => page.appendChild(competitorCard(c)));
+  const rows = [...STATE.competitors]
+    .sort((a, b) => typeOrder(a.type) - typeOrder(b.type) || String(a.name).localeCompare(String(b.name)));
+  rows.forEach(c => page.appendChild(competitorCard(c, rows.length)));
 }
 
-function competitorCard(c) {
+function competitorCard(c, listLength = 0) {
   const updates = STATE.competitor_updates
     .filter(u => String(u.competitor_id) === String(c.id))
     .sort((a, b) => String(b.date || '').localeCompare(String(a.date || '')));
   const insights = insightsForSource('Competitor', c.id);
 
-  const head = h('div', { class: 'flex flex-wrap items-start justify-between gap-3' }, [
-    h('div', { class: 'flex-1 min-w-[200px]' }, [
-      h('div', { class: 'flex flex-wrap items-center gap-1.5 mb-1' }, [
-        chip(c.type || 'Unknown', c.type === 'Status quo' ? 'bronze' : 'violet'),
-        chip(`Threat: ${c.threat || 'Unknown'}`, threatTone(c.threat)),
-        c.hq && c.hq !== '—' ? chip(c.hq, 'line') : null,
-      ].filter(Boolean)),
-      h('div', { class: 'card-title', text: c.name || '—' }),
-    ]),
-    h('div', { class: 'flex gap-1' }, [
-      h('button', { class: 'btn btn-ghost text-xs', onclick: () => openCompetitorForm(c) }, 'Edit'),
-      h('button', { class: 'btn btn-ghost text-xs t-rose', onclick: () => deleteCompetitor(c) }, 'Delete'),
-    ]),
+  const summary = h('div', {}, [
+    h('div', { class: 'flex flex-wrap items-center gap-1.5 mb-1' }, [
+      chip(c.type || 'Unknown', c.type === 'Status quo' ? 'bronze' : 'violet'),
+      chip(`Threat: ${c.threat || 'Unknown'}`, threatTone(c.threat)),
+      c.hq && c.hq !== '—' ? chip(c.hq, 'line') : null,
+      updates.length ? chip(`${updates.length} update${updates.length === 1 ? '' : 's'}`, 'info') : null,
+    ].filter(Boolean)),
+    h('div', { class: 'card-title', text: c.name || '—' }),
+    h('div', { class: 'rec-peek', text: c.positioning || 'No positioning written down.' }),
   ]);
 
-  const body = h('div', { class: 'mt-3 flex flex-col gap-3' });
+  const tools = h('div', { class: 'flex gap-1' }, [
+    h('button', { class: 'btn btn-ghost text-xs', onclick: () => openCompetitorForm(c) }, 'Edit'),
+    h('button', { class: 'btn btn-ghost text-xs t-rose', onclick: () => deleteCompetitor(c) }, 'Delete'),
+  ]);
+
+  const body = h('div', { class: 'flex flex-col gap-3' });
   if (c.positioning) body.appendChild(h('div', { class: 'text-sm t-soft', text: c.positioning }));
 
   const grid = h('div', { class: 'grid gap-3 sm:grid-cols-2' });
@@ -98,13 +100,12 @@ function competitorCard(c) {
   }
 
   /* Updates over time — this is what stops the map going stale. */
-  const tools = h('div', { class: 'flex flex-wrap gap-2 pt-3 mt-1 border-t b-soft' }, [
+  body.appendChild(h('div', { class: 'flex flex-wrap gap-2 pt-3 mt-1 border-t b-soft' }, [
     h('button', { class: 'btn btn-line text-xs', onclick: () => openUpdateForm(c) }, '+ Log an update'),
     h('button', { class: 'btn btn-line text-xs', onclick: () => insightModal({
       sourceKind: 'Competitor', sourceId: c.id, sourceLabel: c.name,
     }) }, '+ Write down a finding'),
-  ]);
-  body.appendChild(tools);
+  ]));
 
   if (updates.length) {
     const list = h('div', { class: 'flex flex-col gap-2' });
@@ -134,7 +135,11 @@ function competitorCard(c) {
     ]));
   }
 
-  return h('div', { class: 'card card-pad mb-4' }, [head, body]);
+  return expandableCard({
+    key: `competitor:${c.id}`, summary, detail: body, tools,
+    /* The status quo is the competitor that wins most often, so it opens. */
+    defaultOpen: c.type === 'Status quo' || listLength <= OPEN_BY_DEFAULT_UP_TO,
+  });
 }
 
 /* ------------------------------------------------------------ forms */

@@ -353,8 +353,71 @@ table.data.sticky-head thead th { position: sticky; top: 0; background: var(--su
 
 /* A stat tile acting as a filter toggle (the pipeline board). */
 .is-selected { border-color: var(--green); box-shadow: inset 0 0 0 1px var(--green); }
+
+/* ============================================================================
+   RECORD CARD — summary row always visible, detail one tap away.
+   The whole summary is the hit target, so on a phone you open a record by
+   tapping its name rather than hunting a chevron.
+   ========================================================================== */
+.rec-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+.rec-toggle {
+  display: flex; align-items: flex-start; gap: 10px; flex: 1; min-width: 0;
+  background: none; border: none; padding: 0; margin: 0; cursor: pointer;
+  text-align: left; color: inherit; font: inherit;
+}
+.rec-chevron {
+  flex-shrink: 0; margin-top: 1px; width: 16px;
+  font-size: 18px; line-height: 22px; font-weight: 600; color: var(--ink-soft);
+  transition: transform var(--ease), color var(--ease);
+}
+.rec-chevron.open { transform: rotate(90deg); }
+.rec-toggle:hover .rec-chevron { color: var(--ink); }
+.rec-toggle:focus-visible { outline: 2px solid var(--green); outline-offset: 4px; border-radius: var(--r-ctl); }
+.rec-summary { flex: 1; min-width: 0; }
+.rec-body { margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--line-soft); }
+/* A one-line preview under the title while the card is shut — the sentence
+   that decides whether it is worth opening. Once the card is open the detail
+   below says the same thing in full, so the preview steps out of the way
+   rather than repeating itself. */
+.rec-peek {
+  font-size: 13px; line-height: 20px; color: var(--ink-mute); margin-top: 4px;
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+}
+.rec-toggle[aria-expanded="true"] .rec-peek { display: none; }
 /* A panel that is empty when it should not be. */
 .b-rose-hint { border-color: var(--rose-border); background: var(--rose-soft); }
+
+/* ============================================================================
+   THE LOOP — the four steps this whole workspace exists to run, shown on the
+   Overview until somebody says they have got it. Nothing else in the app ever
+   explains what it is for; a research tool that assumes you read the brief is
+   a research tool nobody finishes setting up.
+   ========================================================================== */
+.loop-step {
+  display: flex; align-items: center; gap: 12px; width: 100%;
+  padding: 10px 12px; border-radius: var(--r-ctl);
+  background: none; border: 1px solid transparent; cursor: pointer; text-align: left;
+  transition: background-color var(--ease), border-color var(--ease);
+}
+.loop-step:hover { background: var(--surface-inset); border-color: var(--line-soft); }
+.loop-step-n {
+  flex-shrink: 0; width: 24px; height: 24px; border-radius: 999px;
+  display: flex; align-items: center; justify-content: center;
+  font-family: var(--font-display); font-size: 12px; font-weight: 500;
+  background: var(--green-soft); color: var(--green-text); border: 1px solid var(--green-border);
+}
+.loop-step.done .loop-step-n { background: var(--green-deep); color: var(--paper); border-color: var(--green-deep); }
+.loop-step-text { flex: 1; min-width: 0; font-size: 13px; line-height: 20px; color: var(--ink); }
+.loop-step-go { flex-shrink: 0; font-size: 12px; color: var(--ink-mute); white-space: nowrap; }
+.loop-step:hover .loop-step-go { color: var(--green-text); }
+@media (max-width: 640px) {
+  /* On a phone the step text and its destination fight over the same 300px and
+     both lose. The destination drops to its own line, indented under the text. */
+  .loop-step { flex-wrap: wrap; align-items: flex-start; }
+  .loop-step-n { margin-top: 1px; }
+  .loop-step-text { flex: 1 1 0; min-width: 0; order: 1; }
+  .loop-step-go { flex: 1 1 100%; order: 2; padding-left: 36px; margin-top: 2px; }
+}
 
 .inset-block {
   background: var(--surface-inset);
@@ -443,10 +506,6 @@ table.data.sticky-head thead th { position: sticky; top: 0; background: var(--su
 }
 .nav-foot-link:hover { color: var(--ink); background: var(--surface-inset); }
 
-/* Nav group header: label left, phase badge + chevron right-aligned column */
-.nav-phase-badge { font-size: 9.5px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--ink-mute); white-space: nowrap; }
-.nav-group-right { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
-
 /* Shell layout — owned classes, never utility-dependent */
 .header-left { display: flex; align-items: center; gap: 12px; min-width: 0; }
 .header-title-block { min-width: 0; }
@@ -487,19 +546,13 @@ table.data.sticky-head thead th { position: sticky; top: 0; background: var(--su
 }
 
 .nav-divider { height: 1px; background: var(--line-soft); margin: 12px 4px; }
-.nav-group { margin-top: 16px; }
-.nav-group-header {
-  display: flex; align-items: center; justify-content: space-between; width: 100%;
-  min-height: 32px; padding: 4px 12px; background: none; border: none; cursor: pointer;
-  color: var(--ink-mute); text-align: left;
-  transition: color var(--ease);
+/* A section heading, not a control — it names a part of the work and does
+   nothing when tapped, so there is no collapsed state to lose a screen in. */
+.nav-section {
+  color: var(--ink-mute); padding: 4px 12px; margin: 18px 0 4px;
+  border-top: 1px solid var(--line-soft); padding-top: 14px;
 }
-.nav-group-header:hover { color: var(--ink-soft); }
-.nav-chevron { font-size: 13px; color: var(--ink-mute); transition: transform var(--ease); display: inline-block; }
-.nav-lock { font-size: 9.5px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--ink-mute); opacity: 0.8; }
-.nav-group.locked .nav-item { opacity: 0.45; }
-.nav-group.locked .nav-group-header .micro { opacity: 0.55; }
-.nav-group-list { padding-top: 2px; }
+.nav-section:first-child { border-top: none; margin-top: 0; padding-top: 4px; }
 
 .hamburger {
   display: none; background: none; border: none; padding: 10px; cursor: pointer; color: var(--ink);
@@ -531,8 +584,8 @@ table.data.sticky-head thead th { position: sticky; top: 0; background: var(--su
   transition: transform 150ms ease-out; box-shadow: var(--shadow-float);
 }
 .chat-panel.closed { transform: translateX(100%); box-shadow: none; }
-/* Mesgreen list scrolls within the panel — never chains to the page behind. */
-#chat-mesgreens { overscroll-behavior: contain; -webkit-overflow-scrolling: touch; }
+/* Message list scrolls within the panel — never chains to the page behind. */
+#chat-messages { overscroll-behavior: contain; -webkit-overflow-scrolling: touch; }
 .chat-msg { padding: 11px 14px; border-radius: var(--r-card); font-size: 14px; line-height: 22px; max-width: 92%; white-space: pre-wrap; }
 .chat-msg.user { background: var(--green-soft); color: var(--green-text); align-self: flex-end; border-bottom-right-radius: 4px; }
 .chat-msg.bot  { background: var(--surface-inset); color: var(--ink); align-self: flex-start; border-bottom-left-radius: 4px; border: 1px solid var(--line-soft); }
@@ -621,7 +674,10 @@ table.data.sticky-head thead th { position: sticky; top: 0; background: var(--su
   width: 9px; height: 9px; border-radius: 999px;
   background: var(--gold); border: 2px solid var(--green-deep);
 }
-@media (max-width: 900px) { .chat-fab { display: flex; } }
+/* Exactly the breakpoint at which the sidebar becomes a drawer — above it the
+   Assistant button in the sidebar footer is always on screen, so a second
+   floating one would be a duplicate control. */
+@media (max-width: 768px) { .chat-fab { display: flex; } }
 /* While the chat itself is open it would sit on top of the panel. */
 body:has(#chat-panel:not(.closed)) .chat-fab { display: none; }
 

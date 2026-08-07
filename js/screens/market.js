@@ -7,6 +7,7 @@
 import {
   STATE, registerRoute, renderCurrentRoute, h, chip, emptyState,
   openModal, closeModal, formField, setPageActions, fmtDate, today, factNeedsSource,
+  expandableCard, OPEN_BY_DEFAULT_UP_TO,
 } from '../app.js';
 import { FACT_CATEGORIES, FACT_STRENGTH, FACT_STRENGTH_NAMES, factStrengthTone, ownerOptions } from '../config.js';
 import { data } from '../data.js';
@@ -78,31 +79,33 @@ function renderMarket(page) {
     return;
   }
 
-  rows.forEach(f => page.appendChild(factCard(f)));
+  rows.forEach(f => page.appendChild(factCard(f, rows.length)));
 }
 
-function factCard(f) {
+function factCard(f, listLength = 0) {
   const missing = factNeedsSource(f);
   const insights = insightsForSource('Market fact', f.id);
 
-  const head = h('div', { class: 'flex flex-wrap items-start justify-between gap-3' }, [
-    h('div', { class: 'flex-1 min-w-[200px]' }, [
-      h('div', { class: 'flex flex-wrap items-center gap-1.5 mb-1' }, [
-        chip(f.category || 'Other', 'violet'),
-        chip(f.strength || 'Needs checking', factStrengthTone(f.strength)),
-        missing ? chip('no source', 'rose') : null,
-        f.affects_question ? chip((STATE.questions.find(q => String(q.id) === String(f.affects_question)) || {}).ref || '—', 'info') : null,
-      ].filter(Boolean)),
-      h('div', { class: 'card-title', text: f.claim || '—' }),
-      f.value ? h('div', { class: 'text-sm t-bronze mt-1 num', text: f.value }) : null,
+  /* The claim itself is the summary — a fact you cannot read without opening
+     it is a fact you will not check. */
+  const summary = h('div', {}, [
+    h('div', { class: 'flex flex-wrap items-center gap-1.5 mb-1' }, [
+      chip(f.category || 'Other', 'violet'),
+      chip(f.strength || 'Needs checking', factStrengthTone(f.strength)),
+      missing ? chip('no source', 'rose') : null,
+      f.affects_question ? chip((STATE.questions.find(q => String(q.id) === String(f.affects_question)) || {}).ref || '—', 'info') : null,
     ].filter(Boolean)),
-    h('div', { class: 'flex gap-1' }, [
-      h('button', { class: 'btn btn-ghost text-xs', onclick: () => openFactForm(f) }, 'Edit'),
-      h('button', { class: 'btn btn-ghost text-xs t-rose', onclick: () => deleteFact(f) }, 'Delete'),
-    ]),
+    h('div', { class: 'card-title', text: f.claim || '—' }),
+    f.value ? h('div', { class: 'text-sm t-bronze mt-1 num', text: f.value }) : null,
+    h('div', { class: 'rec-peek', text: missing ? 'No source link — this is hearsay until one is attached.' : (f.source_name || 'Source attached.') }),
+  ].filter(Boolean));
+
+  const tools = h('div', { class: 'flex gap-1' }, [
+    h('button', { class: 'btn btn-ghost text-xs', onclick: () => openFactForm(f) }, 'Edit'),
+    h('button', { class: 'btn btn-ghost text-xs t-rose', onclick: () => deleteFact(f) }, 'Delete'),
   ]);
 
-  const body = h('div', { class: 'mt-3 flex flex-col gap-3' });
+  const body = h('div', { class: 'flex flex-col gap-3' });
   if (f.detail) body.appendChild(h('div', { class: 'text-sm t-soft', style: 'white-space:pre-wrap', text: f.detail }));
 
   body.appendChild(h('div', { class: missing ? 'inset-block b-rose-hint' : 'inset-block' }, [
@@ -130,7 +133,11 @@ function factCard(f) {
     onDelete: () => deleteInsight(i),
   })));
 
-  return h('div', { class: `card card-pad mb-3${missing ? ' card-flagged' : ''}` }, [head, body]);
+  return expandableCard({
+    key: `fact:${f.id}`, summary, detail: body, tools, flagged: missing,
+    /* A fact with no source link opens itself — the second of the two rules. */
+    defaultOpen: missing || listLength <= OPEN_BY_DEFAULT_UP_TO,
+  });
 }
 
 /* ------------------------------------------------------------ form */

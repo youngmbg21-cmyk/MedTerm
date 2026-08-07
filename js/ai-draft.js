@@ -34,6 +34,11 @@ export function aiDraftControls({
   onManual,
   compact = true,
   manualTone = 'ghost', // 'line' where the manual path is a full peer (e.g. template reports)
+  /* Where several of these rows appear on one screen — the question board
+     shows five — the draft button must not be a primary, or the screen ends
+     up with five primaries and the design system's one-primary rule is a
+     dead letter. Callers in that position pass 'line'. */
+  draftTone = null,
 }) {
   const size = compact ? ' text-xs' : '';
   const wrap = h('div');
@@ -42,7 +47,7 @@ export function aiDraftControls({
 
   if (aiAvailable) {
     const draftBtn = h('button', {
-      class: `btn ${filled ? 'btn-ghost' : 'btn-primary'}${size}`,
+      class: `btn btn-${draftTone || (filled ? 'ghost' : 'primary')}${size}`,
       onclick: async () => {
         const label = draftBtn.textContent;
         draftBtn.disabled = true;

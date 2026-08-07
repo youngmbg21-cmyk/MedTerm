@@ -22,18 +22,33 @@ python3 -m http.server 8000
 Then open **http://localhost:8000** in Chrome, Safari or Edge. It works on a phone browser
 at 375px wide just as well as on a laptop.
 
+## The loop
+
+Everything in here serves one loop, and the Overview shows it until you hide it:
+
+1. **Line up a company worth talking to** — Prospects
+2. **Have the conversation, write it up the same day** — Conversations
+3. **Turn what they said into a finding, attached to one of the five questions** — Findings
+4. **Read where the five questions now stand, and aim the next conversation at the thinnest
+   one** — The five questions
+
 ## What is in it
+
+The sidebar is in that order too: the spine first, then the research that feeds it.
 
 | Screen | The one question it answers |
 |---|---|
 | **Overview** | What should we do today? |
 | **The five questions** | What do we still not know, and what would answer it? |
-| **Competitors** | Who else could they buy instead of us — including nobody? |
-| **Market & rules** | What is true about Kenya, and who says so? |
+| **Findings** | What have we learned, and what does it change? |
 | **Prospects** | Who are we talking to, and who is going cold? |
 | **Conversations** | What did people actually tell us? |
 | **Pricing** | What will they actually pay, and for what shape? |
-| **Insights** | What have we learned, and what does it change? |
+| **Competitors** | Who else could they buy instead of us — including nobody? |
+| **Market & rules** | What is true about Kenya, and who says so? |
+
+On the list screens each record starts as a single summary line — tap it to open the
+detail. Anything the app has flagged opens itself.
 
 The **assistant** (the button at the bottom of the sidebar) reads the whole workspace and
 argues with you about it. It can propose things to write down, but nothing is ever saved

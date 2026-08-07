@@ -19,7 +19,7 @@ five questions. That brief is the source of everything in here. `sql/schema.sql`
 ## Architecture in one paragraph
 
 `index.html` loads vanilla ES modules from `js/`, starting at `js/boot.js`. One app for
-laptop and phone — the sidebar becomes a drawer below 900px, and nothing branches on
+laptop and phone — the sidebar becomes a drawer below 768px, and nothing branches on
 screen size. All configuration (data mode, AI mode, pipeline stages, segments, categories,
 team names) lives in `js/config.js`. All data access goes through `js/data.js` — one
 interface (`list/create/update/remove`), two adapters: `local` (localStorage, seeded from
@@ -32,9 +32,12 @@ the assistant and the AI-drafted writing surfaces through the shared `js/ai-draf
 control row and the one `/api/draft-section` seam in the Edge Function; drafts always land
 in an edit box, never auto-saved. With local data the client sends the backend the
 workspace slices it needs in the request body. The decision spine — the five questions,
-insights linked to them, and the source each insight came from — lives in ordinary tables
-and flows through `js/evidence.js`; AI-proposed writes go through the Confirm/Skip pattern
-in `js/actions.js`.
+the findings linked to them, and the source each finding came from — lives in ordinary
+tables and flows through `js/evidence.js`; AI-proposed writes go through the Confirm/Skip
+pattern in `js/actions.js`. The sidebar reads in the order the work happens (Overview ·
+**the spine**: the five questions, findings · **the research**: prospects, conversations,
+pricing, competitors, market & rules), and every list screen renders its records through
+`expandableCard()` — a summary row that always shows, detail one tap away.
 
 ## Core rules — never violate
 
@@ -83,6 +86,14 @@ in `js/actions.js`.
     confidence scores appear anywhere.
 13. **Write for two non-developers.** Every message, empty state and error in the app is
     read by someone who does not code. Plain English, no jargon, and say what to do next.
+14. **One word per thing.** The record joining evidence to a question is an `insight` row
+    in `sql/schema.sql`, in `js/evidence.js` and in the Edge Function — and it is a
+    **finding** in every single word the user reads. Never both. The same discipline
+    applies to anything else that grows a second name.
+15. **Every screen must stay scannable when the workspace fills up.** A list screen shows
+    records through `expandableCard()`, and the shut summary must carry enough to decide
+    whether to open it. A record that breaches one of the two data-quality rules opens
+    itself and stays flagged — those are never one tap away.
 
 ## Design system — how the app must look
 
@@ -128,11 +139,11 @@ at the top of `css/theme.css`; the load-bearing rules:
 | `js/config.js` | All configuration — single source of truth. Holds the Supabase credentials block; do not restructure it |
 | `js/data.js` | Data interface + local/api adapters + the AI request functions |
 | `js/seed.js` | The starting workspace — reference material only, never invented evidence |
-| `js/app.js` | State, router, nav, component kit, the two data-quality rules |
+| `js/app.js` | State, router, nav, component kit (incl. `expandableCard`), the two data-quality rules |
 | `js/auth.js` | Magic-link login (lazy-loaded) |
 | `js/chat.js` | Assistant panel |
 | `js/actions.js` | Shared Confirm/Skip pattern for AI-proposed writes |
-| `js/evidence.js` | Insights: the link between a finding and a question |
+| `js/evidence.js` | Findings: the link between something we learned and a question (`insights` table) |
 | `js/ai-draft.js` | The one AI-drafts-you-edit control row |
 | `js/export.js` | CSV exports |
 | `js/screens/*.js` | One screen per file |

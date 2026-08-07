@@ -162,11 +162,16 @@ export const questionShort = (id) => (STATE.questions.find(q => String(q.id) ===
    ------------------------------------------------------------ */
 const ROUTES = {};
 
+/* Old route names kept working, so a bookmark or a link somebody pasted into
+   WhatsApp six weeks ago still lands on the right screen after a rename. */
+const ROUTE_ALIASES = { insights: 'findings' };
+
 export function registerRoute(name, title, renderFn, question = '') {
   ROUTES[name] = { title, question, render: renderFn };
 }
 
 export function go(route) {
+  route = ROUTE_ALIASES[route] || route;
   if (!ROUTES[route]) route = 'overview';
   location.hash = route;
 }
@@ -190,6 +195,14 @@ export function renderCurrentRoute() {
   const qi = raw.indexOf('?');
   let route = qi < 0 ? raw : raw.slice(0, qi);
   currentParams = new URLSearchParams(qi < 0 ? '' : raw.slice(qi + 1));
+  /* An old link renders the right screen AND corrects the address bar, so the
+     name in the URL is never one the app no longer uses. replaceState rather
+     than assigning location.hash: no extra history entry, and Back still goes
+     where the reader expects. */
+  if (ROUTE_ALIASES[route]) {
+    route = ROUTE_ALIASES[route];
+    history.replaceState(null, '', `#${route}${qi < 0 ? '' : '?' + raw.slice(qi + 1)}`);
+  }
   const r = ROUTES[route] || ROUTES.overview;
   if (!r) return;
   document.getElementById('page-title').textContent = r.title;
@@ -208,22 +221,32 @@ export function renderCurrentRoute() {
 }
 
 /* ------------------------------------------------------------
-   NAV — one axis: the research pipeline. Phase-gated.
+   NAV — the sidebar reads in the order the work actually happens,
+   not in the order the tables were designed.
+
+     Overview                      where do I start today
+     ── The spine ──
+     The five questions            what we are trying to answer
+     Findings                      what we have learned so far
+     ── The research ──
+     Prospects → Conversations     the loop that produces findings
+     Pricing · Competitors · Market & rules   what we look up
+
+   Section headings are labels, not buttons. With eight destinations,
+   collapsing them was a control to learn for no room saved — and a
+   screen you cannot see is a screen you forget exists.
    ------------------------------------------------------------ */
 const NAV = [
   { type: 'route', route: 'overview', label: 'Overview' },
+  { type: 'section', label: 'The spine' },
   { type: 'route', route: 'questions', label: 'The five questions' },
-  { type: 'divider' },
-  {
-    type: 'group', id: 'market', label: 'The market', open: true,
-    routes: [['competitors', 'Competitors'], ['market', 'Market & rules']],
-  },
-  {
-    type: 'group', id: 'customers', label: 'Customers', open: true,
-    routes: [['prospects', 'Prospects'], ['conversations', 'Conversations'], ['pricing', 'Pricing']],
-  },
-  { type: 'divider' },
-  { type: 'route', route: 'insights', label: 'Insights' },
+  { type: 'route', route: 'findings', label: 'Findings' },
+  { type: 'section', label: 'The research' },
+  { type: 'route', route: 'prospects', label: 'Prospects' },
+  { type: 'route', route: 'conversations', label: 'Conversations' },
+  { type: 'route', route: 'pricing', label: 'Pricing' },
+  { type: 'route', route: 'competitors', label: 'Competitors' },
+  { type: 'route', route: 'market', label: 'Market & rules' },
 ];
 
 export function buildNav() {
@@ -231,43 +254,13 @@ export function buildNav() {
   nav.innerHTML = '';
 
   NAV.forEach(item => {
-    if (item.type === 'divider') {
-      nav.appendChild(h('div', { class: 'nav-divider' }));
+    if (item.type === 'section') {
+      nav.appendChild(h('div', { class: 'nav-section micro', text: item.label }));
       return;
     }
-    if (item.type === 'route') {
-      nav.appendChild(h('a', { class: 'nav-item', 'data-route': item.route, href: `#${item.route}` }, [
-        h('span', { class: 'dot' }), item.label,
-      ]));
-      return;
-    }
-
-    /* Groups tidy the sidebar; nothing is ever locked. Research does not run
-       in a straight line, so every screen is reachable at every stage. */
-    let collapsed = !item.open;
-    const group = h('div', { class: 'nav-group' });
-    const chevron = h('span', { class: 'nav-chevron', text: '›' });
-    const header = h('button', { class: 'nav-group-header', type: 'button' }, [
-      h('span', { class: 'micro', text: item.label }),
-      h('span', { class: 'nav-group-right' }, [chevron]),
-    ]);
-    const list = h('div', { class: 'nav-group-list' });
-    item.routes.forEach(([route, label]) => {
-      list.appendChild(h('a', { class: 'nav-item', 'data-route': route, href: `#${route}` }, [
-        h('span', { class: 'dot' }), label,
-      ]));
-    });
-
-    function applyCollapsed() {
-      list.style.display = collapsed ? 'none' : '';
-      chevron.style.transform = collapsed ? '' : 'rotate(90deg)';
-    }
-    header.addEventListener('click', () => { collapsed = !collapsed; applyCollapsed(); });
-    applyCollapsed();
-
-    group.appendChild(header);
-    group.appendChild(list);
-    nav.appendChild(group);
+    nav.appendChild(h('a', { class: 'nav-item', 'data-route': item.route, href: `#${item.route}` }, [
+      h('span', { class: 'dot' }), item.label,
+    ]));
   });
 
   // route clicks (delegated per element so .active toggling keeps working)
@@ -362,9 +355,10 @@ export function h(tag, attrs = {}, children = []) {
 }
 
 /* ------------------------------------------------------------
-   SHARED COMPONENTS — the six building blocks every screen uses.
-   Semantic colour: sage = done/on-track · honey = attention ·
-   rose = blocked/breach · info = current/informational · plum = themes.
+   SHARED COMPONENTS — the building blocks every screen uses.
+   Semantic colour: green = done/on-track · gold = attention ·
+   rose = blocked/breach · info = neutral · violet = tags ·
+   bronze = editorial accent.
    ------------------------------------------------------------ */
 
 /* 1 · Metric card */
@@ -433,8 +427,55 @@ export function emptyState(title, sub, action) {
   ].filter(Boolean));
 }
 
-/* 6 · Attention banners are plain divs with .banner .banner-{rose|honey|info} —
-   see theme.css. Red = data-quality breach, honey = attention, info = calm note. */
+/* 6 · Attention banners are plain divs with .banner .banner-{rose|gold|info} —
+   see theme.css. Rose = data-quality breach, gold = attention, info = calm note. */
+
+/* ------------------------------------------------------------
+   7 · THE RECORD CARD — a summary line that always shows, and a
+   detail body one tap away.
+
+   Every list screen used to render every record fully open. With
+   four seeded prospects that reads fine; with twenty real ones the
+   screen is six thousand pixels tall and "who has gone quiet?"
+   becomes a scrolling exercise. The summary row therefore has to
+   carry enough to decide whether to open the card at all —
+   chips, the name, one line of context — and the rest waits.
+
+   Records that breach a data-quality rule (a conversation with no
+   finding, a fact with no source) open themselves and stay flagged:
+   the two rules of this workspace are never one tap away.
+
+   Open/closed state is held here rather than in the screen, so it
+   survives the re-render that follows every save.
+   ------------------------------------------------------------ */
+const opened = new Set();
+const closed = new Set();
+
+export function expandableCard({ key, summary, detail, tools, flagged = false, defaultOpen = false }) {
+  /* An explicit tap always wins over the default; otherwise flagged and
+     short-list records start open. */
+  const isOpen = closed.has(key) ? false : (opened.has(key) || defaultOpen);
+
+  const chevron = h('span', { class: `rec-chevron${isOpen ? ' open' : ''}`, text: '›', 'aria-hidden': 'true' });
+  const toggle = h('button', {
+    class: 'rec-toggle', type: 'button', 'aria-expanded': String(isOpen),
+    onclick: () => {
+      if (isOpen) { opened.delete(key); closed.add(key); }
+      else { closed.delete(key); opened.add(key); }
+      renderCurrentRoute();
+    },
+  }, [chevron, summary]);
+
+  const card = h('div', { class: `card card-pad mb-3${flagged ? ' card-flagged' : ''}` }, [
+    h('div', { class: 'rec-head' }, [toggle, tools || null].filter(Boolean)),
+  ]);
+  if (isOpen && detail) card.appendChild(h('div', { class: 'rec-body' }, [detail]));
+  return card;
+}
+
+/* How a screen decides whether its records start open: a short list is easier
+   read whole than clicked through, a long one is not. */
+export const OPEN_BY_DEFAULT_UP_TO = 3;
 
 /* ------------------------------------------------------------
    MODAL + FORM HELPERS

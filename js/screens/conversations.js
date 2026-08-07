@@ -7,6 +7,7 @@ import {
   STATE, registerRoute, renderCurrentRoute, h, chip, emptyState, quoteBlock,
   openModal, closeModal, formField, setPageActions, fmtDate, today, routeParams,
   conversationUnmined, prospectName, segmentCoverageRows, progressBar,
+  expandableCard, OPEN_BY_DEFAULT_UP_TO,
 } from '../app.js';
 import { CHANNELS, teamOptions, SEGMENTS } from '../config.js';
 import { data } from '../data.js';
@@ -68,34 +69,36 @@ function renderConversations(page) {
     return;
   }
 
-  [...STATE.conversations]
+  const rows = [...STATE.conversations]
     .sort((a, b) => (conversationUnmined(b) - conversationUnmined(a)) ||
-      String(b.date || '').localeCompare(String(a.date || '')))
-    .forEach(c => page.appendChild(conversationCard(c)));
+      String(b.date || '').localeCompare(String(a.date || '')));
+  rows.forEach(c => page.appendChild(conversationCard(c, rows.length)));
 }
 
-function conversationCard(c) {
+function conversationCard(c, listLength = 0) {
   const insights = insightsForSource('Conversation', c.id);
   const unmined = conversationUnmined(c);
 
-  const head = h('div', { class: 'flex flex-wrap items-start justify-between gap-3' }, [
-    h('div', { class: 'flex-1 min-w-[200px]' }, [
-      h('div', { class: 'flex flex-wrap items-center gap-1.5 mb-1' }, [
-        chip(fmtDate(c.date), 'line'),
-        c.channel ? chip(c.channel, 'info') : null,
-        c.wtp_signal ? chip(c.wtp_signal, wtpTone(c.wtp_signal)) : null,
-        unmined ? chip('nothing written down', 'rose') : chip(`${insights.length} finding${insights.length === 1 ? '' : 's'}`, 'green'),
-      ].filter(Boolean)),
-      h('div', { class: 'card-title', text: prospectName(c.prospect_id) }),
-      h('div', { class: 'text-xs t-mute mt-0.5', text: [c.person, c.person_role, c.interviewer ? `ran by ${c.interviewer}` : null].filter(Boolean).join(' · ') }),
-    ]),
-    h('div', { class: 'flex gap-1' }, [
-      h('button', { class: 'btn btn-ghost text-xs', onclick: () => openConversationForm(c) }, 'Edit'),
-      h('button', { class: 'btn btn-ghost text-xs t-rose', onclick: () => deleteConversation(c) }, 'Delete'),
-    ]),
+  /* Shut, a conversation still shows who, when, and whether anything was ever
+     written down from it — which is the whole reason to look at this list. */
+  const summary = h('div', {}, [
+    h('div', { class: 'flex flex-wrap items-center gap-1.5 mb-1' }, [
+      chip(fmtDate(c.date), 'line'),
+      c.channel ? chip(c.channel, 'info') : null,
+      c.wtp_signal ? chip(c.wtp_signal, wtpTone(c.wtp_signal)) : null,
+      unmined ? chip('nothing written down', 'rose') : chip(`${insights.length} finding${insights.length === 1 ? '' : 's'}`, 'green'),
+    ].filter(Boolean)),
+    h('div', { class: 'card-title', text: prospectName(c.prospect_id) }),
+    h('div', { class: 'text-xs t-mute mt-0.5', text: [c.person, c.person_role, c.interviewer ? `ran by ${c.interviewer}` : null].filter(Boolean).join(' · ') }),
+    h('div', { class: 'rec-peek', text: c.best_quote ? `“${c.best_quote}”` : (c.main_pain || 'No quote or pain recorded.') }),
   ]);
 
-  const body = h('div', { class: 'mt-3 flex flex-col gap-3' });
+  const tools = h('div', { class: 'flex gap-1' }, [
+    h('button', { class: 'btn btn-ghost text-xs', onclick: () => openConversationForm(c) }, 'Edit'),
+    h('button', { class: 'btn btn-ghost text-xs t-rose', onclick: () => deleteConversation(c) }, 'Delete'),
+  ]);
+
+  const body = h('div', { class: 'flex flex-col gap-3' });
 
   if (c.best_quote) {
     body.appendChild(quoteBlock(c.best_quote, [c.person, prospectName(c.prospect_id)].filter(Boolean).join(', ')));
@@ -137,7 +140,12 @@ function conversationCard(c) {
     body.appendChild(list);
   }
 
-  return h('div', { class: `card card-pad mb-3${unmined ? ' card-flagged' : ''}` }, [head, body]);
+  return expandableCard({
+    key: `conversation:${c.id}`, summary, detail: body, tools, flagged: unmined,
+    /* A conversation nobody has written a finding from opens itself, every
+       time, until somebody does. That is the rule, not a nicety. */
+    defaultOpen: unmined || listLength <= OPEN_BY_DEFAULT_UP_TO,
+  });
 }
 
 /* ------------------------------------------------------------ form */

@@ -6,6 +6,7 @@
 import {
   STATE, registerRoute, renderCurrentRoute, h, chip, emptyState, sectionCard,
   openModal, closeModal, formField, setPageActions, evidenceFor, evidenceWeight, fmtDate,
+  expandableCard,
 } from '../app.js';
 import { QUESTION_STATUS, QUESTION_STATUS_NAMES, questionTone, ownerOptions } from '../config.js';
 import { data } from '../data.js';
@@ -16,7 +17,11 @@ import { draftSectionRequest, aiDataSlices } from '../data.js';
 const sorted = () => [...STATE.questions].sort((a, b) => (a.sort || 0) - (b.sort || 0));
 
 function renderQuestions(page) {
-  setPageActions(h('button', { class: 'btn btn-primary', onclick: () => openQuestionForm() }, '+ Add a question'));
+  /* The primary action on this screen is the one you actually take on it:
+     attaching what you have learned to a question. Adding a sixth question
+     to a screen called "the five questions" happens roughly never, so it
+     lives in the quiet tools row below. */
+  setPageActions(h('button', { class: 'btn btn-primary', onclick: () => insightModal({}) }, '+ Write down a finding'));
 
   const qs = sorted();
   if (!qs.length) {
@@ -34,6 +39,12 @@ function renderQuestions(page) {
     ]));
   }
 
+  page.appendChild(h('div', { class: 'flex flex-wrap items-center gap-3 mb-4' }, [
+    h('div', { class: 'text-sm t-soft flex-1 min-w-[200px]',
+      text: 'A question only moves on written evidence. Open one to read what is attached to it and what would answer it.' }),
+    h('button', { class: 'btn btn-line', onclick: () => openQuestionForm() }, '+ Add a question'),
+  ]));
+
   qs.forEach(q => page.appendChild(questionCard(q)));
 }
 
@@ -41,21 +52,29 @@ function questionCard(q) {
   const e = evidenceFor(q.id);
   const w = evidenceWeight(q.id);
 
-  const head = h('div', { class: 'flex flex-wrap items-start justify-between gap-3' }, [
-    h('div', { class: 'flex-1 min-w-[200px]' }, [
-      h('div', { class: 'flex items-center gap-2 mb-1' }, [
-        chip(q.ref || '—', 'info'),
-        chip(q.status || 'Open', questionTone(q.status)),
-        chip(w.label, w.tone),
-      ]),
-      h('div', { class: 'card-title', text: q.short || '' }),
+  /* Shut, a question shows where it stands and what the evidence says. That
+     is enough to choose which one the next conversation should be aimed at —
+     which is the only decision this screen exists to support. Open, it shows
+     the argument. Five open cards was four screens of scrolling. */
+  const summary = h('div', {}, [
+    h('div', { class: 'flex flex-wrap items-center gap-1.5 mb-1' }, [
+      chip(q.ref || '—', 'info'),
+      chip(q.status || 'Open', questionTone(q.status)),
+      chip(w.label, w.tone),
+      chip(`${e.supports.length} support`, e.supports.length ? 'green' : 'line'),
+      chip(`${e.challenges.length} challenge`, e.challenges.length ? 'rose' : 'line'),
     ]),
-    h('div', { class: 'flex gap-1' }, [
-      h('button', { class: 'btn btn-ghost text-xs', onclick: () => openQuestionForm(q) }, 'Edit'),
-    ]),
+    h('div', { class: 'card-title', text: q.short || '' }),
+    h('div', { class: 'rec-peek', text: q.leaning
+      ? `Where we stand: ${q.leaning}`
+      : (q.would_answer ? `What would answer it: ${q.would_answer}` : 'No leaning written down yet.') }),
   ]);
 
-  const body = h('div', { class: 'mt-3' });
+  const tools = h('div', { class: 'flex gap-1' }, [
+    h('button', { class: 'btn btn-ghost text-xs', onclick: () => openQuestionForm(q) }, 'Edit'),
+  ]);
+
+  const body = h('div', {});
   if (q.why_it_matters) body.appendChild(h('div', { class: 'text-sm t-soft', text: q.why_it_matters }));
 
   if (q.would_answer) {
@@ -78,15 +97,15 @@ function questionCard(q) {
     draftLabel: 'Draft where we stand',
     redraftLabel: 'Redraft where we stand',
     manualLabel: 'Write it yourself',
+    draftTone: 'line', // five of these on one screen; none of them is the primary
     onDraft: () => draftLeaning(q),
     onManual: () => openLeaningForm(q),
   }));
   body.appendChild(leaningBox);
 
-  /* The evidence itself. */
+  /* The evidence itself. The support/challenge tally already rode up into the
+     summary; here it only needs the context count and the way to add more. */
   const tally = h('div', { class: 'flex flex-wrap items-center gap-2 mt-4 mb-2' }, [
-    chip(`${e.supports.length} support`, e.supports.length ? 'green' : 'line'),
-    chip(`${e.challenges.length} challenge`, e.challenges.length ? 'rose' : 'line'),
     e.context.length ? chip(`${e.context.length} context`, 'info') : null,
     h('button', { class: 'btn btn-line text-xs ml-auto', onclick: () => insightModal({ questionId: q.id }) }, '+ Attach a finding'),
   ].filter(Boolean));
@@ -106,7 +125,7 @@ function questionCard(q) {
     body.appendChild(list);
   }
 
-  return h('div', { class: 'card card-pad mb-4' }, [head, body]);
+  return expandableCard({ key: `question:${q.id}`, summary, detail: body, tools });
 }
 
 /* ------------------------------------------------------------ forms */

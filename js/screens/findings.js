@@ -1,7 +1,11 @@
-/* Insights — one question: "What have we learned, and what does it change?"
+/* Findings — one question: "What have we learned, and what does it change?"
 
    Every finding in the workspace in one place, filterable by question and by
-   direction. This is the ledger the two of you argue from. */
+   direction. This is the ledger the two of you argue from.
+
+   The record is called an `insight` in the database and in js/evidence.js,
+   which is where that name stays. On screen there is one word for it —
+   "finding" — because two words for one thing is two things to learn. */
 import {
   STATE, registerRoute, renderCurrentRoute, h, chip, emptyState,
   setPageActions, evidenceFor,
@@ -12,7 +16,7 @@ import { exportInsights } from '../export.js';
 
 const view = { question: 'all', direction: 'all', kind: 'all' };
 
-function renderInsights(page) {
+function renderFindings(page) {
   setPageActions(h('button', { class: 'btn btn-primary', onclick: () => insightModal({}) }, '+ Write down a finding'));
 
   const qs = [...STATE.questions].sort((a, b) => (a.sort || 0) - (b.sort || 0));
@@ -79,5 +83,5 @@ function renderInsights(page) {
   page.appendChild(list);
 }
 
-registerRoute('insights', 'Insights', renderInsights,
+registerRoute('findings', 'Findings', renderFindings,
   'What have we learned, and what does it change?');

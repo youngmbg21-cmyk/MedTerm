@@ -5,7 +5,7 @@
 import {
   STATE, registerRoute, renderCurrentRoute, h, chip, emptyState,
   openModal, closeModal, formField, setPageActions, fmtDate, today,
-  isStalled, daysSince, pipelineCounts,
+  isStalled, daysSince, pipelineCounts, expandableCard, OPEN_BY_DEFAULT_UP_TO,
 } from '../app.js';
 import {
   PIPELINE, PIPELINE_NAMES, pipelineTone, SEGMENT_NAMES, SECTORS, CHANNELS,
@@ -98,39 +98,43 @@ function renderProspects(page) {
         STATE.prospects.length ? null : { label: '+ Add the first prospect', onclick: () => openProspectForm() }));
       return;
     }
-    rows.forEach(p => wrap.appendChild(prospectCard(p)));
+    rows.forEach(p => wrap.appendChild(prospectCard(p, rows.length)));
   }
   renderList();
 }
 
-function prospectCard(p) {
+function prospectCard(p, listLength = 0) {
   const convos = STATE.conversations.filter(c => String(c.prospect_id) === String(p.id));
   const contacts = STATE.contacts.filter(c => String(c.prospect_id) === String(p.id));
   const stalled = isStalled(p);
+  const nextStep = String(p.next_step || '').trim();
 
-  const head = h('div', { class: 'flex flex-wrap items-start justify-between gap-3' }, [
-    h('div', { class: 'flex-1 min-w-[200px]' }, [
-      h('div', { class: 'flex flex-wrap items-center gap-1.5 mb-1' }, [
-        chip(p.status || 'To contact', pipelineTone(p.status)),
-        p.segment ? chip(p.segment, 'violet') : null,
-        stalled ? chip(`quiet ${daysSince(p.last_touch || p.first_contact)}d`, 'rose') : null,
-        convos.length ? chip(`${convos.length} conversation${convos.length === 1 ? '' : 's'}`, 'info') : null,
-      ].filter(Boolean)),
-      h('div', { class: 'card-title', text: p.company || '—' }),
-      h('div', { class: 'text-xs t-mute mt-0.5', text: [p.sector, p.city, p.size].filter(Boolean).join(' · ') || '' }),
-    ]),
-    h('div', { class: 'flex gap-1' }, [
-      h('button', { class: 'btn btn-ghost text-xs', onclick: () => openProspectForm(p) }, 'Edit'),
-      h('button', { class: 'btn btn-ghost text-xs t-rose', onclick: () => deleteProspect(p) }, 'Delete'),
-    ]),
+  /* The summary has to answer "do I need to open this?" on its own: where they
+     are, whether they have gone quiet, and what we said we would do next. */
+  const summary = h('div', {}, [
+    h('div', { class: 'flex flex-wrap items-center gap-1.5 mb-1' }, [
+      chip(p.status || 'To contact', pipelineTone(p.status)),
+      p.segment ? chip(p.segment, 'violet') : null,
+      stalled ? chip(`quiet ${daysSince(p.last_touch || p.first_contact)}d`, 'rose') : null,
+      convos.length ? chip(`${convos.length} conversation${convos.length === 1 ? '' : 's'}`, 'info') : null,
+      nextStep ? null : chip('no next step', 'gold'),
+    ].filter(Boolean)),
+    h('div', { class: 'card-title', text: p.company || '—' }),
+    h('div', { class: 'text-xs t-mute mt-0.5', text: [p.sector, p.city, p.size].filter(Boolean).join(' · ') || '' }),
+    h('div', { class: 'rec-peek', text: nextStep ? `Next: ${nextStep}` : 'No next step written down.' }),
   ]);
 
-  const body = h('div', { class: 'mt-3 flex flex-col gap-3' });
+  const tools = h('div', { class: 'flex gap-1' }, [
+    h('button', { class: 'btn btn-ghost text-xs', onclick: () => openProspectForm(p) }, 'Edit'),
+    h('button', { class: 'btn btn-ghost text-xs t-rose', onclick: () => deleteProspect(p) }, 'Delete'),
+  ]);
+
+  const body = h('div', { class: 'flex flex-col gap-3' });
   if (p.why_fit) body.appendChild(h('div', { class: 'text-sm t-soft', text: p.why_fit }));
 
-  body.appendChild(h('div', { class: `inset-block${String(p.next_step || '').trim() ? '' : ' b-rose-hint'}` }, [
+  body.appendChild(h('div', { class: `inset-block${nextStep ? '' : ' b-rose-hint'}` }, [
     h('div', { class: 'micro t-bronze mb-1', text: 'Next step' }),
-    h('div', { class: 'text-sm', text: String(p.next_step || '').trim() || 'Nothing written down. Decide the next move now, while you remember why.' }),
+    h('div', { class: 'text-sm', text: nextStep || 'Nothing written down. Decide the next move now, while you remember why.' }),
     p.next_step_date ? h('div', { class: 'text-xs t-mute mt-1', text: `By ${fmtDate(p.next_step_date)}` }) : null,
   ].filter(Boolean)));
 
@@ -156,7 +160,12 @@ function prospectCard(p) {
   ].filter(Boolean).join(' · ') });
   body.appendChild(foot);
 
-  return h('div', { class: 'card card-pad mb-3' }, [head, body]);
+  return expandableCard({
+    key: `prospect:${p.id}`, summary, detail: body, tools, flagged: stalled,
+    /* A gone-cold prospect opens itself — the thing you must act on is never
+       behind a tap. Otherwise a short list reads better whole. */
+    defaultOpen: stalled || listLength <= OPEN_BY_DEFAULT_UP_TO,
+  });
 }
 
 /* ------------------------------------------------------------ forms */

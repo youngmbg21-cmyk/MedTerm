@@ -1,6 +1,6 @@
 /* Entry point. Builds the shell, loads the stylesheet and every screen, then
    starts the router. One app for laptop and phone — the sidebar collapses to a
-   drawer below 900px, so nothing here branches on screen size.
+   drawer below 768px, so nothing here branches on screen size.
 
    Assets and shell are set up here (not in static HTML) so #modal-root exists
    in the DOM before app.js — whose top-level code observes it — is imported. */
@@ -102,7 +102,7 @@ async function boot() {
     import('./screens/conversations.js'),
     import('./screens/pricing.js'),
     import('./screens/market.js'),
-    import('./screens/insights.js'),
+    import('./screens/findings.js'),
     import('./screens/settings.js'),
   ]);
 

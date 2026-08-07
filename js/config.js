@@ -141,7 +141,8 @@ export const FACT_STRENGTH_NAMES = FACT_STRENGTH.map(f => f.name);
 export const factStrengthTone = (s) => (FACT_STRENGTH.find(f => f.name === s) || {}).tone || 'line';
 
 /* ------------------------------------------------------------
-   Insights — the link between a finding and a question.
+   Findings — the link between something we learned and a question.
+   (Stored in the `insights` table; "finding" is the only word the user sees.)
    ------------------------------------------------------------ */
 export const DIRECTIONS = [
   { name: 'Supports',  tone: 'green' },

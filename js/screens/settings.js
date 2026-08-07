@@ -73,8 +73,11 @@ function renderSettings(page) {
     const dangerBody = h('div', { class: 'flex flex-col gap-3' }, [
       h('div', { class: 'text-sm t-soft', text: 'Both of these throw away work. Download a backup first — neither can be undone.' }),
       h('div', { class: 'flex flex-wrap gap-2' }, [
-        h('button', { class: 'btn btn-line', onclick: () => confirmWipe('startFresh') }, 'Clear our research, keep the reference material'),
-        h('button', { class: 'btn btn-line t-rose', onclick: () => confirmWipe('reset') }, 'Reset to the starting workspace'),
+        /* Short labels: buttons never wrap, and at 375px the long version of
+           the first one ran off the side of the screen. What each one does is
+           spelled out in the line underneath, where there is room for it. */
+        h('button', { class: 'btn btn-line', onclick: () => confirmWipe('startFresh') }, 'Clear our research'),
+        h('button', { class: 'btn btn-line t-rose', onclick: () => confirmWipe('reset') }, 'Reset the workspace'),
       ]),
       h('div', { class: 'text-xs t-mute', text: '"Clear our research" keeps the five questions, the competitor set, the market facts and the pricing ideas, and deletes every prospect, conversation, reaction and finding. "Reset" puts everything back exactly as it arrived.' }),
     ]);

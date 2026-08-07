@@ -52,7 +52,7 @@ export function exportFacts() {
 }
 
 export function exportInsights() {
-  downloadCsv(`hati-insights-${stamp()}.csv`,
+  downloadCsv(`hati-findings-${stamp()}.csv`,
     ['Date', 'Question', 'Direction', 'Finding', 'Quote', 'Source kind', 'Source', 'Written by'],
     STATE.insights.map(i => [i.date, questionShort(i.question_id), i.direction, i.finding, i.quote,
       i.source_kind, i.source_label, i.owner]));

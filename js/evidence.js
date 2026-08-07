@@ -4,6 +4,12 @@
    is created, rendered and counted, so no screen invents its own
    version of "does this support or challenge Q2?".
 
+   The record is an `insight` row in the database — that name is
+   load-bearing in sql/schema.sql and the Edge Function, so it
+   stays. On screen it is always called a FINDING, and never
+   anything else. If you are adding user-facing copy here, the
+   word is "finding".
+
    An insight record:
      question_id   which of the five questions it bears on
      direction     Supports · Challenges · Context
@@ -68,9 +74,9 @@ export function insightModal({
     formField('Date', 'date', 'text', src.date || today(), null, 'date'),
   ];
 
-  openModal(editing ? 'Edit insight' : 'Write down a finding', fields, async (out) => {
+  openModal(editing ? 'Edit finding' : 'Write down a finding', fields, async (out) => {
     if (!String(out.finding || '').trim()) {
-      alert('An insight needs its one sentence. That sentence is the whole record — everything else is supporting detail.');
+      alert('A finding needs its one sentence. That sentence is the whole record — everything else is supporting detail.');
       return;
     }
     const row = {
@@ -90,7 +96,7 @@ export function insightModal({
     closeModal();
     if (afterSave) afterSave();
     else renderCurrentRoute();
-  }, editing ? 'Save' : 'Save insight');
+  }, editing ? 'Save' : 'Save finding');
 }
 
 /* Every insight drawn from one particular record. */
@@ -98,7 +104,7 @@ export function insightsForSource(kind, id, insights = STATE.insights) {
   return insights.filter(i => i.source_kind === kind && String(i.source_id) === String(id));
 }
 
-/* One insight, rendered. Compact enough for a list, complete enough to
+/* One finding, rendered. Compact enough for a list, complete enough to
    argue with: direction, the sentence, the quote, and where it came from. */
 export function insightCard(insight, { showQuestion = true, onEdit, onDelete } = {}) {
   const q = STATE.questions.find(x => String(x.id) === String(insight.question_id));
@@ -140,7 +146,7 @@ export function evidenceTally(questionId) {
 }
 
 export async function deleteInsight(insight, after) {
-  openModal('Delete this insight?', [
+  openModal('Delete this finding?', [
     { key: '_', el: h('div', { class: 'text-sm t-soft' }, [
       h('div', { text: insight.finding || '' }),
       h('div', { class: 'text-xs mt-2 t-mute', text: 'Deleting it removes it from the question it was attached to. This cannot be undone.' }),
