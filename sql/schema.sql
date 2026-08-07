@@ -333,9 +333,14 @@ END $$;
 
 -- ------------------------------------------------------------
 -- Last step, done by hand: add yourselves to the team.
--- Replace the two email addresses, then run these two lines.
+-- Replace the two email addresses, then run these lines.
 -- Until a row here is 'active', the Edge Function will refuse
 -- the request even with a valid login — which is the point.
+--
+-- NOTE — this is needed for the ASSISTANT, not only for shared data.
+-- The Edge Function checks membership on every AI request, so the
+-- assistant and the decision brief stay refused until these rows
+-- exist, even while your workspace data is still local.
 -- ------------------------------------------------------------
 -- INSERT INTO team_members (email, display_name, role, status)
 --   VALUES ('you@example.com', 'Young', 'lead', 'active')
@@ -343,3 +348,25 @@ END $$;
 -- INSERT INTO team_members (email, display_name, role, status)
 --   VALUES ('simon@example.com', 'Simon', 'partner', 'active')
 --   ON CONFLICT (email) DO UPDATE SET status = 'active';
+
+-- ------------------------------------------------------------
+-- Link each team row to the Supabase account that signed in with
+-- that address.
+--
+-- Why this exists: the invite above is written by EMAIL, because
+-- nobody has a Supabase user id until the first time they sign in.
+-- But every RLS policy in this file, and the Edge Function's own
+-- membership check, look the member up by USER_ID. Until the two
+-- are joined, an invited founder signs in successfully and is then
+-- refused with "Not authorised" — correct row, never matched.
+--
+-- The deployed Edge Function now links the row itself on first
+-- sign-in. This statement is the manual repair for a workspace
+-- whose function has not been redeployed yet, and it is safe to
+-- run any number of times.
+-- ------------------------------------------------------------
+-- UPDATE team_members tm
+--   SET user_id = u.id
+--   FROM auth.users u
+--   WHERE lower(u.email) = lower(tm.email)
+--     AND tm.user_id IS DISTINCT FROM u.id;

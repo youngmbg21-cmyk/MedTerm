@@ -39,6 +39,39 @@ storage has.
 
 ---
 
+## 2b · Turning the assistant on
+
+**Read this even though your data is local.** The assistant and the decision brief are the
+one part of the app that talks to a server, and that server checks who you are before it
+will spend a penny of your Claude credit. So they need setting up even while everything
+else lives in your browser.
+
+Three things have to be true:
+
+1. **The tables exist.** Run `sql/schema.sql` in the Supabase SQL editor — Step 1 below.
+   Safe to run twice, deletes nothing.
+2. **Your email is on the team list, and linked to your account.** At the bottom of
+   `sql/schema.sql` there are two `INSERT` lines. Uncomment them, put your real email
+   addresses in, and Run. Then sign in to the app once, and run the `UPDATE` statement
+   underneath them — that joins your row to the account you just signed in with.
+3. **The Claude API key is set.** Tap the HaTi wordmark five times to open the admin page.
+
+Then click **Write the first brief**. You will be asked to sign in with your email;
+Supabase mails you a link, you click it, and you are in.
+
+**If it says "Not authorised"** after you have signed in: your row exists but has not been
+linked to your account. Run the `UPDATE` statement at the bottom of `sql/schema.sql`. This
+was a genuine trap — the invite is written by email, but the server looks you up by account
+id, and nothing used to join the two. A redeployed function now links it for you on first
+sign-in; the `UPDATE` is the fix if you have not redeployed.
+
+**If it says the key is not configured**, see section 4.
+
+You can ignore all of this and keep working — the sign-in screen has a **Not now** button,
+and every other screen in the app works without an account.
+
+---
+
 ## 3 · Going shared (both of you, one workspace)
 
 Do this when you start having real conversations and it matters that you both see the same
@@ -109,7 +142,9 @@ can look plain for a moment. Reload. If it stays broken, hold Shift and reload �
 forces the browser to stop using an old cached copy.
 
 **"Not authorised" when using the assistant.**
-You are signed in, but your email is not on the team list in Supabase. See Step 2 above.
+Either your email is not on the team list in Supabase, or it is on the list but has not
+been linked to the account you signed in with. Run the `UPDATE team_members` statement at
+the very bottom of `sql/schema.sql` — that joins the two. See section 2b.
 
 **The assistant answers about medical tourism, patients, or interviews.**
 The Supabase function has not been redeployed yet. See Step 3, part 1.

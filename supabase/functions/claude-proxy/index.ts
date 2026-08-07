@@ -487,10 +487,33 @@ async function authenticate(req: Request, env: Env): Promise<Member | null> {
   if (error || !user) return null;
 
   // Service role bypasses RLS for the membership lookup itself.
-  const { data } = await supabaseRequest(
-    'GET', `team_members?user_id=eq.${user.id}&status=eq.active&select=id,role,display_name`, null, env,
+  const select = 'select=id,role,display_name';
+  let { data } = await supabaseRequest(
+    'GET', `team_members?user_id=eq.${user.id}&status=eq.active&${select}`, null, env,
   );
-  const row = Array.isArray(data) ? data[0] : null;
+  let row = Array.isArray(data) ? data[0] : null;
+
+  /* First sign-in for this person. Nobody knows their Supabase user id before
+     they have ever signed in, so an invite is written by EMAIL — which meant
+     the lookup above could never match, and a correctly-invited founder was
+     refused forever with "Not authorised. Ask Young to add you." even though
+     Young had added them. Fall back to the email and link the row on the way
+     through, so every later request takes the fast path above.
+
+     `user_id=is.null` is the safety catch: only an unclaimed row can be
+     linked, so somebody who signs up with an address that already belongs to
+     a linked account cannot take it over. */
+  if (!row && user.email) {
+    ({ data } = await supabaseRequest(
+      'GET',
+      `team_members?email=ilike.${encodeURIComponent(user.email)}&user_id=is.null&status=eq.active&${select}`,
+      null, env,
+    ));
+    row = Array.isArray(data) ? data[0] : null;
+    if (row) {
+      await supabaseRequest('PATCH', `team_members?id=eq.${(row as any).id}`, { user_id: user.id }, env);
+    }
+  }
   if (!row) return null;
   return { id: (row as any).id, role: (row as any).role, display_name: (row as any).display_name, userId: user.id };
 }
