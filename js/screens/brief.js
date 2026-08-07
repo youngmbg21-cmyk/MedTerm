@@ -223,7 +223,8 @@ async function generate(btn) {
   } catch (e) {
     btn.disabled = false;
     btn.textContent = label;
-    alert('The brief could not be written: ' + e.message);
+    // Walking away from the sign-in screen is a choice, not a failure.
+    if (e.name !== 'SignInCancelled') alert('The brief could not be written: ' + e.message);
   }
 }
 

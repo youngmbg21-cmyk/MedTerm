@@ -41,12 +41,20 @@ export async function getSession() {
   return session;
 }
 
-/* Full-screen magic-link login. Resolves when signed in. */
-export async function requireLogin() {
+/* Full-screen magic-link login. Resolves when signed in.
+ *
+ * `cancellable` matters. In shared-data mode this runs at boot and there is
+ * genuinely nothing to do until you sign in, so there is no way out. But with
+ * local data the whole workspace works signed out — only the assistant needs
+ * an account — and a full-screen sign-in with no exit, reached by tapping an
+ * AI button once, traps you until you know to reload the page. So when the
+ * app can carry on without it, the screen says so and lets you leave.
+ */
+export async function requireLogin({ cancellable = false } = {}) {
   const session = await getSession();
   if (session) return session;
 
-  return new Promise(async (resolve) => {
+  return new Promise(async (resolve, reject) => {
     const supabase = await getClient();
 
     const email = el('input', { class: 'field', type: 'email', placeholder: 'you@example.com', autocomplete: 'email', style: 'margin-bottom:12px;' });
@@ -77,6 +85,28 @@ export async function requireLogin() {
       msg,
       el('button', { class: 'btn btn-primary tall', type: 'submit', style: 'width:100%;', text: 'Send magic link' }),
     ]);
+
+    if (cancellable) {
+      form.appendChild(el('div', {
+        style: 'font-size:12px;line-height:18px;color:#64736A;margin-top:14px;text-align:center;',
+        text: 'Only the assistant needs an account. Everything else in the workspace works without one.',
+      }));
+      form.appendChild(el('button', {
+        type: 'button',
+        class: 'btn btn-ghost',
+        style: 'width:100%;margin-top:6px;',
+        text: 'Not now',
+        onclick: () => {
+          overlay.remove();
+          /* Named so callers can tell a deliberate "not now" from a real
+             failure — choosing to leave should not then be reported to you
+             as an error. */
+          const err = new Error('Sign-in cancelled. The assistant needs you signed in before it can read the workspace — everything else still works.');
+          err.name = 'SignInCancelled';
+          reject(err);
+        },
+      }));
+    }
 
     const overlay = el('div', {
       id: 'login-overlay',

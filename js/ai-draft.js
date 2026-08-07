@@ -53,7 +53,8 @@ export function aiDraftControls({
         draftBtn.disabled = true;
         draftBtn.textContent = 'Drafting…';
         try { await onDraft(); }
-        catch (e) { alert('Draft failed: ' + e.message); }
+        // Walking away from the sign-in screen is a choice, not a failure.
+        catch (e) { if (e.name !== 'SignInCancelled') alert('Draft failed: ' + e.message); }
         finally { draftBtn.disabled = false; draftBtn.textContent = label; }
       },
     }, filled ? redraftLabel : draftLabel);

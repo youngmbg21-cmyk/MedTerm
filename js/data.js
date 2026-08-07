@@ -215,8 +215,28 @@ async function workerFetch(path, opts = {}) {
       ...(opts.headers || {}),
     },
   });
-  if (!res.ok) throw new Error(`API ${res.status}: ${await res.text()}`);
+  if (!res.ok) throw new Error(explainApiError(res.status, await res.text()));
   return res.json();
+}
+
+/* Two people who do not code read every error this app produces (rule 13).
+   A raw status line and a blob of JSON tells them nothing they can act on,
+   so the failures that actually happen get a sentence and a next step. */
+function explainApiError(status, body) {
+  if (status === 401) {
+    return 'You are not signed in, so the assistant could not be reached. Close this, try again, and use the sign-in link that appears.';
+  }
+  if (status === 403) {
+    return 'You are signed in, but this email is not on the team list yet. Whoever set up the Supabase project needs to add you to team_members before the assistant will answer.';
+  }
+  if (status === 503) {
+    return 'The Claude API key is not set on the server. Tap the HaTi wordmark five times to open the admin page and add it.';
+  }
+  if (status >= 500) {
+    return `The server had a problem (${status}). Wait a moment and try again — nothing you typed has been lost.`;
+  }
+  const detail = String(body || '').slice(0, 300);
+  return `The request failed (${status}). ${detail}`;
 }
 
 const apiAdapter = {
@@ -308,8 +328,38 @@ export function aiDataSlices(state) {
 }
 
 /* Chat goes through the backend whenever AI_MODE is 'worker'. */
+/* Every AI call needs a signed-in user. The Edge Function checks the JWT
+   against team_members before it spends a token, and Supabase's own gateway
+   rejects a request with no Authorization header before it even gets there —
+   that is the 401 UNAUTHORIZED_NO_AUTH_HEADER.
+
+   With local data the workspace opens without a login, so the first AI call is
+   where the sign-in gets asked for. This lives HERE, on the two functions that
+   are the only paths to the backend, rather than in each caller — the chat had
+   its own copy of this and the two draft surfaces had none, which is precisely
+   how the decision brief shipped 401ing on its first click.
+
+   requireLogin() returns immediately when a session already exists, so calling
+   it every time costs a localStorage read and heals a session that expired
+   mid-morning. */
+async function ensureSignedIn() {
+  let requireLogin;
+  try {
+    ({ requireLogin } = await import('./auth.js'));
+  } catch {
+    /* The sign-in screen itself loads from a CDN. If that is blocked or the
+       connection is down, say so in words rather than surfacing a module
+       error nobody can act on. */
+    throw new Error('The sign-in screen could not load. Check your internet connection and try again — everything you have typed is saved.');
+  }
+  /* With local data the workspace is fully usable signed out, so the sign-in
+     screen must be escapable; in shared mode there is nothing to escape to. */
+  await requireLogin({ cancellable: isLocalMode });
+}
+
 export async function chatRequest(payload) {
   if (!aiAvailable) throw new Error(AI_OFF_MESSAGE);
+  await ensureSignedIn();
   return workerFetch('/api/chat', { method: 'POST', body: JSON.stringify(payload) });
 }
 
@@ -317,5 +367,6 @@ export async function chatRequest(payload) {
    The draft always lands in an editable box; nothing is ever auto-saved. */
 export async function draftSectionRequest(payload) {
   if (!aiAvailable) throw new Error(AI_OFF_MESSAGE);
+  await ensureSignedIn();
   return workerFetch('/api/draft-section', { method: 'POST', body: JSON.stringify(payload) });
 }

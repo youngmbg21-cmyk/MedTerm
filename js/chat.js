@@ -228,16 +228,8 @@ Rules for you:
 - You argue; the two founders decide. Every action you propose is confirmed by a human.`;
 }
 
-/* With local data the app opens without a login; the assistant is the first
-   thing that genuinely needs one, so it asks here, through the same Supabase
-   magic-link flow the shared-data mode uses at boot. */
-let signedIn = false;
-async function ensureSignedIn() {
-  if (signedIn) return;
-  const { requireLogin } = await import('./auth.js');
-  await requireLogin();
-  signedIn = true;
-}
+/* Signing in is handled inside data.js, on the two AI request functions
+   themselves — so every AI surface gets it, not just this one. */
 
 export async function sendChat(userText) {
   if (!aiAvailable) return;
@@ -254,7 +246,6 @@ export async function sendChat(userText) {
   if (sendBtn) sendBtn.disabled = true;
 
   try {
-    await ensureSignedIn();
     const res = await chatRequest({
       messages: STATE.chatHistory,
       dataContext: buildDataContext(),
