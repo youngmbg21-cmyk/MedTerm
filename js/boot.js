@@ -126,6 +126,31 @@ async function boot() {
   buildNav();
   initChat();
 
+  /* Coming back from a magic link.
+
+     Supabase returns you to the app with the session in the URL fragment —
+     #access_token=...&refresh_token=... — and it is the Supabase client that
+     reads those out and stores them. But the client is only created when
+     js/auth.js is first imported, and with local data nothing imported it at
+     startup: the app opens signed out on purpose and only asks for an account
+     when you use the assistant.
+
+     So the tokens arrived, nothing was listening, and they were thrown away
+     with the next navigation. You clicked the link, the app looked exactly as
+     before, and the next AI button asked you to sign in again — forever.
+
+     Loading the client here, whenever the URL looks like an auth callback, is
+     what makes clicking the link actually sign you in. */
+  if (/[#&](access_token|refresh_token|error_description)=/.test(location.hash)) {
+    try {
+      const { getSession } = await import('./auth.js');
+      await getSession(); // creating the client consumes the fragment
+    } catch { /* the client could not load — fall through to the app signed out */ }
+    // Never leave tokens sitting in the address bar, and hand the router a
+    // real route rather than the leftovers of a callback.
+    history.replaceState(null, '', `${location.pathname}${location.search}#overview`);
+  }
+
   window.addEventListener('hashchange', renderCurrentRoute);
   if (!location.hash) location.hash = 'overview';
   renderCurrentRoute();
