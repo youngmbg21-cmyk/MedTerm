@@ -58,23 +58,50 @@ export async function requireLogin({ cancellable = false } = {}) {
     const supabase = await getClient();
 
     const email = el('input', { class: 'field', type: 'email', placeholder: 'you@example.com', autocomplete: 'email', style: 'margin-bottom:12px;' });
+    const password = el('input', { class: 'field', type: 'password', placeholder: 'Your password', autocomplete: 'current-password', style: 'margin-bottom:12px;' });
     const msg = el('div', { style: 'display:none;font-size:12px;line-height:16px;margin-bottom:12px;' });
+
+    const say = (text, ok) => {
+      msg.style.display = 'block';
+      msg.style.color = ok ? '#0E4E34' : '#94382F';
+      msg.textContent = text;
+    };
+
+    /* Supabase's own error strings are written for developers. These are the
+       three you actually hit, in words that say what to do next. */
+    const humanError = (raw) => {
+      const t = String(raw || '').toLowerCase();
+      if (t.includes('rate limit')) {
+        return 'Too many sign-in emails in the last hour — that is Supabase\u2019s limit, not a mistake. Use a password instead, or wait an hour.';
+      }
+      if (t.includes('invalid login credentials')) {
+        return 'That email and password do not match an account. If you have never set a password, use the email link instead.';
+      }
+      if (t.includes('email not confirmed')) {
+        return 'That account has not been confirmed yet. Open it in Supabase \u2192 Authentication \u2192 Users and confirm it.';
+      }
+      return raw;
+    };
+
+    const submit = el('button', { class: 'btn btn-primary tall', type: 'submit', style: 'width:100%;', text: 'Sign in' });
 
     const form = el('form', {
       class: 'card',
       style: 'width:100%;max-width:340px;padding:24px;',
       onsubmit: async (e) => {
         e.preventDefault();
-        msg.style.display = 'block';
+        submit.disabled = true;
         try {
-          const { error } = await supabase.auth.signInWithOtp({ email: email.value.trim() });
-          if (error) { msg.style.color = '#94382F'; msg.textContent = error.message; }
-          else { msg.style.color = '#0E4E34'; msg.textContent = 'Check your email for the sign-in link.'; }
-        } catch (err) {
-          // Network failure (offline) rejects the call — surface it instead of
-          // leaving the button looking inert with an unhandled rejection.
-          msg.style.color = '#94382F';
-          msg.textContent = 'Couldn’t reach sign-in. Check your connection and try again.';
+          const { error } = await supabase.auth.signInWithPassword({
+            email: email.value.trim(), password: password.value,
+          });
+          if (error) say(humanError(error.message), false);
+          /* No success message: onAuthStateChange fires SIGNED_IN and the
+             overlay is gone before anyone could read one. */
+        } catch {
+          say('Could not reach sign-in. Check your connection and try again.', false);
+        } finally {
+          submit.disabled = false;
         }
       },
     }, [
@@ -82,9 +109,32 @@ export async function requireLogin({ cancellable = false } = {}) {
       el('div', { style: 'font-size:13px;line-height:19px;color:#64736A;margin-bottom:18px;', text: 'Sign in with your team email to continue.' }),
       el('div', { class: 'micro', style: 'color:#42544A;margin-bottom:6px;', text: 'Email' }),
       email,
+      el('div', { class: 'micro', style: 'color:#42544A;margin-bottom:6px;', text: 'Password' }),
+      password,
       msg,
-      el('button', { class: 'btn btn-primary tall', type: 'submit', style: 'width:100%;', text: 'Send magic link' }),
+      submit,
     ]);
+
+    /* The email link stays as a second way in — it is the only route for
+       somebody who has never had a password set for them. It is the quiet
+       option because it is the one that runs into the hourly cap. */
+    form.appendChild(el('button', {
+      type: 'button',
+      class: 'btn btn-ghost',
+      style: 'width:100%;margin-top:8px;',
+      text: 'Email me a link instead',
+      onclick: async () => {
+        const address = email.value.trim();
+        if (!address) { say('Type your email address first.', false); return; }
+        try {
+          const { error } = await supabase.auth.signInWithOtp({ email: address });
+          if (error) say(humanError(error.message), false);
+          else say('Check your email for the sign-in link.', true);
+        } catch {
+          say('Could not reach sign-in. Check your connection and try again.', false);
+        }
+      },
+    }));
 
     if (cancellable) {
       form.appendChild(el('div', {

@@ -56,14 +56,34 @@ Three things have to be true:
    underneath them — that joins your row to the account you just signed in with.
 3. **The Claude API key is set.** Tap the HaTi wordmark five times to open the admin page.
 
-Then click **Write the first brief**. You will be asked to sign in with your email;
-Supabase mails you a link, you click it, and you are in.
+Then click **Write the first brief**. You will be asked to sign in.
+
+### Signing in — set a password once
+
+The sign-in screen takes an **email and a password**. Supabase's free plan only sends about
+two sign-in emails an hour, so the emailed link is the slow road; a password has no limit
+and works instantly. Set one like this:
+
+1. Supabase → **Authentication** → **Users**.
+2. Find your row, click the three dots at the end of it, and choose the option to set or
+   reset the password. (If you have no row yet: **Add user** → **Create new user**, use
+   your real email, set a password, and tick **Auto Confirm User**.)
+3. Type that email and password into the app's sign-in screen and click **Sign in**.
+
+You stay signed in afterwards, so this is a once-only job — do it for Simon too.
+
+**"Email me a link instead"** is still there under the button, for anyone who has never had
+a password set. It is the option that runs into the hourly cap.
 
 **If it says "Not authorised"** after you have signed in: your row exists but has not been
 linked to your account. Run the `UPDATE` statement at the bottom of `sql/schema.sql`. This
 was a genuine trap — the invite is written by email, but the server looks you up by account
 id, and nothing used to join the two. A redeployed function now links it for you on first
 sign-in; the `UPDATE` is the fix if you have not redeployed.
+
+**If it says "email rate limit exceeded"**, you have used up Supabase's free allowance of
+sign-in emails for the hour. Set a password instead — see above. Pressing the button again
+does not queue anything.
 
 **If it says the key is not configured**, see section 4.
 
