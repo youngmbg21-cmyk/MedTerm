@@ -41,54 +41,39 @@ storage has.
 
 ## 2b · Turning the assistant on
 
-**Read this even though your data is local.** The assistant and the decision brief are the
-one part of the app that talks to a server, and that server checks who you are before it
-will spend a penny of your Claude credit. So they need setting up even while everything
-else lives in your browser.
-
-Three things have to be true:
+**Sign-in is currently switched off.** The app never asks you for an account, and the
+assistant and the decision brief work straight away. Two things still have to be true:
 
 1. **The tables exist.** Run `sql/schema.sql` in the Supabase SQL editor — Step 1 below.
    Safe to run twice, deletes nothing.
-2. **Your email is on the team list, and linked to your account.** At the bottom of
-   `sql/schema.sql` there are two `INSERT` lines. Uncomment them, put your real email
-   addresses in, and Run. Then sign in to the app once, and run the `UPDATE` statement
-   underneath them — that joins your row to the account you just signed in with.
-3. **The Claude API key is set.** Tap the HaTi wordmark five times to open the admin page.
+2. **The Claude API key is set.** Tap the HaTi wordmark five times to open the admin page,
+   or put it in with SQL:
 
-Then click **Write the first brief**. You will be asked to sign in.
+   ```sql
+   insert into settings (key, value, updated_at)
+   values ('claude_api_key', 'sk-ant-api03-YOUR-KEY', now())
+   on conflict (key) do update set value = excluded.value, updated_at = now();
+   ```
 
-### Signing in — set a password once
+Then click **Write the first brief**.
 
-The sign-in screen takes an **email and a password**. Supabase's free plan only sends about
-two sign-in emails an hour, so the emailed link is the slow road; a password has no limit
-and works instantly. Set one like this:
+### What switching sign-in off costs, and how to put it back
 
-1. Supabase → **Authentication** → **Users**.
-2. Find your row, click the three dots at the end of it, and choose the option to set or
-   reset the password. (If you have no row yet: **Add user** → **Create new user**, use
-   your real email, set a password, and tick **Auto Confirm User**.)
-3. Type that email and password into the app's sign-in screen and click **Sign in**.
+The sign-in was the thing stopping a stranger who finds the site from spending your Claude
+credit. With it off, anyone who does can. The key itself is still safe — it never leaves
+Supabase and never reaches the browser — but the spending is open. It is a small site
+nobody knows about, so the risk is low, not zero.
 
-You stay signed in afterwards, so this is a once-only job — do it for Simon too.
+To turn it back on, when the email problem is sorted:
 
-**"Email me a link instead"** is still there under the button, for anyone who has never had
-a password set. It is the option that runs into the hourly cap.
+1. In `supabase/functions/claude-proxy/index.ts`, change `REQUIRE_TEAM_MEMBER = false` to
+   `true`, and redeploy the function.
+2. In `js/data.js`, the comment marked **SIGN-IN IS OFF** says which one line to restore.
+3. Rotate the Claude key on the admin page, in case it was used while open.
 
-**If it says "Not authorised"** after you have signed in: your row exists but has not been
-linked to your account. Run the `UPDATE` statement at the bottom of `sql/schema.sql`. This
-was a genuine trap — the invite is written by email, but the server looks you up by account
-id, and nothing used to join the two. A redeployed function now links it for you on first
-sign-in; the `UPDATE` is the fix if you have not redeployed.
-
-**If it says "email rate limit exceeded"**, you have used up Supabase's free allowance of
-sign-in emails for the hour. Set a password instead — see above. Pressing the button again
-does not queue anything.
-
-**If it says the key is not configured**, see section 4.
-
-You can ignore all of this and keep working — the sign-in screen has a **Not now** button,
-and every other screen in the app works without an account.
+Everything the login needs is still in `js/auth.js` — it takes an email and a password as
+well as an emailed link, so the two-emails-an-hour cap need never block you again. Set a
+password from Supabase → **Authentication** → **Users**.
 
 ---
 

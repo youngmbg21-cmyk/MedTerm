@@ -211,7 +211,11 @@ async function workerFetch(path, opts = {}) {
       'Content-Type': 'application/json',
       // Supabase Edge Functions expect the anon key as `apikey`.
       ...(SUPABASE_ANON_KEY ? { apikey: SUPABASE_ANON_KEY } : {}),
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      /* Supabase's gateway refuses a request with no Authorization header
+         (401 UNAUTHORIZED_NO_AUTH_HEADER) before the function ever runs. With
+         sign-in off there is no user token, so the anon key stands in — it is
+         already public in js/config.js and reaches the browser anyway. */
+      Authorization: `Bearer ${token || SUPABASE_ANON_KEY}`,
       ...(opts.headers || {}),
     },
   });
@@ -328,38 +332,22 @@ export function aiDataSlices(state) {
 }
 
 /* Chat goes through the backend whenever AI_MODE is 'worker'. */
-/* Every AI call needs a signed-in user. The Edge Function checks the JWT
-   against team_members before it spends a token, and Supabase's own gateway
-   rejects a request with no Authorization header before it even gets there —
-   that is the 401 UNAUTHORIZED_NO_AUTH_HEADER.
+/* SIGN-IN IS OFF.
+   The founders asked for it to be removed: the emailed sign-in link ran into
+   Supabase's two-per-hour cap and left the workspace unreachable, and no
+   amount of setup was going to fix that today.
 
-   With local data the workspace opens without a login, so the first AI call is
-   where the sign-in gets asked for. This lives HERE, on the two functions that
-   are the only paths to the backend, rather than in each caller — the chat had
-   its own copy of this and the two draft surfaces had none, which is precisely
-   how the decision brief shipped 401ing on its first click.
+   Nothing here asks for an account any more. The Edge Function has a matching
+   switch (REQUIRE_TEAM_MEMBER) which must be off for this to work end to end.
 
-   requireLogin() returns immediately when a session already exists, so calling
-   it every time costs a localStorage read and heals a session that expired
-   mid-morning. */
-async function ensureSignedIn() {
-  let requireLogin;
-  try {
-    ({ requireLogin } = await import('./auth.js'));
-  } catch {
-    /* The sign-in screen itself loads from a CDN. If that is blocked or the
-       connection is down, say so in words rather than surfacing a module
-       error nobody can act on. */
-    throw new Error('The sign-in screen could not load. Check your internet connection and try again — everything you have typed is saved.');
-  }
-  /* With local data the workspace is fully usable signed out, so the sign-in
-     screen must be escapable; in shared mode there is nothing to escape to. */
-  await requireLogin({ cancellable: isLocalMode });
-}
+   The trade-off, recorded so it is not forgotten: the sign-in was what stopped
+   a stranger who finds the site from spending the Claude API key. With it off,
+   anyone who does can. Rotate the key on the admin page when you turn sign-in
+   back on. js/auth.js still holds the whole login flow, unused, ready to be
+   reconnected here in one line. */
 
 export async function chatRequest(payload) {
   if (!aiAvailable) throw new Error(AI_OFF_MESSAGE);
-  await ensureSignedIn();
   return workerFetch('/api/chat', { method: 'POST', body: JSON.stringify(payload) });
 }
 
@@ -367,6 +355,5 @@ export async function chatRequest(payload) {
    The draft always lands in an editable box; nothing is ever auto-saved. */
 export async function draftSectionRequest(payload) {
   if (!aiAvailable) throw new Error(AI_OFF_MESSAGE);
-  await ensureSignedIn();
   return workerFetch('/api/draft-section', { method: 'POST', body: JSON.stringify(payload) });
 }

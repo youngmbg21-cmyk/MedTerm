@@ -437,6 +437,12 @@ ${JSON.stringify(localData || {}, null, 2).slice(0, 40000)}`,
 /* ------------------------------------------------------------ Table CRUD */
 type Member = { id: string; role: string; display_name: string; userId: string };
 
+/* Who a request is treated as while REQUIRE_TEAM_MEMBER is off. 'lead' so the
+   table routes behave exactly as they did for a signed-in founder. */
+const ANONYMOUS_MEMBER: Member = {
+  id: 'anonymous', role: 'lead', display_name: 'Signed-out', userId: 'anonymous',
+};
+
 // The only tables the app reads/writes. Anything else 404s — no arbitrary access.
 const DATA_TABLES = new Set([
   'questions', 'competitors', 'competitor_updates', 'prospects', 'contacts',
@@ -530,9 +536,21 @@ Deno.serve(async (req: Request) => {
       CLAUDE_API_KEY: '',
     };
 
-    // Must be signed in AND an active team member. This is what keeps the
-    // workspace private even though anyone can request a magic link.
-    const member = await authenticate(req, env);
+    /* Normally: must be signed in AND an active team member — that is what
+       keeps the workspace private even though anyone can request a magic link.
+
+       Switched off at the founders' request. Supabase's free plan sends about
+       two sign-in emails an hour, those were spent, and the workspace was
+       unreachable behind a login that could not be completed.
+
+       What this costs: anyone who finds the function URL can now spend the
+       Claude API key. The key itself is still server-side and never leaves
+       Supabase, but the spending is open. Set this back to true and redeploy
+       to close it again — everything needed is still here and still works.
+       Rotate the key on the admin page at the same time. */
+    const REQUIRE_TEAM_MEMBER = false;
+
+    const member = await authenticate(req, env) || (REQUIRE_TEAM_MEMBER ? null : ANONYMOUS_MEMBER);
     if (!member) {
       return errorResponse(
         'Not authorised. You must be signed in and listed as an active member in the team_members table. Ask Young to add you.',
